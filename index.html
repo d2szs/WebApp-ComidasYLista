@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calendario de comidas</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- Pantalla de configuración: claves sin definir o Supabase sin respuesta -->
+  <section id="pantalla-config" class="pantalla pantalla-centrada" hidden>
+    <div class="tarjeta">
+      <h1>No se puede conectar</h1>
+      <p id="config-mensaje"></p>
+      <button type="button" id="config-reintentar" class="boton boton-primario">Reintentar</button>
+    </div>
+  </section>
+
+  <!-- Pantalla inicial mientras se comprueba la sesión -->
+  <section id="pantalla-inicio" class="pantalla pantalla-centrada">
+    <div class="cargando-texto">Cargando…</div>
+  </section>
+
+  <!-- Inicio de sesión -->
+  <section id="pantalla-login" class="pantalla pantalla-centrada" hidden>
+    <form id="form-login" class="tarjeta" novalidate>
+      <h1>Calendario de comidas</h1>
+      <label class="campo">
+        <span>Email</span>
+        <input type="email" id="login-email" autocomplete="username" required>
+      </label>
+      <label class="campo">
+        <span>Contraseña</span>
+        <input type="password" id="login-clave" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="mensaje-error" hidden></p>
+      <button type="submit" id="login-boton" class="boton boton-primario boton-ancho">Entrar</button>
+    </form>
+  </section>
+
+  <!-- Aplicación -->
+  <section id="pantalla-app" class="pantalla" hidden>
+    <header class="cabecera">
+      <div class="cabecera-fila">
+        <h1 class="titulo-app">Comidas</h1>
+        <button type="button" id="boton-salir" class="boton boton-texto">Cerrar sesión</button>
+      </div>
+      <div class="selector-vista" role="group" aria-label="Vista">
+        <button type="button" class="boton-vista" data-vista="mes">Mes</button>
+        <button type="button" class="boton-vista" data-vista="semana">Semana</button>
+        <button type="button" class="boton-vista" data-vista="dia">Día</button>
+      </div>
+      <div class="navegacion">
+        <button type="button" id="boton-anterior" class="boton boton-icono" aria-label="Anterior">‹</button>
+        <button type="button" id="boton-hoy" class="boton">Hoy</button>
+        <button type="button" id="boton-siguiente" class="boton boton-icono" aria-label="Siguiente">›</button>
+        <span id="titulo-periodo" class="titulo-periodo"></span>
+      </div>
+    </header>
+
+    <div id="aviso-error" class="aviso-error" role="alert" hidden>
+      <span id="aviso-error-texto"></span>
+      <button type="button" id="aviso-error-cerrar" class="boton-texto" aria-label="Cerrar aviso">✕</button>
+    </div>
+    <div id="indicador-carga" class="indicador-carga" hidden>Cargando…</div>
+
+    <main id="calendario" class="calendario"></main>
+
+    <button type="button" id="boton-anadir" class="boton boton-primario boton-flotante">+ Añadir comida</button>
+  </section>
+
+  <!-- Formulario de comida -->
+  <dialog id="dialogo-comida" class="dialogo">
+    <form id="form-comida" novalidate>
+      <h2 id="form-titulo">Añadir comida</h2>
+      <p id="form-aviso" class="mensaje-info" hidden></p>
+
+      <label class="campo">
+        <span>Fecha</span>
+        <input type="date" id="form-fecha" required>
+      </label>
+
+      <div class="campo">
+        <span>Tipo</span>
+        <div class="selector-tipo" role="group" aria-label="Tipo de comida">
+          <button type="button" class="boton-tipo" data-tipo="desayuno">Desayuno</button>
+          <button type="button" class="boton-tipo" data-tipo="comida">Comida</button>
+          <button type="button" class="boton-tipo" data-tipo="cena">Cena</button>
+        </div>
+      </div>
+
+      <div id="form-plato-1"></div>
+      <div id="form-plato-2"></div>
+
+      <p id="form-error" class="mensaje-error" hidden></p>
+      <button type="button" id="form-quitar-segundo" class="boton boton-peligro" hidden>Eliminar segundo plato</button>
+
+      <div class="dialogo-botones">
+        <button type="button" id="form-cancelar" class="boton">Cancelar</button>
+        <button type="submit" id="form-guardar" class="boton boton-primario">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirmaciones -->
+  <dialog id="dialogo-confirmar" class="dialogo dialogo-pequeno">
+    <p id="confirmar-texto"></p>
+    <div class="dialogo-botones">
+      <button type="button" id="confirmar-no" class="boton">Cancelar</button>
+      <button type="button" id="confirmar-si" class="boton boton-peligro">Aceptar</button>
+    </div>
+  </dialog>
+
+  <!-- Plantilla de un plato del formulario -->
+  <template id="plantilla-plato">
+    <fieldset class="plato">
+      <legend class="plato-titulo"></legend>
+      <label class="campo">
+        <span class="plato-etiqueta-nombre">Nombre de receta</span>
+        <input type="text" class="plato-nombre" maxlength="200">
+      </label>
+      <div class="campo">
+        <span>Ingredientes</span>
+        <div class="ingredientes"></div>
+        <button type="button" class="boton boton-texto plato-anadir-ingrediente">+ Añadir ingrediente</button>
+      </div>
+      <label class="campo">
+        <span>Receta</span>
+        <textarea class="plato-receta" rows="4"></textarea>
+      </label>
+      <label class="campo">
+        <span>Referencia (enlace web)</span>
+        <input type="url" class="plato-referencia" placeholder="https://…">
+      </label>
+    </fieldset>
+  </template>
+
+  <!-- Plantilla de una fila de ingrediente -->
+  <template id="plantilla-ingrediente">
+    <div class="ingrediente">
+      <input type="text" class="ingrediente-nombre" placeholder="Ingrediente" aria-label="Ingrediente">
+      <input type="number" class="ingrediente-cantidad" placeholder="Cant." min="0" step="any" inputmode="decimal" aria-label="Cantidad">
+      <select class="ingrediente-unidad" aria-label="Unidad">
+        <option value="">—</option>
+        <option value="und">und.</option>
+        <option value="kg">kg.</option>
+        <option value="gr">gr.</option>
+      </select>
+      <button type="button" class="boton boton-icono ingrediente-quitar" aria-label="Quitar ingrediente">✕</button>
+    </div>
+  </template>
+
+  <!-- supabase-js v2.117.2 (UMD), descargado de jsDelivr -->
+  <script src="./supabase.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

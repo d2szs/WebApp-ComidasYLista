@@ -1,0 +1,258 @@
+/* ===== Variables: colores, tipografía y tamaños ===== */
+:root {
+  --color-fondo: #f6f7f9;
+  --color-superficie: #ffffff;
+  --color-borde: #e2e5ea;
+  --color-texto: #1f2933;
+  --color-texto-suave: #6b7280;
+  --color-primario: #2f6f5e;
+  --color-primario-texto: #ffffff;
+  --color-error: #b42318;
+  --color-error-fondo: #fdecea;
+  --color-info-fondo: #eef4ff;
+  --color-hoy: #e8f3ef;
+
+  --color-desayuno: #e0a100;
+  --color-comida: #2f80c9;
+  --color-cena: #8a4fbf;
+
+  --fuente: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --texto-pequeno: 0.8125rem;
+  --texto-normal: 1rem;
+  --texto-grande: 1.25rem;
+
+  --espacio: 1rem;
+  --radio: 10px;
+  --sombra: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --ancho-maximo: 1100px;
+}
+
+/* ===== Base ===== */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--fuente);
+  font-size: var(--texto-normal);
+  line-height: 1.4;
+}
+
+h1, h2 { margin: 0 0 var(--espacio); font-size: var(--texto-grande); }
+
+[hidden] { display: none !important; }
+
+input, select, textarea, button { font: inherit; color: inherit; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--color-borde);
+  border-radius: calc(var(--radio) - 4px);
+  background: var(--color-superficie);
+}
+
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-primario); outline-offset: -1px; }
+
+.campo-invalido { border-color: var(--color-error); background: var(--color-error-fondo); }
+
+/* ===== Botones ===== */
+.boton {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  background: var(--color-superficie);
+  cursor: pointer;
+}
+.boton:hover { filter: brightness(0.97); }
+.boton:disabled { opacity: 0.6; cursor: default; }
+.boton-primario { background: var(--color-primario); border-color: var(--color-primario); color: var(--color-primario-texto); }
+.boton-peligro { background: var(--color-error); border-color: var(--color-error); color: #fff; }
+.boton-texto { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primario); cursor: pointer; }
+.boton-icono { padding: 0.4rem 0.7rem; line-height: 1; }
+.boton-ancho { width: 100%; }
+
+.boton-flotante {
+  position: fixed;
+  right: var(--espacio);
+  bottom: var(--espacio);
+  padding: 0.8rem 1.2rem;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* ===== Pantallas ===== */
+.pantalla-centrada {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--espacio);
+}
+
+.tarjeta {
+  width: 100%;
+  max-width: 380px;
+  padding: calc(var(--espacio) * 1.5);
+  background: var(--color-superficie);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+}
+
+.cargando-texto { color: var(--color-texto-suave); }
+
+.campo { display: block; margin-bottom: var(--espacio); }
+.campo > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+
+.mensaje-error { color: var(--color-error); background: var(--color-error-fondo); padding: 0.5rem 0.7rem; border-radius: calc(var(--radio) - 4px); }
+.mensaje-info { background: var(--color-info-fondo); padding: 0.5rem 0.7rem; border-radius: calc(var(--radio) - 4px); }
+
+/* ===== Cabecera ===== */
+.cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 0.75rem var(--espacio);
+  background: var(--color-superficie);
+  border-bottom: 1px solid var(--color-borde);
+}
+.cabecera > * { max-width: var(--ancho-maximo); margin-left: auto; margin-right: auto; }
+.cabecera-fila { display: flex; align-items: center; justify-content: space-between; }
+.titulo-app { margin: 0; }
+
+.selector-vista, .selector-tipo { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
+.boton-vista, .boton-tipo {
+  flex: 1;
+  padding: 0.45rem;
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio);
+  background: var(--color-fondo);
+  cursor: pointer;
+}
+.boton-vista.activo { background: var(--color-primario); border-color: var(--color-primario); color: var(--color-primario-texto); }
+.boton-tipo[data-tipo="desayuno"].activo { background: var(--color-desayuno); border-color: var(--color-desayuno); color: #fff; }
+.boton-tipo[data-tipo="comida"].activo { background: var(--color-comida); border-color: var(--color-comida); color: #fff; }
+.boton-tipo[data-tipo="cena"].activo { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
+
+.navegacion { display: flex; align-items: center; gap: 0.4rem; }
+.titulo-periodo { display: inline-block; margin-left: 0.4rem; font-weight: 600; }
+.titulo-periodo::first-letter, .semana-fecha::first-letter { text-transform: uppercase; }
+
+/* ===== Avisos ===== */
+.aviso-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  max-width: var(--ancho-maximo);
+  margin: var(--espacio) auto 0;
+  padding: 0.6rem 0.8rem;
+  background: var(--color-error-fondo);
+  color: var(--color-error);
+  border-radius: var(--radio);
+}
+.aviso-error .boton-texto { color: var(--color-error); }
+.indicador-carga { max-width: var(--ancho-maximo); margin: 0.5rem auto 0; padding: 0 var(--espacio); font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+
+/* ===== Calendario ===== */
+.calendario { max-width: var(--ancho-maximo); margin: 0 auto; padding: var(--espacio) var(--espacio) 6rem; }
+
+/* Colores por tipo de comida */
+.tipo-desayuno { --color-tipo: var(--color-desayuno); }
+.tipo-comida { --color-tipo: var(--color-comida); }
+.tipo-cena { --color-tipo: var(--color-cena); }
+
+/* Vista mensual */
+.mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.mes-cabecera { padding: 0.3rem 0; text-align: center; font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+.mes-dia {
+  min-height: 3.5rem;
+  padding: 0.3rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-superficie);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.mes-dia.fuera { opacity: 0.45; }
+.mes-dia.hoy { background: var(--color-hoy); outline: 2px solid var(--color-primario); }
+.mes-numero { font-size: var(--texto-pequeno); font-weight: 600; }
+.mes-comidas { display: flex; gap: 3px; margin-top: 0.25rem; flex-wrap: wrap; }
+.mes-comida { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; font-size: 0.75rem; }
+.punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-tipo); }
+.mes-comida-nombre { display: none; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Vista semanal */
+.semana { display: grid; gap: 0.6rem; }
+.semana-dia { background: var(--color-superficie); border-radius: var(--radio); box-shadow: var(--sombra); padding: 0.6rem; }
+.semana-dia.hoy { outline: 2px solid var(--color-primario); }
+.semana-fecha { display: block; width: 100%; margin-bottom: 0.4rem; padding: 0; border: none; background: none; text-align: left; font-weight: 600; cursor: pointer; }
+.semana-comida {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-left: 4px solid var(--color-tipo);
+  border-radius: 6px;
+  background: var(--color-fondo);
+  text-align: left;
+  cursor: pointer;
+}
+.semana-comida-tipo { display: block; font-size: 0.7rem; color: var(--color-texto-suave); }
+.semana-comida.vacia .semana-comida-nombre { color: var(--color-texto-suave); }
+
+/* Vista diaria */
+.bloque {
+  margin-bottom: 0.75rem;
+  background: var(--color-superficie);
+  border-left: 5px solid var(--color-tipo);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+}
+.bloque-cabecera { display: block; width: 100%; padding: 0.8rem var(--espacio); border: none; background: none; text-align: left; cursor: pointer; }
+.bloque-tipo { display: block; font-size: var(--texto-pequeno); font-weight: 600; color: var(--color-tipo); }
+.bloque-resumen { font-size: var(--texto-normal); }
+.bloque-vacio { padding: 0.8rem var(--espacio); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.bloque-vacio p { margin: 0; color: var(--color-texto-suave); }
+.bloque-detalle { padding: 0 var(--espacio) var(--espacio); }
+.detalle-plato { margin-bottom: var(--espacio); }
+.detalle-plato h3 { margin: 0 0 0.3rem; font-size: var(--texto-normal); }
+.detalle-subtitulo { margin: 0.5rem 0 0.2rem; font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+.detalle-plato ul { margin: 0; padding-left: 1.2rem; }
+.detalle-receta { margin: 0; white-space: pre-wrap; }
+.detalle-plato a { color: var(--color-primario); word-break: break-all; }
+.detalle-botones { display: flex; gap: 0.5rem; }
+
+/* ===== Diálogos ===== */
+.dialogo {
+  width: min(600px, calc(100% - 1rem));
+  max-height: calc(100vh - 1rem);
+  padding: var(--espacio);
+  border: none;
+  border-radius: var(--radio);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+.dialogo::backdrop { background: rgba(0, 0, 0, 0.4); }
+.dialogo-pequeno { width: min(380px, calc(100% - 1rem)); }
+.dialogo-botones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--espacio); }
+
+.plato { margin: 0 0 var(--espacio); padding: var(--espacio); border: 1px solid var(--color-borde); border-radius: var(--radio); }
+.plato-titulo { padding: 0 0.3rem; font-weight: 600; }
+.ingrediente { display: grid; grid-template-columns: 1fr 4.5rem 4.5rem auto; gap: 0.3rem; margin-bottom: 0.3rem; }
+
+/* ===== Pantallas grandes ===== */
+@media (min-width: 768px) {
+  .mes-dia { min-height: 6rem; }
+  .mes-comidas { flex-direction: column; }
+  .mes-comida-nombre { display: block; }
+  .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .semana-comida-nombre { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .navegacion .titulo-periodo { font-size: var(--texto-grande); }
+}
