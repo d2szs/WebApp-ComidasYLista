@@ -14,6 +14,8 @@ const NOMBRE_TIPO = { desayuno: 'Desayuno', comida: 'Comida', cena: 'Cena' };
 const UNIDADES = { und: 'und.', kg: 'kg.', gr: 'gr.' };
 const MENSAJE_DUPLICADO = 'Ya hay una comida registrada ese día';
 const TIEMPO_MAXIMO_CONEXION = 8000;
+// Nombre de cada vista en logic.js
+const VISTA_LOGICA = { dia: 'day', semana: 'week', mes: 'month' };
 
 // ===== Estado =====
 const estado = {
@@ -47,28 +49,8 @@ function hoy() {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function aISO(fecha) {
-  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
-  const dia = String(fecha.getDate()).padStart(2, '0');
-  return `${fecha.getFullYear()}-${mes}-${dia}`;
-}
-
-function deISO(texto) {
-  const [anio, mes, dia] = texto.split('-').map(Number);
-  return new Date(anio, mes - 1, dia);
-}
-
-function sumarDias(fecha, dias) {
-  return new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate() + dias);
-}
-
-// Lunes de la semana de la fecha
-function inicioSemana(fecha) {
-  return sumarDias(fecha, -((fecha.getDay() + 6) % 7));
-}
-
 function esHoy(fecha) {
-  return aISO(fecha) === aISO(hoy());
+  return toISODate(fecha) === toISODate(hoy());
 }
 
 function formatear(fecha, opciones) {
@@ -255,31 +237,24 @@ function claveComida(fechaISO, tipo) {
 }
 
 function comidaDe(fecha, tipo) {
-  return estado.comidas.get(claveComida(aISO(fecha), tipo)) || null;
+  return estado.comidas.get(claveComida(toISODate(fecha), tipo)) || null;
 }
 
+// Periodo visible según la vista y el día de referencia (logic.js)
 function rangoVisible() {
-  const f = estado.fechaRef;
-  if (estado.vista === 'dia') return { desde: f, hasta: f };
-  if (estado.vista === 'semana') {
-    const lunes = inicioSemana(f);
-    return { desde: lunes, hasta: sumarDias(lunes, 6) };
-  }
-  const primero = new Date(f.getFullYear(), f.getMonth(), 1);
-  const ultimo = new Date(f.getFullYear(), f.getMonth() + 1, 0);
-  return { desde: inicioSemana(primero), hasta: sumarDias(inicioSemana(ultimo), 6) };
+  return visibleRange(VISTA_LOGICA[estado.vista], estado.fechaRef);
 }
 
 async function cargarDatos() {
   if (!sesionActiva) return;
   const peticion = ++estado.peticion;
-  const { desde, hasta } = rangoVisible();
+  const { from: desde, to: hasta } = rangoVisible();
   $('indicador-carga').hidden = false;
 
   let resultado;
   try {
     resultado = await cliente.from('comidas').select('*')
-      .gte('fecha', aISO(desde)).lte('fecha', aISO(hasta));
+      .gte('fecha', toISODate(desde)).lte('fecha', toISODate(hasta));
   } catch (error) {
     resultado = { error };
   }
@@ -332,10 +307,7 @@ function cambiarVista(vista) {
 }
 
 function moverPeriodo(sentido) {
-  const f = estado.fechaRef;
-  if (estado.vista === 'dia') estado.fechaRef = sumarDias(f, sentido);
-  else if (estado.vista === 'semana') estado.fechaRef = sumarDias(f, 7 * sentido);
-  else estado.fechaRef = new Date(f.getFullYear(), f.getMonth() + sentido, 1);
+  estado.fechaRef = movePeriod(VISTA_LOGICA[estado.vista], estado.fechaRef, sentido);
   estado.abierto = null;
   render();
   cargarDatos();
@@ -374,7 +346,7 @@ function actualizarCabecera() {
   if (estado.vista === 'mes') {
     titulo = formatear(f, { month: 'long', year: 'numeric' });
   } else if (estado.vista === 'semana') {
-    const { desde, hasta } = rangoVisible();
+    const { from: desde, to: hasta } = rangoVisible();
     titulo = formatear(desde, { day: 'numeric', month: 'short' }) + ' – '
       + formatear(hasta, { day: 'numeric', month: 'short', year: 'numeric' });
   } else {
@@ -392,9 +364,9 @@ function crearVistaMes() {
   const rejilla = el('div', 'mes');
   for (const inicial of ['L', 'M', 'X', 'J', 'V', 'S', 'D']) rejilla.append(el('div', 'mes-cabecera', inicial));
 
-  const { desde, hasta } = rangoVisible();
+  const { from: desde, to: hasta } = rangoVisible();
   const mesVisible = estado.fechaRef.getMonth();
-  for (let dia = desde; dia <= hasta; dia = sumarDias(dia, 1)) {
+  for (let dia = desde; dia <= hasta; dia = addDays(dia, 1)) {
     const fecha = dia;
     const celda = boton('mes-dia', undefined, () => abrirDia(fecha));
     if (fecha.getMonth() !== mesVisible) celda.classList.add('fuera');
@@ -420,9 +392,9 @@ function crearVistaMes() {
 // Vista semanal: siete días con sus tres comidas
 function crearVistaSemana() {
   const semana = el('div', 'semana');
-  const lunes = inicioSemana(estado.fechaRef);
+  const lunes = weekStart(estado.fechaRef);
   for (let i = 0; i < 7; i++) {
-    const fecha = sumarDias(lunes, i);
+    const fecha = addDays(lunes, i);
     const tarjeta = el('section', 'semana-dia' + (esHoy(fecha) ? ' hoy' : ''));
     tarjeta.append(boton('semana-fecha', formatear(fecha, { weekday: 'long', day: 'numeric' }), () => abrirDia(fecha)));
 
@@ -646,7 +618,7 @@ function abrirFormulario({ comida = null, fecha = null, tipo = null } = {}) {
     cargarEnFormulario(existente);
   } else {
     const fechaInicial = fecha || (estado.vista === 'dia' ? estado.fechaRef : hoy());
-    cargarEnFormulario({ fecha: aISO(fechaInicial), tipo });
+    cargarEnFormulario({ fecha: toISODate(fechaInicial), tipo });
     if (tipo) buscarExistente();
   }
   $('dialogo-comida').showModal();
@@ -780,7 +752,7 @@ async function guardarComida(evento) {
 
 // ===== Borrado =====
 async function borrarComida(comida) {
-  const texto = `¿Borrar ${NOMBRE_TIPO[comida.tipo].toLowerCase()} del ${fechaLarga(deISO(comida.fecha))}?`;
+  const texto = `¿Borrar ${NOMBRE_TIPO[comida.tipo].toLowerCase()} del ${fechaLarga(fromISODate(comida.fecha))}?`;
   if (!(await confirmar(texto, 'Borrar'))) return;
 
   const { error } = await cliente.from('comidas').delete().eq('id', comida.id);
