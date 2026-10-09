@@ -5,13 +5,6 @@ const SUPABASE_URL = 'https://beyarsihdhzpxzvsxeep.supabase.co';
 const SUPABASE_CLAVE_PUBLICA = 'sb_publishable_BLEWWv74RigJ6Jo977E59A_2vs3nYk2';
 
 // ===== Constantes =====
-const TIPOS = [
-  { id: 'desayuno', nombre: 'Desayuno' },
-  { id: 'comida', nombre: 'Comida' },
-  { id: 'cena', nombre: 'Cena' },
-];
-const NOMBRE_TIPO = { desayuno: 'Desayuno', comida: 'Comida', cena: 'Cena' };
-const UNIDADES = { und: 'und.', kg: 'kg.', gr: 'gr.' };
 const MENSAJE_DUPLICADO = 'Ya hay una comida registrada ese día';
 const TIEMPO_MAXIMO_CONEXION = 8000;
 // Nombre de cada vista en logic.js
@@ -67,17 +60,6 @@ function boton(clase, texto, alPulsar) {
 function mostrarPantalla(nombre) {
   for (const pantalla of ['config', 'inicio', 'login', 'app']) {
     $('pantalla-' + pantalla).hidden = pantalla !== nombre;
-  }
-}
-
-// Devuelve el enlace solo si es http/https válido
-function enlaceSeguro(texto) {
-  if (!texto) return null;
-  try {
-    const url = new URL(texto);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
-  } catch {
-    return null;
   }
 }
 
@@ -220,12 +202,8 @@ async function cerrarSesion() {
 }
 
 // ===== Carga de datos =====
-function claveComida(fechaISO, tipo) {
-  return fechaISO + '|' + tipo;
-}
-
 function comidaDe(fecha, tipo) {
-  return estado.comidas.get(claveComida(toISODate(fecha), tipo)) || null;
+  return estado.comidas.get(mealKey(toISODate(fecha), tipo)) || null;
 }
 
 // Periodo visible según la vista y el día de referencia (logic.js)
@@ -254,7 +232,7 @@ async function cargarDatos() {
     return;
   }
   ocultarError('carga');
-  estado.comidas = new Map(resultado.data.map((c) => [claveComida(c.fecha, c.tipo), c]));
+  estado.comidas = new Map(resultado.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
   render();
 }
 
@@ -332,10 +310,6 @@ function actualizarCabecera() {
   $('titulo-periodo').textContent = periodTitle(VISTA_LOGICA[estado.vista], estado.fechaRef);
 }
 
-function nombresPlatos(comida) {
-  return comida.platos.map((p) => p.nombre).join(' · ');
-}
-
 // Vista mensual: cuadrícula de días con puntos (móvil) o nombres (pantalla grande)
 function crearVistaMes() {
   const rejilla = el('div', 'mes');
@@ -349,11 +323,11 @@ function crearVistaMes() {
     celda.append(el('div', 'mes-numero', String(fecha.getDate())));
 
     const lista = el('div', 'mes-comidas');
-    for (const tipo of TIPOS) {
+    for (const tipo of MEAL_TYPES) {
       const comida = comidaDe(fecha, tipo.id);
       if (!comida) continue;
       const item = el('div', 'mes-comida tipo-' + tipo.id);
-      item.title = tipo.nombre + ': ' + comida.platos[0].nombre;
+      item.title = tipo.name + ': ' + comida.platos[0].nombre;
       item.append(el('span', 'punto'), el('span', 'mes-comida-nombre', comida.platos[0].nombre));
       lista.append(item);
     }
@@ -370,15 +344,15 @@ function crearVistaSemana() {
     const tarjeta = el('section', 'semana-dia' + (isToday ? ' hoy' : ''));
     tarjeta.append(boton('semana-fecha', formatDate(fecha, { weekday: 'long', day: 'numeric' }), () => abrirDia(fecha)));
 
-    for (const tipo of TIPOS) {
+    for (const tipo of MEAL_TYPES) {
       const comida = comidaDe(fecha, tipo.id);
       const alPulsar = comida
         ? () => abrirDia(fecha, tipo.id)
         : () => abrirFormulario({ fecha, tipo: tipo.id });
       const fila = boton('semana-comida tipo-' + tipo.id + (comida ? '' : ' vacia'), undefined, alPulsar);
       fila.append(
-        el('span', 'semana-comida-tipo', tipo.nombre),
-        el('span', 'semana-comida-nombre', comida ? nombresPlatos(comida) : '—'),
+        el('span', 'semana-comida-tipo', tipo.name),
+        el('span', 'semana-comida-nombre', comida ? dishNames(comida) : '—'),
       );
       tarjeta.append(fila);
     }
@@ -390,7 +364,7 @@ function crearVistaSemana() {
 // Vista diaria: un bloque por tipo de comida
 function crearVistaDia() {
   const contenedor = el('div', 'dia');
-  for (const tipo of TIPOS) contenedor.append(crearBloque(estado.fechaRef, tipo));
+  for (const tipo of MEAL_TYPES) contenedor.append(crearBloque(estado.fechaRef, tipo));
   return contenedor;
 }
 
@@ -401,7 +375,7 @@ function crearBloque(fecha, tipo) {
   if (!comida) {
     const vacio = el('div', 'bloque-vacio');
     const textos = el('div');
-    textos.append(el('span', 'bloque-tipo', tipo.nombre), el('p', null, 'Nada registrado'));
+    textos.append(el('span', 'bloque-tipo', tipo.name), el('p', null, 'Nada registrado'));
     vacio.append(textos, boton('boton', 'Añadir', () => abrirFormulario({ fecha, tipo: tipo.id })));
     bloque.append(vacio);
     return bloque;
@@ -413,20 +387,15 @@ function crearBloque(fecha, tipo) {
     render();
   });
   cabecera.setAttribute('aria-expanded', String(abierto));
-  cabecera.append(el('span', 'bloque-tipo', tipo.nombre), el('span', 'bloque-resumen', nombresPlatos(comida)));
+  cabecera.append(el('span', 'bloque-tipo', tipo.name), el('span', 'bloque-resumen', dishNames(comida)));
   bloque.append(cabecera);
   if (abierto) bloque.append(crearDetalle(comida));
   return bloque;
 }
 
-function tituloPlato(tipo, indice) {
-  if (tipo === 'desayuno') return 'Plato';
-  return indice === 0 ? 'Primer plato' : 'Segundo plato';
-}
-
 function crearDetalle(comida) {
   const detalle = el('div', 'bloque-detalle');
-  comida.platos.forEach((plato, indice) => detalle.append(crearDetallePlato(plato, tituloPlato(comida.tipo, indice))));
+  comida.platos.forEach((plato, indice) => detalle.append(crearDetallePlato(plato, dishTitle(comida.tipo, indice))));
 
   const botones = el('div', 'detalle-botones');
   botones.append(
@@ -443,16 +412,13 @@ function crearDetallePlato(plato, titulo) {
 
   if (plato.ingredientes?.length) {
     const lista = el('ul');
-    for (const ing of plato.ingredientes) {
-      const cantidad = Number(ing.cantidad).toLocaleString('es-ES');
-      lista.append(el('li', null, `${ing.nombre}: ${cantidad} ${UNIDADES[ing.unidad] || ing.unidad}`));
-    }
+    for (const ing of plato.ingredientes) lista.append(el('li', null, formatIngredient(ing)));
     caja.append(el('p', 'detalle-subtitulo', 'Ingredientes'), lista);
   }
   if (plato.receta) {
     caja.append(el('p', 'detalle-subtitulo', 'Receta'), el('p', 'detalle-receta', plato.receta));
   }
-  const enlace = enlaceSeguro(plato.referencia);
+  const enlace = safeLink(plato.referencia);
   if (enlace) {
     const a = el('a', null, enlace);
     a.href = enlace;
@@ -647,8 +613,8 @@ function validarPlato(plato, textoNombre) {
     const cantidadValida = f.cantidad.value !== '' && Number.isFinite(cantidad) && cantidad > 0;
     if (!nombreIng) marcar(f.nombre);
     if (!cantidadValida) marcar(f.cantidad);
-    if (!UNIDADES[f.unidad.value]) marcar(f.unidad);
-    if (!nombreIng || !cantidadValida || !UNIDADES[f.unidad.value]) {
+    if (!UNITS[f.unidad.value]) marcar(f.unidad);
+    if (!nombreIng || !cantidadValida || !UNITS[f.unidad.value]) {
       error = error || 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
       continue;
     }
@@ -656,7 +622,7 @@ function validarPlato(plato, textoNombre) {
   }
 
   const referencia = plato.referencia.value.trim();
-  if (referencia && !enlaceSeguro(referencia)) {
+  if (referencia && !safeLink(referencia)) {
     marcar(plato.referencia);
     error = error || 'La referencia debe ser un enlace que empiece por http:// o https://';
   }
@@ -724,7 +690,7 @@ async function guardarComida(evento) {
 
 // ===== Borrado =====
 async function borrarComida(comida) {
-  const texto = `¿Borrar ${NOMBRE_TIPO[comida.tipo].toLowerCase()} del ${longDate(fromISODate(comida.fecha))}?`;
+  const texto = deleteConfirmText(comida);
   if (!(await confirmar(texto, 'Borrar'))) return;
 
   const { error } = await cliente.from('comidas').delete().eq('id', comida.id);

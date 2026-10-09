@@ -3,6 +3,15 @@
 // Funciones puras de la app: sin DOM, sin Supabase y sin leer el reloj.
 // Script clásico: en el navegador quedan como globales; en Node se exportan (D-3).
 
+// ===== Constantes (ids y claves: los valores de la base de datos) =====
+
+const MEAL_TYPES = [
+  { id: 'desayuno', name: 'Desayuno' },
+  { id: 'comida', name: 'Comida' },
+  { id: 'cena', name: 'Cena' },
+];
+const UNITS = { und: 'und.', kg: 'kg.', gr: 'gr.' };
+
 // ===== Fechas (sin toISOString: trabaja en hora local) =====
 
 // Fecha → 'aaaa-mm-dd'
@@ -101,9 +110,52 @@ function initialFormDate(view, refDate, today) {
   return view === 'day' ? refDate : today;
 }
 
+// ===== Textos de comidas y enlaces =====
+
+// Clave de una comida en el mapa del periodo: 'aaaa-mm-dd|tipo'
+function mealKey(isoDate, type) {
+  return isoDate + '|' + type;
+}
+
+// "Plato 1 · Plato 2"
+function dishNames(meal) {
+  return meal.platos.map((dish) => dish.nombre).join(' · ');
+}
+
+// Título de cada plato en el detalle
+function dishTitle(type, index) {
+  if (type === 'desayuno') return 'Plato';
+  return index === 0 ? 'Primer plato' : 'Segundo plato';
+}
+
+// "Harina: 0,5 kg."; una unidad desconocida se muestra tal cual
+function formatIngredient(ingredient) {
+  const quantity = Number(ingredient.cantidad).toLocaleString('es-ES');
+  return `${ingredient.nombre}: ${quantity} ${UNITS[ingredient.unidad] || ingredient.unidad}`;
+}
+
+// Devuelve el enlace normalizado solo si es http/https válido; si no, null
+function safeLink(text) {
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+// "¿Borrar cena del lunes, 5 de enero de 2099?"
+function deleteConfirmText(meal) {
+  const type = MEAL_TYPES.find((t) => t.id === meal.tipo);
+  return `¿Borrar ${type.name.toLowerCase()} del ${longDate(fromISODate(meal.fecha))}?`;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
+    MEAL_TYPES, UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
+    mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
   };
 }
