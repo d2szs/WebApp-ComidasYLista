@@ -43,22 +43,10 @@ let temporizadorRecarga = null;
 
 const $ = (id) => document.getElementById(id);
 
-// ===== Utilidades de fechas (sin toISOString: trabaja en hora local) =====
+// ===== Hoy: único sitio que lee el reloj; se pasa a logic.js como dato (D-5) =====
 function hoy() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function esHoy(fecha) {
-  return toISODate(fecha) === toISODate(hoy());
-}
-
-function formatear(fecha, opciones) {
-  return new Intl.DateTimeFormat('es-ES', opciones).format(fecha);
-}
-
-function fechaLarga(fecha) {
-  return formatear(fecha, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 // ===== Utilidades del DOM =====
@@ -341,18 +329,7 @@ function actualizarCabecera() {
   document.querySelectorAll('.boton-vista').forEach((b) => {
     b.classList.toggle('activo', b.dataset.vista === estado.vista);
   });
-  const f = estado.fechaRef;
-  let titulo;
-  if (estado.vista === 'mes') {
-    titulo = formatear(f, { month: 'long', year: 'numeric' });
-  } else if (estado.vista === 'semana') {
-    const { from: desde, to: hasta } = rangoVisible();
-    titulo = formatear(desde, { day: 'numeric', month: 'short' }) + ' – '
-      + formatear(hasta, { day: 'numeric', month: 'short', year: 'numeric' });
-  } else {
-    titulo = formatear(f, { weekday: 'long', day: 'numeric', month: 'long' });
-  }
-  $('titulo-periodo').textContent = titulo;
+  $('titulo-periodo').textContent = periodTitle(VISTA_LOGICA[estado.vista], estado.fechaRef);
 }
 
 function nombresPlatos(comida) {
@@ -364,14 +341,11 @@ function crearVistaMes() {
   const rejilla = el('div', 'mes');
   for (const inicial of ['L', 'M', 'X', 'J', 'V', 'S', 'D']) rejilla.append(el('div', 'mes-cabecera', inicial));
 
-  const { from: desde, to: hasta } = rangoVisible();
-  const mesVisible = estado.fechaRef.getMonth();
-  for (let dia = desde; dia <= hasta; dia = addDays(dia, 1)) {
-    const fecha = dia;
+  for (const { date: fecha, outside, isToday } of monthGrid(estado.fechaRef, hoy())) {
     const celda = boton('mes-dia', undefined, () => abrirDia(fecha));
-    if (fecha.getMonth() !== mesVisible) celda.classList.add('fuera');
-    if (esHoy(fecha)) celda.classList.add('hoy');
-    celda.setAttribute('aria-label', fechaLarga(fecha));
+    if (outside) celda.classList.add('fuera');
+    if (isToday) celda.classList.add('hoy');
+    celda.setAttribute('aria-label', longDate(fecha));
     celda.append(el('div', 'mes-numero', String(fecha.getDate())));
 
     const lista = el('div', 'mes-comidas');
@@ -392,11 +366,9 @@ function crearVistaMes() {
 // Vista semanal: siete días con sus tres comidas
 function crearVistaSemana() {
   const semana = el('div', 'semana');
-  const lunes = weekStart(estado.fechaRef);
-  for (let i = 0; i < 7; i++) {
-    const fecha = addDays(lunes, i);
-    const tarjeta = el('section', 'semana-dia' + (esHoy(fecha) ? ' hoy' : ''));
-    tarjeta.append(boton('semana-fecha', formatear(fecha, { weekday: 'long', day: 'numeric' }), () => abrirDia(fecha)));
+  for (const { date: fecha, isToday } of weekDays(estado.fechaRef, hoy())) {
+    const tarjeta = el('section', 'semana-dia' + (isToday ? ' hoy' : ''));
+    tarjeta.append(boton('semana-fecha', formatDate(fecha, { weekday: 'long', day: 'numeric' }), () => abrirDia(fecha)));
 
     for (const tipo of TIPOS) {
       const comida = comidaDe(fecha, tipo.id);
@@ -617,7 +589,7 @@ function abrirFormulario({ comida = null, fecha = null, tipo = null } = {}) {
   if (existente) {
     cargarEnFormulario(existente);
   } else {
-    const fechaInicial = fecha || (estado.vista === 'dia' ? estado.fechaRef : hoy());
+    const fechaInicial = fecha || initialFormDate(VISTA_LOGICA[estado.vista], estado.fechaRef, hoy());
     cargarEnFormulario({ fecha: toISODate(fechaInicial), tipo });
     if (tipo) buscarExistente();
   }
@@ -752,7 +724,7 @@ async function guardarComida(evento) {
 
 // ===== Borrado =====
 async function borrarComida(comida) {
-  const texto = `¿Borrar ${NOMBRE_TIPO[comida.tipo].toLowerCase()} del ${fechaLarga(fromISODate(comida.fecha))}?`;
+  const texto = `¿Borrar ${NOMBRE_TIPO[comida.tipo].toLowerCase()} del ${longDate(fromISODate(comida.fecha))}?`;
   if (!(await confirmar(texto, 'Borrar'))) return;
 
   const { error } = await cliente.from('comidas').delete().eq('id', comida.id);
