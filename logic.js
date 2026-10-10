@@ -178,12 +178,70 @@ function formDishLayout(type, secondHasData) {
   };
 }
 
+// ===== Formulario: validación =====
+// invalid: lista de campos que fallan, { dish, field, row? } o { field: 'date' }; app.js los marca (D-6)
+
+const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
+const REFERENCE_ERROR = 'La referencia debe ser un enlace que empiece por http:// o https://';
+
+// Valida un plato en bruto: { dish } con las claves de la base de datos, o { error, invalid }
+function validateDish(rawDish, index, nameMessage) {
+  const invalid = [];
+  let error = null;
+  const fail = (message, field, row) => {
+    invalid.push(row === undefined ? { dish: index, field } : { dish: index, field, row });
+    error = error || message;
+  };
+
+  const nombre = rawDish.name.trim();
+  if (!nombre) fail(nameMessage, 'name');
+
+  const ingredientes = [];
+  rawDish.rows.forEach((row, i) => {
+    if (isIngredientRowEmpty(row)) return;
+    const name = row.name.trim();
+    const quantity = Number(row.quantity);
+    const quantityOk = !row.badInput && row.quantity !== '' && Number.isFinite(quantity) && quantity > 0;
+    const unitOk = Boolean(UNITS[row.unit]);
+    if (!name) fail(INGREDIENT_ERROR, 'name', i);
+    if (!quantityOk) fail(INGREDIENT_ERROR, 'quantity', i);
+    if (!unitOk) fail(INGREDIENT_ERROR, 'unit', i);
+    if (name && quantityOk && unitOk) ingredientes.push({ nombre: name, cantidad: quantity, unidad: row.unit });
+  });
+
+  const referencia = rawDish.reference.trim();
+  if (referencia && !safeLink(referencia)) fail(REFERENCE_ERROR, 'reference');
+
+  if (error) return { error, invalid };
+  return { dish: { nombre, ingredientes, receta: rawDish.recipe.trim(), referencia } };
+}
+
+// Valida el formulario en bruto { date, type, dishes }: { data } listo para guardar, o { error, invalid }.
+// Orden actual: fecha (sale enseguida), tipo (sin marca), desayuno con dos platos y los dos platos marcados
+function validateMealForm(rawForm) {
+  const { date, type, dishes } = rawForm;
+  if (!date) return { error: 'Elige una fecha.', invalid: [{ field: 'date' }] };
+  if (!type) return { error: 'Elige el tipo: desayuno, comida o cena.', invalid: [] };
+
+  const secondHasData = dishHasData(dishes[1]);
+  const layoutError = formDishLayout(type, secondHasData).error;
+  if (layoutError) return { error: layoutError, invalid: [] };
+
+  const firstName = type === 'desayuno' ? 'Escribe el nombre del plato.' : 'Escribe el nombre del primer plato.';
+  const results = [validateDish(dishes[0], 0, firstName)];
+  if (secondHasData) results.push(validateDish(dishes[1], 1, 'El segundo plato necesita un nombre de receta.'));
+
+  const failed = results.filter((r) => r.error);
+  if (failed.length) return { error: failed[0].error, invalid: failed.flatMap((r) => r.invalid) };
+  return { data: { fecha: date, tipo: type, platos: results.map((r) => r.dish) } };
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
-    formDishLayout, isIngredientRowEmpty, dishHasData,
+    formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
   };
 }

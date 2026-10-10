@@ -593,76 +593,45 @@ async function buscarExistente() {
 }
 
 // ===== Formulario: validación y guardado =====
-function marcar(nodo) {
-  nodo.classList.add('campo-invalido');
+// El formulario entero en bruto, para validateMealForm (D-6)
+function readForm() {
+  return {
+    date: $('form-fecha').value,
+    type: formulario.tipo,
+    dishes: [readDish(formulario.plato1), readDish(formulario.plato2)],
+  };
 }
 
-// Valida un plato y devuelve { plato } o { error }
-function validarPlato(plato, textoNombre) {
-  let error = null;
-  const nombre = plato.nombre.value.trim();
-  if (!nombre) {
-    marcar(plato.nombre);
-    error = textoNombre;
+// Marca los campos que devuelve la validación: { field: 'date' } o { dish, field, row? }
+function marcarInvalidos(invalidos) {
+  const platos = [formulario.plato1, formulario.plato2];
+  const campoFila = { name: 'nombre', quantity: 'cantidad', unit: 'unidad' };
+  const campoPlato = { name: 'nombre', reference: 'referencia' };
+  for (const { dish, field, row } of invalidos) {
+    let nodo;
+    if (field === 'date') nodo = $('form-fecha');
+    else if (row !== undefined) nodo = leerFilas(platos[dish])[row][campoFila[field]];
+    else nodo = platos[dish][campoPlato[field]];
+    nodo.classList.add('campo-invalido');
   }
-
-  const ingredientes = [];
-  for (const f of leerFilas(plato)) {
-    if (isIngredientRowEmpty(readRow(f))) continue;
-    const nombreIng = f.nombre.value.trim();
-    const cantidad = Number(f.cantidad.value);
-    const cantidadValida = f.cantidad.value !== '' && Number.isFinite(cantidad) && cantidad > 0;
-    if (!nombreIng) marcar(f.nombre);
-    if (!cantidadValida) marcar(f.cantidad);
-    if (!UNITS[f.unidad.value]) marcar(f.unidad);
-    if (!nombreIng || !cantidadValida || !UNITS[f.unidad.value]) {
-      error = error || 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
-      continue;
-    }
-    ingredientes.push({ nombre: nombreIng, cantidad, unidad: f.unidad.value });
-  }
-
-  const referencia = plato.referencia.value.trim();
-  if (referencia && !safeLink(referencia)) {
-    marcar(plato.referencia);
-    error = error || 'La referencia debe ser un enlace que empiece por http:// o https://';
-  }
-
-  if (error) return { error };
-  return { plato: { nombre, ingredientes, receta: plato.receta.value.trim(), referencia } };
 }
 
-// Devuelve { datos } listos para guardar o { error }
+// Devuelve { data } listo para guardar o { error }, con los campos marcados
 function validarFormulario() {
   limpiarMarcas();
-  const fecha = $('form-fecha').value;
-  const tipo = formulario.tipo;
-  if (!fecha) {
-    marcar($('form-fecha'));
-    return { error: 'Elige una fecha.' };
-  }
-  if (!tipo) return { error: 'Elige el tipo: desayuno, comida o cena.' };
-
-  const segundoConDatos = dishHasData(readDish(formulario.plato2));
-  if (tipo === 'desayuno' && segundoConDatos) {
-    actualizarPlatos();
-    return { error: 'El desayuno solo tiene un plato. Elimina el segundo plato para poder guardar.' };
-  }
-
-  const textoNombre1 = tipo === 'desayuno' ? 'Escribe el nombre del plato.' : 'Escribe el nombre del primer plato.';
-  const primero = validarPlato(formulario.plato1, textoNombre1);
-  const segundo = segundoConDatos ? validarPlato(formulario.plato2, 'El segundo plato necesita un nombre de receta.') : null;
-  if (primero.error) return { error: primero.error };
-  if (segundo?.error) return { error: segundo.error };
-
-  const platos = segundo ? [primero.plato, segundo.plato] : [primero.plato];
-  return { datos: { fecha, tipo, platos } };
+  const raw = readForm();
+  const resultado = validateMealForm(raw);
+  if (!resultado.error) return resultado;
+  marcarInvalidos(resultado.invalid);
+  // Desayuno con dos platos: se vuelve a enseñar el botón "Eliminar segundo plato", como antes
+  if (formDishLayout(raw.type, dishHasData(raw.dishes[1])).showRemoveSecond) actualizarPlatos();
+  return resultado;
 }
 
 async function guardarComida(evento) {
   evento.preventDefault();
   mostrarErrorFormulario('');
-  const { datos, error } = validarFormulario();
+  const { data: datos, error } = validarFormulario();
   if (error) return mostrarErrorFormulario(error);
 
   $('form-guardar').disabled = true;
