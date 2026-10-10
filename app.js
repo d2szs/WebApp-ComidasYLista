@@ -487,27 +487,28 @@ function leerFilas(plato) {
   }));
 }
 
-function filaVacia(f) {
-  return !f.nombre.value.trim() && f.cantidad.value === '' && !f.cantidad.validity.badInput && !f.unidad.value;
+// Valores en bruto de una fila y de un plato, para la lógica (D-6)
+function readRow(f) {
+  return { name: f.nombre.value, quantity: f.cantidad.value, badInput: f.cantidad.validity.badInput, unit: f.unidad.value };
 }
 
-function platoTieneDatos(plato) {
-  return Boolean(plato.nombre.value.trim() || plato.receta.value.trim() || plato.referencia.value.trim())
-    || leerFilas(plato).some((f) => !filaVacia(f));
+function readDish(plato) {
+  return {
+    name: plato.nombre.value,
+    recipe: plato.receta.value,
+    reference: plato.referencia.value,
+    rows: leerFilas(plato).map(readRow),
+  };
 }
 
 // Muestra u oculta el segundo plato según el tipo elegido
 function actualizarPlatos() {
-  const esDesayuno = formulario.tipo === 'desayuno';
-  formulario.plato1.titulo.textContent = esDesayuno ? 'Plato' : 'Primer plato';
-  formulario.plato2.titulo.textContent = 'Segundo plato (opcional)';
-
-  const segundoConDatos = platoTieneDatos(formulario.plato2);
-  formulario.plato2.nodo.hidden = esDesayuno && !segundoConDatos;
-  $('form-quitar-segundo').hidden = !(esDesayuno && segundoConDatos);
-  if (esDesayuno && segundoConDatos) {
-    mostrarErrorFormulario('El desayuno solo tiene un plato. Elimina el segundo plato para poder guardar.');
-  }
+  const layout = formDishLayout(formulario.tipo, dishHasData(readDish(formulario.plato2)));
+  formulario.plato1.titulo.textContent = layout.firstTitle;
+  formulario.plato2.titulo.textContent = layout.secondTitle;
+  formulario.plato2.nodo.hidden = layout.secondHidden;
+  $('form-quitar-segundo').hidden = !layout.showRemoveSecond;
+  if (layout.error) mostrarErrorFormulario(layout.error);
 }
 
 function elegirTipo(tipo) {
@@ -582,7 +583,7 @@ async function buscarExistente() {
   }
   if (!existente || busqueda !== formulario.busqueda || formulario.id) return;
 
-  const hayDatos = platoTieneDatos(formulario.plato1) || platoTieneDatos(formulario.plato2);
+  const hayDatos = dishHasData(readDish(formulario.plato1)) || dishHasData(readDish(formulario.plato2));
   if (hayDatos) {
     const cargar = await confirmar(MENSAJE_DUPLICADO + '. ¿Quieres editarla? Se perderá lo que has escrito.', 'Editar la existente');
     if (!cargar) return;
@@ -607,7 +608,7 @@ function validarPlato(plato, textoNombre) {
 
   const ingredientes = [];
   for (const f of leerFilas(plato)) {
-    if (filaVacia(f)) continue;
+    if (isIngredientRowEmpty(readRow(f))) continue;
     const nombreIng = f.nombre.value.trim();
     const cantidad = Number(f.cantidad.value);
     const cantidadValida = f.cantidad.value !== '' && Number.isFinite(cantidad) && cantidad > 0;
@@ -642,7 +643,7 @@ function validarFormulario() {
   }
   if (!tipo) return { error: 'Elige el tipo: desayuno, comida o cena.' };
 
-  const segundoConDatos = platoTieneDatos(formulario.plato2);
+  const segundoConDatos = dishHasData(readDish(formulario.plato2));
   if (tipo === 'desayuno' && segundoConDatos) {
     actualizarPlatos();
     return { error: 'El desayuno solo tiene un plato. Elimina el segundo plato para poder guardar.' };

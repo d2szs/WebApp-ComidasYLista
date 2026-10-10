@@ -151,11 +151,39 @@ function deleteConfirmText(meal) {
   return `¿Borrar ${type.name.toLowerCase()} del ${longDate(fromISODate(meal.fecha))}?`;
 }
 
+// ===== Formulario: distribución de los platos y filas vacías =====
+// Las filas y los platos llegan en bruto desde el formulario (D-6):
+// row = { name, quantity, badInput, unit }; rawDish = { name, recipe, reference, rows }
+
+// Una fila vacía no se guarda; una cantidad no numérica (badInput) cuenta como dato
+function isIngredientRowEmpty(row) {
+  return !row.name.trim() && row.quantity === '' && !row.badInput && !row.unit;
+}
+
+function dishHasData(rawDish) {
+  return Boolean(rawDish.name.trim() || rawDish.recipe.trim() || rawDish.reference.trim())
+    || rawDish.rows.some((row) => !isIngredientRowEmpty(row));
+}
+
+// Títulos y visibilidad de los platos según el tipo; el desayuno solo tiene un plato
+function formDishLayout(type, secondHasData) {
+  const isBreakfast = type === 'desayuno';
+  const blocked = isBreakfast && secondHasData;
+  return {
+    firstTitle: isBreakfast ? 'Plato' : 'Primer plato',
+    secondTitle: 'Segundo plato (opcional)',
+    secondHidden: isBreakfast && !secondHasData,
+    showRemoveSecond: blocked,
+    error: blocked ? 'El desayuno solo tiene un plato. Elimina el segundo plato para poder guardar.' : null,
+  };
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
+    formDishLayout, isIngredientRowEmpty, dishHasData,
   };
 }
