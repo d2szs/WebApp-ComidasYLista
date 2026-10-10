@@ -77,16 +77,6 @@ function ocultarError(tipo) {
   estado.avisoTipo = null;
 }
 
-function traducirError(error) {
-  if (isNetworkError(error, navigator.onLine)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
-  if (error?.code === '23505') return MENSAJE_DUPLICADO + '.';
-  if (error?.code === '23514') return 'Los datos no son válidos para guardarlos.';
-  if (error?.code === 'PGRST301' || error?.code === '42501' || error?.status === 401) {
-    return 'Tu sesión ha caducado o no tienes permiso. Cierra sesión y vuelve a entrar.';
-  }
-  return 'Ha ocurrido un error inesperado. Inténtalo de nuevo.';
-}
-
 // ===== Arranque y conexión =====
 function mostrarConfig(mensaje) {
   $('config-mensaje').textContent = mensaje;
@@ -175,7 +165,7 @@ async function enviarLogin(evento) {
 async function cerrarSesion() {
   // Solo en este dispositivo: la otra sesión abierta sigue funcionando
   const { error } = await cliente.auth.signOut({ scope: 'local' });
-  if (error) mostrarError('No se ha podido cerrar la sesión. ' + traducirError(error));
+  if (error) mostrarError('No se ha podido cerrar la sesión. ' + translateError(error, navigator.onLine));
 }
 
 // ===== Carga de datos =====
@@ -205,7 +195,7 @@ async function cargarDatos() {
 
   $('indicador-carga').hidden = true;
   if (resultado.error) {
-    mostrarError('No se han podido cargar las comidas. ' + traducirError(resultado.error), 'carga');
+    mostrarError('No se han podido cargar las comidas. ' + translateError(resultado.error, navigator.onLine), 'carga');
     return;
   }
   ocultarError('carga');
@@ -225,12 +215,11 @@ function suscribirCambios() {
   canal = cliente.channel('comidas-cambios')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, programarRecarga)
     .subscribe((estadoCanal) => {
-      if (estadoCanal === 'SUBSCRIBED') {
-        if (estado.avisoTipo === 'sync') {
-          ocultarError('sync');
-          programarRecarga();
-        }
-      } else if (estadoCanal === 'CHANNEL_ERROR' || estadoCanal === 'TIMED_OUT') {
+      const accion = syncStatusAction(estadoCanal, estado.avisoTipo);
+      if (accion === 'recover') {
+        ocultarError('sync');
+        programarRecarga();
+      } else if (accion === 'show') {
         mostrarError('Se ha perdido la sincronización en tiempo real. Reintentando…', 'sync');
       }
     });
@@ -615,13 +604,13 @@ async function guardarComida(evento) {
   try {
     // Una sola entrada por día y tipo
     const existente = await buscarComida(datos.fecha, datos.tipo);
-    if (existente && existente.id !== formulario.id) return mostrarErrorFormulario(MENSAJE_DUPLICADO);
+    if (isOtherMeal(existente, formulario.id)) return mostrarErrorFormulario(MENSAJE_DUPLICADO);
 
     if (formulario.id) {
       const { data, error: errorGuardar } = await cliente.from('comidas')
         .update(datos).eq('id', formulario.id).select('id');
       if (errorGuardar) throw errorGuardar;
-      if (!data.length) return mostrarErrorFormulario('Esta comida ya no existe; puede que la haya borrado la otra persona.');
+      if (wasDeleted(data)) return mostrarErrorFormulario('Esta comida ya no existe; puede que la haya borrado la otra persona.');
     } else {
       const { error: errorGuardar } = await cliente.from('comidas').insert(datos);
       if (errorGuardar) throw errorGuardar;
@@ -629,7 +618,7 @@ async function guardarComida(evento) {
     $('dialogo-comida').close();
     cargarDatos();
   } catch (errorGuardar) {
-    mostrarErrorFormulario(errorGuardar?.code === '23505' ? MENSAJE_DUPLICADO : traducirError(errorGuardar));
+    mostrarErrorFormulario(errorGuardar?.code === '23505' ? MENSAJE_DUPLICADO : translateError(errorGuardar, navigator.onLine));
   } finally {
     $('form-guardar').disabled = false;
   }
@@ -641,7 +630,7 @@ async function borrarComida(comida) {
   if (!(await confirmar(texto, 'Borrar'))) return;
 
   const { error } = await cliente.from('comidas').delete().eq('id', comida.id);
-  if (error) return mostrarError('No se ha podido borrar la comida. ' + traducirError(error));
+  if (error) return mostrarError('No se ha podido borrar la comida. ' + translateError(error, navigator.onLine));
   estado.abierto = null;
   cargarDatos();
 }

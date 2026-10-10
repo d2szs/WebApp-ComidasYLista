@@ -286,6 +286,35 @@ function translateLoginError(error, online) {
   return 'No se ha podido iniciar sesión. Inténtalo de nuevo.';
 }
 
+// Traduce un error de Supabase a un mensaje en español (online: navigator.onLine)
+function translateError(error, online) {
+  if (isNetworkError(error, online)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
+  if (error?.code === '23505') return 'Ya hay una comida registrada ese día.';
+  if (error?.code === '23514') return 'Los datos no son válidos para guardarlos.';
+  if (error?.code === 'PGRST301' || error?.code === '42501' || error?.status === 401) {
+    return 'Tu sesión ha caducado o no tienes permiso. Cierra sesión y vuelve a entrar.';
+  }
+  return 'Ha ocurrido un error inesperado. Inténtalo de nuevo.';
+}
+
+// Qué hacer con el aviso según el estado del canal de tiempo real:
+// 'show' (mostrar el aviso), 'recover' (quitarlo y recargar) o 'none'
+function syncStatusAction(channelStatus, noticeKind) {
+  if (channelStatus === 'SUBSCRIBED') return noticeKind === 'sync' ? 'recover' : 'none';
+  if (channelStatus === 'CHANNEL_ERROR' || channelStatus === 'TIMED_OUT') return 'show';
+  return 'none';
+}
+
+// Hay otra comida en esa fecha y tipo que no es la que se edita
+function isOtherMeal(existing, editingId) {
+  return !!existing && existing.id !== editingId;
+}
+
+// La edición no cambió ninguna fila: la otra persona la borró
+function wasDeleted(updatedRows) {
+  return updatedRows.length === 0;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -294,5 +323,6 @@ if (typeof module !== 'undefined') {
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
+    translateError, syncStatusAction, isOtherMeal, wasDeleted,
   };
 }
