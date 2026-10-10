@@ -77,14 +77,8 @@ function ocultarError(tipo) {
   estado.avisoTipo = null;
 }
 
-function esErrorDeRed(error) {
-  return !navigator.onLine
-    || error?.name === 'AuthRetryableFetchError'
-    || /fetch|network|load failed/i.test(error?.message || '');
-}
-
 function traducirError(error) {
-  if (esErrorDeRed(error)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
+  if (isNetworkError(error, navigator.onLine)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
   if (error?.code === '23505') return MENSAJE_DUPLICADO + '.';
   if (error?.code === '23514') return 'Los datos no son válidos para guardarlos.';
   if (error?.code === 'PGRST301' || error?.code === '42501' || error?.status === 401) {
@@ -94,18 +88,12 @@ function traducirError(error) {
 }
 
 // ===== Arranque y conexión =====
-function clavesDefinidas() {
-  return Boolean(SUPABASE_URL && SUPABASE_CLAVE_PUBLICA)
-    && !SUPABASE_URL.includes('TU_URL')
-    && !SUPABASE_CLAVE_PUBLICA.includes('TU_CLAVE_PUBLICA');
-}
-
 function mostrarConfig(mensaje) {
   $('config-mensaje').textContent = mensaje;
   mostrarPantalla('config');
 }
 
-// Comprueba que Supabase responde. Devuelve null si va bien o el texto del problema.
+// Pregunta a Supabase si responde. Devuelve el código HTTP, o null si no responde a tiempo.
 async function comprobarServidor() {
   const control = new AbortController();
   const temporizador = setTimeout(() => control.abort(), TIEMPO_MAXIMO_CONEXION);
@@ -114,12 +102,9 @@ async function comprobarServidor() {
       headers: { apikey: SUPABASE_CLAVE_PUBLICA },
       signal: control.signal,
     });
-    if (respuesta.status === 401 || respuesta.status === 403) {
-      return 'Supabase rechaza la clave pública. Revisa SUPABASE_CLAVE_PUBLICA en app.js.';
-    }
-    return respuesta.ok ? null : 'Supabase responde con un error. Prueba de nuevo en unos minutos.';
+    return respuesta.status;
   } catch {
-    return 'Supabase no responde. Comprueba tu conexión a internet y que SUPABASE_URL en app.js es correcta.';
+    return null;
   } finally {
     clearTimeout(temporizador);
   }
@@ -127,14 +112,15 @@ async function comprobarServidor() {
 
 async function conectar() {
   mostrarPantalla('inicio');
-  if (!window.supabase) {
-    return mostrarConfig('No se ha podido cargar la librería de Supabase. Comprueba que el archivo supabase.js está junto a index.html.');
-  }
-  if (!clavesDefinidas()) {
-    return mostrarConfig('Faltan las claves de Supabase. Abre app.js y rellena SUPABASE_URL y SUPABASE_CLAVE_PUBLICA con los datos de tu proyecto.');
-  }
-  const problema = await comprobarServidor();
-  if (problema) return mostrarConfig(problema);
+  const check = {
+    libraryLoaded: Boolean(window.supabase),
+    keysDefined: keysDefined(SUPABASE_URL, SUPABASE_CLAVE_PUBLICA),
+    status: null,
+  };
+  // Solo se pregunta al servidor si hay librería y claves
+  if (check.libraryLoaded && check.keysDefined) check.status = await comprobarServidor();
+  const problem = configMessage(check);
+  if (problem) return mostrarConfig(problem);
 
   if (!cliente) cliente = window.supabase.createClient(SUPABASE_URL, SUPABASE_CLAVE_PUBLICA);
   if (!escuchandoSesion) {
@@ -164,16 +150,6 @@ function aplicarSesion(sesion) {
 }
 
 // ===== Inicio y cierre de sesión =====
-function traducirErrorLogin(error) {
-  const mensaje = (error.message || '').toLowerCase();
-  if (error.code === 'invalid_credentials' || mensaje.includes('invalid login')) return 'Email o contraseña incorrectos.';
-  if (error.code === 'email_not_confirmed') return 'Esta cuenta todavía no tiene el email confirmado.';
-  if (error.code === 'validation_failed') return 'El email no tiene un formato válido.';
-  if (error.status === 429 || error.code === 'over_request_rate_limit') return 'Demasiados intentos. Espera un momento y vuelve a probar.';
-  if (esErrorDeRed(error)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
-  return 'No se ha podido iniciar sesión. Inténtalo de nuevo.';
-}
-
 function mostrarErrorLogin(texto) {
   $('login-error').textContent = texto;
   $('login-error').hidden = !texto;
@@ -183,7 +159,8 @@ async function enviarLogin(evento) {
   evento.preventDefault();
   const email = $('login-email').value.trim();
   const clave = $('login-clave').value;
-  if (!email || !clave) return mostrarErrorLogin('Escribe tu email y tu contraseña.');
+  const inputError = loginInputError(email, clave);
+  if (inputError) return mostrarErrorLogin(inputError);
 
   mostrarErrorLogin('');
   $('login-boton').disabled = true;
@@ -191,7 +168,7 @@ async function enviarLogin(evento) {
   const { error } = await cliente.auth.signInWithPassword({ email, password: clave });
   $('login-boton').disabled = false;
   $('login-boton').textContent = 'Entrar';
-  if (error) return mostrarErrorLogin(traducirErrorLogin(error));
+  if (error) return mostrarErrorLogin(translateLoginError(error, navigator.onLine));
   $('login-clave').value = '';
 }
 
