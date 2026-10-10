@@ -289,12 +289,28 @@ function translateLoginError(error, online) {
 // Traduce un error de Supabase a un mensaje en español (online: navigator.onLine)
 function translateError(error, online) {
   if (isNetworkError(error, online)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
-  if (error?.code === '23505') return 'Ya hay una comida registrada ese día.';
+  if (error?.code === '23505') return 'Ya hay otra comida con esa fecha y ese tipo.';
   if (error?.code === '23514') return 'Los datos no son válidos para guardarlos.';
   if (error?.code === 'PGRST301' || error?.code === '42501' || error?.status === 401) {
     return 'Tu sesión ha caducado o no tienes permiso. Cierra sesión y vuelve a entrar.';
   }
   return 'Ha ocurrido un error inesperado. Inténtalo de nuevo.';
+}
+
+// Avisos de duplicado del formulario, con el tipo y su concordancia (RF-42).
+// kind: 'confirm' (pregunta antes de cargarla), 'editing' (aviso al cargarla) o 'error' (al guardar)
+function duplicateMessage(type, kind) {
+  const masculine = type === 'desayuno';
+  const head = masculine ? 'Ya hay un desayuno registrado ese día' : `Ya hay una ${type} registrada ese día`;
+  if (kind === 'confirm') return head + (masculine ? '. ¿Quieres editarlo?' : '. ¿Quieres editarla?') + ' Se perderá lo que has escrito.';
+  if (kind === 'editing') return head + (masculine ? ': lo estás editando.' : ': la estás editando.');
+  return head;
+}
+
+// Mensaje de un error al guardar: un duplicado nombra el tipo; el resto, translateError (CL-6)
+function saveErrorMessage(error, type, online) {
+  if (error?.code === '23505') return duplicateMessage(type, 'error');
+  return translateError(error, online);
 }
 
 // Qué hacer con el aviso según el estado del canal de tiempo real:
@@ -324,5 +340,6 @@ if (typeof module !== 'undefined') {
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
+    duplicateMessage, saveErrorMessage,
   };
 }

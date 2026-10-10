@@ -5,7 +5,6 @@ const SUPABASE_URL = 'https://beyarsihdhzpxzvsxeep.supabase.co';
 const SUPABASE_CLAVE_PUBLICA = 'sb_publishable_BLEWWv74RigJ6Jo977E59A_2vs3nYk2';
 
 // ===== Constantes =====
-const MENSAJE_DUPLICADO = 'Ya hay una comida registrada ese día';
 const TIEMPO_MAXIMO_CONEXION = 8000;
 // Nombre de cada vista en logic.js
 const VISTA_LOGICA = { dia: 'day', semana: 'week', mes: 'month' };
@@ -551,11 +550,11 @@ async function buscarExistente() {
 
   const hayDatos = dishHasData(readDish(formulario.plato1)) || dishHasData(readDish(formulario.plato2));
   if (hayDatos) {
-    const cargar = await confirmar(MENSAJE_DUPLICADO + '. ¿Quieres editarla? Se perderá lo que has escrito.', 'Editar la existente');
+    const cargar = await confirmar(duplicateMessage(formulario.tipo, 'confirm'), 'Editar la existente');
     if (!cargar) return;
   }
   cargarEnFormulario(existente);
-  mostrarAvisoFormulario(MENSAJE_DUPLICADO + ': la estás editando.');
+  mostrarAvisoFormulario(duplicateMessage(existente.tipo, 'editing'));
 }
 
 // ===== Formulario: validación y guardado =====
@@ -604,7 +603,7 @@ async function guardarComida(evento) {
   try {
     // Una sola entrada por día y tipo
     const existente = await buscarComida(datos.fecha, datos.tipo);
-    if (isOtherMeal(existente, formulario.id)) return mostrarErrorFormulario(MENSAJE_DUPLICADO);
+    if (isOtherMeal(existente, formulario.id)) return mostrarErrorFormulario(duplicateMessage(datos.tipo, 'error'));
 
     if (formulario.id) {
       const { data, error: errorGuardar } = await cliente.from('comidas')
@@ -618,7 +617,7 @@ async function guardarComida(evento) {
     $('dialogo-comida').close();
     cargarDatos();
   } catch (errorGuardar) {
-    mostrarErrorFormulario(errorGuardar?.code === '23505' ? MENSAJE_DUPLICADO : translateError(errorGuardar, navigator.onLine));
+    mostrarErrorFormulario(saveErrorMessage(errorGuardar, datos.tipo, navigator.onLine));
   } finally {
     $('form-guardar').disabled = false;
   }
