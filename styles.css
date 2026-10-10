@@ -137,11 +137,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .boton-tipo[data-tipo="cena"].activo { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
 
 .navegacion { display: flex; align-items: center; gap: 0.4rem; }
-.titulo-periodo { display: inline-block; margin-left: 0.4rem; font-weight: 600; }
-.titulo-periodo::first-letter, .semana-fecha::first-letter { text-transform: uppercase; }
+.period-title { display: inline-block; margin-left: 0.4rem; font-weight: 600; }
+.period-title::first-letter, .semana-fecha::first-letter { text-transform: uppercase; }
 
 /* ===== Avisos ===== */
-.aviso-error {
+.error-notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -153,11 +153,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   color: var(--color-error);
   border-radius: var(--radius);
 }
-.aviso-error .boton-texto { color: var(--color-error); }
-.indicador-carga { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); }
+.error-notice .boton-texto { color: var(--color-error); }
+.loading-indicator { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); }
 
 /* ===== Calendario ===== */
-.calendario { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
+.calendar { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
 
 /* Colores por tipo de comida */
 .tipo-desayuno { --color-type: var(--color-desayuno); }
@@ -254,5 +254,5 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   .mes-comida-nombre { display: block; }
   .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .semana-comida-nombre { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .navegacion .titulo-periodo { font-size: var(--text-large); }
+  .navegacion .period-title { font-size: var(--text-large); }
 }

@@ -9,21 +9,21 @@
 <body>
 
   <!-- Pantalla de configuración: claves sin definir o Supabase sin respuesta -->
-  <section id="pantalla-config" class="pantalla pantalla-centrada" hidden>
+  <section id="screen-config" class="pantalla pantalla-centrada" hidden>
     <div class="tarjeta">
       <h1>No se puede conectar</h1>
-      <p id="config-mensaje"></p>
-      <button type="button" id="config-reintentar" class="boton boton-primario">Reintentar</button>
+      <p id="config-message"></p>
+      <button type="button" id="config-retry" class="boton boton-primario">Reintentar</button>
     </div>
   </section>
 
   <!-- Pantalla inicial mientras se comprueba la sesión -->
-  <section id="pantalla-inicio" class="pantalla pantalla-centrada">
+  <section id="screen-start" class="pantalla pantalla-centrada">
     <div class="cargando-texto">Cargando…</div>
   </section>
 
   <!-- Inicio de sesión -->
-  <section id="pantalla-login" class="pantalla pantalla-centrada" hidden>
+  <section id="screen-login" class="pantalla pantalla-centrada" hidden>
     <form id="form-login" class="tarjeta" novalidate>
       <h1>Calendario de comidas</h1>
       <label class="campo">
@@ -32,19 +32,19 @@
       </label>
       <label class="campo">
         <span>Contraseña</span>
-        <input type="password" id="login-clave" autocomplete="current-password" required>
+        <input type="password" id="login-password" autocomplete="current-password" required>
       </label>
       <p id="login-error" class="mensaje-error" hidden></p>
-      <button type="submit" id="login-boton" class="boton boton-primario boton-ancho">Entrar</button>
+      <button type="submit" id="login-button" class="boton boton-primario boton-ancho">Entrar</button>
     </form>
   </section>
 
   <!-- Aplicación -->
-  <section id="pantalla-app" class="pantalla" hidden>
+  <section id="screen-app" class="pantalla" hidden>
     <header class="cabecera">
       <div class="cabecera-fila">
         <h1 class="titulo-app">Comidas</h1>
-        <button type="button" id="boton-salir" class="boton boton-texto">Cerrar sesión</button>
+        <button type="button" id="logout-button" class="boton boton-texto">Cerrar sesión</button>
       </div>
       <div class="selector-vista" role="group" aria-label="Vista">
         <button type="button" class="boton-vista" data-vista="mes">Mes</button>
@@ -52,33 +52,33 @@
         <button type="button" class="boton-vista" data-vista="dia">Día</button>
       </div>
       <div class="navegacion">
-        <button type="button" id="boton-anterior" class="boton boton-icono" aria-label="Anterior">‹</button>
-        <button type="button" id="boton-hoy" class="boton">Hoy</button>
-        <button type="button" id="boton-siguiente" class="boton boton-icono" aria-label="Siguiente">›</button>
-        <span id="titulo-periodo" class="titulo-periodo"></span>
+        <button type="button" id="prev-button" class="boton boton-icono" aria-label="Anterior">‹</button>
+        <button type="button" id="today-button" class="boton">Hoy</button>
+        <button type="button" id="next-button" class="boton boton-icono" aria-label="Siguiente">›</button>
+        <span id="period-title" class="period-title"></span>
       </div>
     </header>
 
-    <div id="aviso-error" class="aviso-error" role="alert" hidden>
-      <span id="aviso-error-texto"></span>
-      <button type="button" id="aviso-error-cerrar" class="boton-texto" aria-label="Cerrar aviso">✕</button>
+    <div id="error-notice" class="error-notice" role="alert" hidden>
+      <span id="error-notice-text"></span>
+      <button type="button" id="error-notice-close" class="boton-texto" aria-label="Cerrar aviso">✕</button>
     </div>
-    <div id="indicador-carga" class="indicador-carga" hidden>Cargando…</div>
+    <div id="loading-indicator" class="loading-indicator" hidden>Cargando…</div>
 
-    <main id="calendario" class="calendario"></main>
+    <main id="calendar" class="calendar"></main>
 
-    <button type="button" id="boton-anadir" class="boton boton-primario boton-flotante">+ Añadir comida</button>
+    <button type="button" id="add-button" class="boton boton-primario boton-flotante">+ Añadir comida</button>
   </section>
 
   <!-- Formulario de comida -->
-  <dialog id="dialogo-comida" class="dialogo">
-    <form id="form-comida" novalidate>
-      <h2 id="form-titulo">Añadir comida</h2>
-      <p id="form-aviso" class="mensaje-info" hidden></p>
+  <dialog id="meal-dialog" class="dialogo">
+    <form id="meal-form" novalidate>
+      <h2 id="form-title">Añadir comida</h2>
+      <p id="form-notice" class="mensaje-info" hidden></p>
 
       <label class="campo">
         <span>Fecha</span>
-        <input type="date" id="form-fecha" required>
+        <input type="date" id="form-date" required>
       </label>
 
       <div class="campo">
@@ -90,30 +90,30 @@
         </div>
       </div>
 
-      <div id="form-plato-1"></div>
-      <div id="form-plato-2"></div>
+      <div id="form-dish-1"></div>
+      <div id="form-dish-2"></div>
 
       <p id="form-error" class="mensaje-error" hidden></p>
-      <button type="button" id="form-quitar-segundo" class="boton boton-peligro" hidden>Eliminar segundo plato</button>
+      <button type="button" id="form-remove-second" class="boton boton-peligro" hidden>Eliminar segundo plato</button>
 
       <div class="dialogo-botones">
-        <button type="button" id="form-cancelar" class="boton">Cancelar</button>
-        <button type="submit" id="form-guardar" class="boton boton-primario">Guardar</button>
+        <button type="button" id="form-cancel" class="boton">Cancelar</button>
+        <button type="submit" id="form-save" class="boton boton-primario">Guardar</button>
       </div>
     </form>
   </dialog>
 
   <!-- Confirmaciones -->
-  <dialog id="dialogo-confirmar" class="dialogo dialogo-pequeno">
-    <p id="confirmar-texto"></p>
+  <dialog id="confirm-dialog" class="dialogo dialogo-pequeno">
+    <p id="confirm-text"></p>
     <div class="dialogo-botones">
-      <button type="button" id="confirmar-no" class="boton">Cancelar</button>
-      <button type="button" id="confirmar-si" class="boton boton-peligro">Aceptar</button>
+      <button type="button" id="confirm-no" class="boton">Cancelar</button>
+      <button type="button" id="confirm-yes" class="boton boton-peligro">Aceptar</button>
     </div>
   </dialog>
 
   <!-- Plantilla de un plato del formulario -->
-  <template id="plantilla-plato">
+  <template id="dish-template">
     <fieldset class="plato">
       <legend class="plato-titulo"></legend>
       <label class="campo">
@@ -137,7 +137,7 @@
   </template>
 
   <!-- Plantilla de una fila de ingrediente -->
-  <template id="plantilla-ingrediente">
+  <template id="ingredient-template">
     <div class="ingrediente">
       <input type="text" class="ingrediente-nombre" placeholder="Ingrediente" aria-label="Ingrediente">
       <input type="number" class="ingrediente-cantidad" placeholder="Cant." min="0" step="any" inputmode="decimal" aria-label="Cantidad">

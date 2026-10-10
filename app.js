@@ -57,28 +57,28 @@ function boton(clase, texto, alPulsar) {
 }
 
 function mostrarPantalla(nombre) {
-  for (const pantalla of ['config', 'inicio', 'login', 'app']) {
-    $('pantalla-' + pantalla).hidden = pantalla !== nombre;
+  for (const pantalla of ['config', 'start', 'login', 'app']) {
+    $('screen-' + pantalla).hidden = pantalla !== nombre;
   }
 }
 
 // ===== Avisos y errores =====
 function mostrarError(texto, tipo = 'accion') {
-  $('aviso-error-texto').textContent = texto;
-  $('aviso-error').hidden = false;
+  $('error-notice-text').textContent = texto;
+  $('error-notice').hidden = false;
   estado.avisoTipo = tipo;
 }
 
 // Oculta el aviso (si se indica tipo, solo cuando el aviso es de ese tipo)
 function ocultarError(tipo) {
   if (tipo && estado.avisoTipo !== tipo) return;
-  $('aviso-error').hidden = true;
+  $('error-notice').hidden = true;
   estado.avisoTipo = null;
 }
 
 // ===== Arranque y conexión =====
 function mostrarConfig(mensaje) {
-  $('config-mensaje').textContent = mensaje;
+  $('config-message').textContent = mensaje;
   mostrarPantalla('config');
 }
 
@@ -100,7 +100,7 @@ async function comprobarServidor() {
 }
 
 async function conectar() {
-  mostrarPantalla('inicio');
+  mostrarPantalla('start');
   const check = {
     libraryLoaded: Boolean(window.supabase),
     keysDefined: keysDefined(SUPABASE_URL, SUPABASE_CLAVE_PUBLICA),
@@ -147,18 +147,18 @@ function mostrarErrorLogin(texto) {
 async function enviarLogin(evento) {
   evento.preventDefault();
   const email = $('login-email').value.trim();
-  const clave = $('login-clave').value;
+  const clave = $('login-password').value;
   const inputError = loginInputError(email, clave);
   if (inputError) return mostrarErrorLogin(inputError);
 
   mostrarErrorLogin('');
-  $('login-boton').disabled = true;
-  $('login-boton').textContent = 'Entrando…';
+  $('login-button').disabled = true;
+  $('login-button').textContent = 'Entrando…';
   const { error } = await cliente.auth.signInWithPassword({ email, password: clave });
-  $('login-boton').disabled = false;
-  $('login-boton').textContent = 'Entrar';
+  $('login-button').disabled = false;
+  $('login-button').textContent = 'Entrar';
   if (error) return mostrarErrorLogin(translateLoginError(error, navigator.onLine));
-  $('login-clave').value = '';
+  $('login-password').value = '';
 }
 
 async function cerrarSesion() {
@@ -181,7 +181,7 @@ async function cargarDatos() {
   if (!sesionActiva) return;
   const peticion = ++estado.peticion;
   const { from: desde, to: hasta } = rangoVisible();
-  $('indicador-carga').hidden = false;
+  $('loading-indicator').hidden = false;
 
   let resultado;
   try {
@@ -192,7 +192,7 @@ async function cargarDatos() {
   }
   if (peticion !== estado.peticion) return; // llegó una petición más reciente
 
-  $('indicador-carga').hidden = true;
+  $('loading-indicator').hidden = true;
   if (resultado.error) {
     mostrarError('No se han podido cargar las comidas. ' + translateError(resultado.error, navigator.onLine), 'carga');
     return;
@@ -262,7 +262,7 @@ function abrirDia(fecha, tipoAbierto = null) {
 // ===== Render =====
 function render() {
   actualizarCabecera();
-  const calendario = $('calendario');
+  const calendario = $('calendar');
   if (estado.vista === 'mes') calendario.replaceChildren(crearVistaMes());
   else if (estado.vista === 'semana') calendario.replaceChildren(crearVistaSemana());
   else calendario.replaceChildren(crearVistaDia());
@@ -272,7 +272,7 @@ function actualizarCabecera() {
   document.querySelectorAll('.boton-vista').forEach((b) => {
     b.classList.toggle('activo', b.dataset.vista === estado.vista);
   });
-  $('titulo-periodo').textContent = periodTitle(VISTA_LOGICA[estado.vista], estado.fechaRef);
+  $('period-title').textContent = periodTitle(VISTA_LOGICA[estado.vista], estado.fechaRef);
 }
 
 // Vista mensual: cuadrícula de días con puntos (móvil) o nombres (pantalla grande)
@@ -396,9 +396,9 @@ function crearDetallePlato(plato, titulo) {
 
 // ===== Confirmación =====
 function confirmar(texto, textoAceptar = 'Aceptar') {
-  const dialogo = $('dialogo-confirmar');
-  $('confirmar-texto').textContent = texto;
-  $('confirmar-si').textContent = textoAceptar;
+  const dialogo = $('confirm-dialog');
+  $('confirm-text').textContent = texto;
+  $('confirm-yes').textContent = textoAceptar;
   dialogo.returnValue = '';
   return new Promise((resolver) => {
     dialogo.addEventListener('close', () => resolver(dialogo.returnValue === 'si'), { once: true });
@@ -408,7 +408,7 @@ function confirmar(texto, textoAceptar = 'Aceptar') {
 
 // ===== Formulario: platos e ingredientes =====
 function crearPlatoFormulario(contenedor) {
-  const nodo = $('plantilla-plato').content.firstElementChild.cloneNode(true);
+  const nodo = $('dish-template').content.firstElementChild.cloneNode(true);
   const buscar = (selector) => nodo.querySelector(selector);
   const plato = {
     nodo,
@@ -425,7 +425,7 @@ function crearPlatoFormulario(contenedor) {
 }
 
 function anadirIngrediente(plato, datos = {}) {
-  const fila = $('plantilla-ingrediente').content.firstElementChild.cloneNode(true);
+  const fila = $('ingredient-template').content.firstElementChild.cloneNode(true);
   fila.querySelector('.ingrediente-nombre').value = datos.nombre || '';
   fila.querySelector('.ingrediente-cantidad').value = datos.cantidad ?? '';
   fila.querySelector('.ingrediente-unidad').value = datos.unidad || '';
@@ -472,7 +472,7 @@ function actualizarPlatos() {
   formulario.plato1.titulo.textContent = layout.firstTitle;
   formulario.plato2.titulo.textContent = layout.secondTitle;
   formulario.plato2.nodo.hidden = layout.secondHidden;
-  $('form-quitar-segundo').hidden = !layout.showRemoveSecond;
+  $('form-remove-second').hidden = !layout.showRemoveSecond;
   if (layout.error) mostrarErrorFormulario(layout.error);
 }
 
@@ -496,18 +496,18 @@ function mostrarErrorFormulario(texto) {
 }
 
 function mostrarAvisoFormulario(texto) {
-  $('form-aviso').textContent = texto;
-  $('form-aviso').hidden = !texto;
+  $('form-notice').textContent = texto;
+  $('form-notice').hidden = !texto;
 }
 
 function limpiarMarcas() {
-  document.querySelectorAll('#form-comida .campo-invalido').forEach((n) => n.classList.remove('campo-invalido'));
+  document.querySelectorAll('#meal-form .campo-invalido').forEach((n) => n.classList.remove('campo-invalido'));
 }
 
 function cargarEnFormulario({ id = null, fecha, tipo = null, platos = [] }) {
   formulario.id = id;
-  $('form-titulo').textContent = id ? 'Editar comida' : 'Añadir comida';
-  $('form-fecha').value = fecha;
+  $('form-title').textContent = id ? 'Editar comida' : 'Añadir comida';
+  $('form-date').value = fecha;
   rellenarPlato(formulario.plato1, platos[0]);
   rellenarPlato(formulario.plato2, platos[1]);
   limpiarMarcas();
@@ -525,7 +525,7 @@ function abrirFormulario({ comida = null, fecha = null, tipo = null } = {}) {
     cargarEnFormulario({ fecha: toISODate(fechaInicial), tipo });
     if (tipo) buscarExistente();
   }
-  $('dialogo-comida').showModal();
+  $('meal-dialog').showModal();
 }
 
 async function buscarComida(fechaISO, tipo) {
@@ -537,7 +537,7 @@ async function buscarComida(fechaISO, tipo) {
 
 // En una entrada nueva: si la fecha y el tipo ya tienen comida, se pasa a editarla
 async function buscarExistente() {
-  const fechaISO = $('form-fecha').value;
+  const fechaISO = $('form-date').value;
   if (formulario.id || !fechaISO || !formulario.tipo) return;
   const busqueda = ++formulario.busqueda;
   let existente;
@@ -561,7 +561,7 @@ async function buscarExistente() {
 // El formulario entero en bruto, para validateMealForm (D-6)
 function readForm() {
   return {
-    date: $('form-fecha').value,
+    date: $('form-date').value,
     type: formulario.tipo,
     dishes: [readDish(formulario.plato1), readDish(formulario.plato2)],
   };
@@ -574,7 +574,7 @@ function markInvalid(invalid) {
   const dishField = { name: 'nombre', reference: 'referencia' };
   for (const { dish, field, row } of invalid) {
     let node;
-    if (field === 'date') node = $('form-fecha');
+    if (field === 'date') node = $('form-date');
     else if (row !== undefined) node = leerFilas(dishes[dish])[row][rowField[field]];
     else node = dishes[dish][dishField[field]];
     node.classList.add('campo-invalido');
@@ -599,7 +599,7 @@ async function guardarComida(evento) {
   const { data: datos, error } = validarFormulario();
   if (error) return mostrarErrorFormulario(error);
 
-  $('form-guardar').disabled = true;
+  $('form-save').disabled = true;
   try {
     // Una sola entrada por día y tipo
     const existente = await buscarComida(datos.fecha, datos.tipo);
@@ -614,12 +614,12 @@ async function guardarComida(evento) {
       const { error: errorGuardar } = await cliente.from('comidas').insert(datos);
       if (errorGuardar) throw errorGuardar;
     }
-    $('dialogo-comida').close();
+    $('meal-dialog').close();
     cargarDatos();
   } catch (errorGuardar) {
     mostrarErrorFormulario(saveErrorMessage(errorGuardar, datos.tipo, navigator.onLine));
   } finally {
-    $('form-guardar').disabled = false;
+    $('form-save').disabled = false;
   }
 }
 
@@ -636,31 +636,31 @@ async function borrarComida(comida) {
 
 // ===== Eventos =====
 function conectarEventos() {
-  $('config-reintentar').addEventListener('click', conectar);
+  $('config-retry').addEventListener('click', conectar);
   $('form-login').addEventListener('submit', enviarLogin);
-  $('boton-salir').addEventListener('click', cerrarSesion);
+  $('logout-button').addEventListener('click', cerrarSesion);
 
   document.querySelectorAll('.boton-vista').forEach((b) => b.addEventListener('click', () => cambiarVista(b.dataset.vista)));
-  $('boton-anterior').addEventListener('click', () => moverPeriodo(-1));
-  $('boton-siguiente').addEventListener('click', () => moverPeriodo(1));
-  $('boton-hoy').addEventListener('click', irAHoy);
-  $('boton-anadir').addEventListener('click', () => abrirFormulario());
-  $('aviso-error-cerrar').addEventListener('click', () => ocultarError());
+  $('prev-button').addEventListener('click', () => moverPeriodo(-1));
+  $('next-button').addEventListener('click', () => moverPeriodo(1));
+  $('today-button').addEventListener('click', irAHoy);
+  $('add-button').addEventListener('click', () => abrirFormulario());
+  $('error-notice-close').addEventListener('click', () => ocultarError());
 
-  formulario.plato1 = crearPlatoFormulario($('form-plato-1'));
-  formulario.plato2 = crearPlatoFormulario($('form-plato-2'));
+  formulario.plato1 = crearPlatoFormulario($('form-dish-1'));
+  formulario.plato2 = crearPlatoFormulario($('form-dish-2'));
   formulario.plato1.etiquetaNombre.textContent = 'Nombre de receta *';
   document.querySelectorAll('.boton-tipo').forEach((b) => b.addEventListener('click', () => {
     elegirTipo(b.dataset.tipo);
     buscarExistente();
   }));
-  $('form-fecha').addEventListener('change', buscarExistente);
-  $('form-quitar-segundo').addEventListener('click', quitarSegundoPlato);
-  $('form-cancelar').addEventListener('click', () => $('dialogo-comida').close());
-  $('form-comida').addEventListener('submit', guardarComida);
+  $('form-date').addEventListener('change', buscarExistente);
+  $('form-remove-second').addEventListener('click', quitarSegundoPlato);
+  $('form-cancel').addEventListener('click', () => $('meal-dialog').close());
+  $('meal-form').addEventListener('submit', guardarComida);
 
-  $('confirmar-si').addEventListener('click', () => $('dialogo-confirmar').close('si'));
-  $('confirmar-no').addEventListener('click', () => $('dialogo-confirmar').close('no'));
+  $('confirm-yes').addEventListener('click', () => $('confirm-dialog').close('si'));
+  $('confirm-no').addEventListener('click', () => $('confirm-dialog').close('no'));
 
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {
@@ -668,7 +668,7 @@ function conectarEventos() {
   });
   window.addEventListener('online', () => {
     if (sesionActiva) cargarDatos();
-    else if (!$('pantalla-config').hidden) conectar();
+    else if (!$('screen-config').hidden) conectar();
   });
   window.addEventListener('offline', () => {
     if (sesionActiva) mostrarError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'carga');
