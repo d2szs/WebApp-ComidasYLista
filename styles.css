@@ -1,30 +1,30 @@
 /* ===== Variables: colores, tipografía y tamaños ===== */
 :root {
-  --color-fondo: #f6f7f9;
-  --color-superficie: #ffffff;
-  --color-borde: #e2e5ea;
-  --color-texto: #1f2933;
-  --color-texto-suave: #6b7280;
-  --color-primario: #2f6f5e;
-  --color-primario-texto: #ffffff;
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-border: #e2e5ea;
+  --color-text: #1f2933;
+  --color-text-muted: #6b7280;
+  --color-primary: #2f6f5e;
+  --color-primary-text: #ffffff;
   --color-error: #b42318;
-  --color-error-fondo: #fdecea;
-  --color-info-fondo: #eef4ff;
-  --color-hoy: #e8f3ef;
+  --color-error-bg: #fdecea;
+  --color-info-bg: #eef4ff;
+  --color-today: #e8f3ef;
 
   --color-desayuno: #e0a100;
   --color-comida: #2f80c9;
   --color-cena: #8a4fbf;
 
-  --fuente: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --texto-pequeno: 0.8125rem;
-  --texto-normal: 1rem;
-  --texto-grande: 1.25rem;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-small: 0.8125rem;
+  --text-normal: 1rem;
+  --text-large: 1.25rem;
 
-  --espacio: 1rem;
-  --radio: 10px;
-  --sombra: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --ancho-maximo: 1100px;
+  --space: 1rem;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --max-width: 1100px;
 }
 
 /* ===== Base ===== */
@@ -32,14 +32,14 @@
 
 body {
   margin: 0;
-  background: var(--color-fondo);
-  color: var(--color-texto);
-  font-family: var(--fuente);
-  font-size: var(--texto-normal);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font);
+  font-size: var(--text-normal);
   line-height: 1.4;
 }
 
-h1, h2 { margin: 0 0 var(--espacio); font-size: var(--texto-grande); }
+h1, h2 { margin: 0 0 var(--space); font-size: var(--text-large); }
 
 [hidden] { display: none !important; }
 
@@ -48,35 +48,35 @@ input, select, textarea, button { font: inherit; color: inherit; }
 input, select, textarea {
   width: 100%;
   padding: 0.55rem 0.65rem;
-  border: 1px solid var(--color-borde);
-  border-radius: calc(var(--radio) - 4px);
-  background: var(--color-superficie);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--color-surface);
 }
 
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-primario); outline-offset: -1px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
 
-.campo-invalido { border-color: var(--color-error); background: var(--color-error-fondo); }
+.campo-invalido { border-color: var(--color-error); background: var(--color-error-bg); }
 
 /* ===== Botones ===== */
 .boton {
   padding: 0.5rem 0.9rem;
-  border: 1px solid var(--color-borde);
-  border-radius: var(--radio);
-  background: var(--color-superficie);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
   cursor: pointer;
 }
 .boton:hover { filter: brightness(0.97); }
 .boton:disabled { opacity: 0.6; cursor: default; }
-.boton-primario { background: var(--color-primario); border-color: var(--color-primario); color: var(--color-primario-texto); }
+.boton-primario { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
 .boton-peligro { background: var(--color-error); border-color: var(--color-error); color: #fff; }
-.boton-texto { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primario); cursor: pointer; }
+.boton-texto { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primary); cursor: pointer; }
 .boton-icono { padding: 0.4rem 0.7rem; line-height: 1; }
 .boton-ancho { width: 100%; }
 
 .boton-flotante {
   position: fixed;
-  right: var(--espacio);
-  bottom: var(--espacio);
+  right: var(--space);
+  bottom: var(--space);
   padding: 0.8rem 1.2rem;
   border-radius: 999px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -89,36 +89,36 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--espacio);
+  padding: var(--space);
 }
 
 .tarjeta {
   width: 100%;
   max-width: 380px;
-  padding: calc(var(--espacio) * 1.5);
-  background: var(--color-superficie);
-  border-radius: var(--radio);
-  box-shadow: var(--sombra);
+  padding: calc(var(--space) * 1.5);
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
-.cargando-texto { color: var(--color-texto-suave); }
+.cargando-texto { color: var(--color-text-muted); }
 
-.campo { display: block; margin-bottom: var(--espacio); }
-.campo > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+.campo { display: block; margin-bottom: var(--space); }
+.campo > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
 
-.mensaje-error { color: var(--color-error); background: var(--color-error-fondo); padding: 0.5rem 0.7rem; border-radius: calc(var(--radio) - 4px); }
-.mensaje-info { background: var(--color-info-fondo); padding: 0.5rem 0.7rem; border-radius: calc(var(--radio) - 4px); }
+.mensaje-error { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
+.mensaje-info { background: var(--color-info-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
 
 /* ===== Cabecera ===== */
 .cabecera {
   position: sticky;
   top: 0;
   z-index: 5;
-  padding: 0.75rem var(--espacio);
-  background: var(--color-superficie);
-  border-bottom: 1px solid var(--color-borde);
+  padding: 0.75rem var(--space);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
 }
-.cabecera > * { max-width: var(--ancho-maximo); margin-left: auto; margin-right: auto; }
+.cabecera > * { max-width: var(--max-width); margin-left: auto; margin-right: auto; }
 .cabecera-fila { display: flex; align-items: center; justify-content: space-between; }
 .titulo-app { margin: 0; }
 
@@ -126,12 +126,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .boton-vista, .boton-tipo {
   flex: 1;
   padding: 0.45rem;
-  border: 1px solid var(--color-borde);
-  border-radius: var(--radio);
-  background: var(--color-fondo);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
   cursor: pointer;
 }
-.boton-vista.activo { background: var(--color-primario); border-color: var(--color-primario); color: var(--color-primario-texto); }
+.boton-vista.activo { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
 .boton-tipo[data-tipo="desayuno"].activo { background: var(--color-desayuno); border-color: var(--color-desayuno); color: #fff; }
 .boton-tipo[data-tipo="comida"].activo { background: var(--color-comida); border-color: var(--color-comida); color: #fff; }
 .boton-tipo[data-tipo="cena"].activo { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
@@ -146,33 +146,33 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  max-width: var(--ancho-maximo);
-  margin: var(--espacio) auto 0;
+  max-width: var(--max-width);
+  margin: var(--space) auto 0;
   padding: 0.6rem 0.8rem;
-  background: var(--color-error-fondo);
+  background: var(--color-error-bg);
   color: var(--color-error);
-  border-radius: var(--radio);
+  border-radius: var(--radius);
 }
 .aviso-error .boton-texto { color: var(--color-error); }
-.indicador-carga { max-width: var(--ancho-maximo); margin: 0.5rem auto 0; padding: 0 var(--espacio); font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+.indicador-carga { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); }
 
 /* ===== Calendario ===== */
-.calendario { max-width: var(--ancho-maximo); margin: 0 auto; padding: var(--espacio) var(--espacio) 6rem; }
+.calendario { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
 
 /* Colores por tipo de comida */
-.tipo-desayuno { --color-tipo: var(--color-desayuno); }
-.tipo-comida { --color-tipo: var(--color-comida); }
-.tipo-cena { --color-tipo: var(--color-cena); }
+.tipo-desayuno { --color-type: var(--color-desayuno); }
+.tipo-comida { --color-type: var(--color-comida); }
+.tipo-cena { --color-type: var(--color-cena); }
 
 /* Vista mensual */
 .mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
-.mes-cabecera { padding: 0.3rem 0; text-align: center; font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+.mes-cabecera { padding: 0.3rem 0; text-align: center; font-size: var(--text-small); color: var(--color-text-muted); }
 .mes-dia {
   min-height: 3.5rem;
   padding: 0.3rem;
   border: none;
   border-radius: 6px;
-  background: var(--color-superficie);
+  background: var(--color-surface);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
@@ -181,17 +181,17 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   justify-content: flex-start;
 }
 .mes-dia.fuera { opacity: 0.45; }
-.mes-dia.hoy { background: var(--color-hoy); outline: 2px solid var(--color-primario); }
-.mes-numero { font-size: var(--texto-pequeno); font-weight: 600; }
+.mes-dia.hoy { background: var(--color-today); outline: 2px solid var(--color-primary); }
+.mes-numero { font-size: var(--text-small); font-weight: 600; }
 .mes-comidas { display: flex; gap: 3px; margin-top: 0.25rem; flex-wrap: wrap; }
 .mes-comida { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; font-size: 0.75rem; }
-.punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-tipo); }
+.punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-type); }
 .mes-comida-nombre { display: none; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Vista semanal */
 .semana { display: grid; gap: 0.6rem; }
-.semana-dia { background: var(--color-superficie); border-radius: var(--radio); box-shadow: var(--sombra); padding: 0.6rem; }
-.semana-dia.hoy { outline: 2px solid var(--color-primario); }
+.semana-dia { background: var(--color-surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.6rem; }
+.semana-dia.hoy { outline: 2px solid var(--color-primary); }
 .semana-fecha { display: block; width: 100%; margin-bottom: 0.4rem; padding: 0; border: none; background: none; text-align: left; font-weight: 600; cursor: pointer; }
 .semana-comida {
   display: block;
@@ -199,51 +199,51 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   margin-top: 0.3rem;
   padding: 0.4rem 0.5rem;
   border: none;
-  border-left: 4px solid var(--color-tipo);
+  border-left: 4px solid var(--color-type);
   border-radius: 6px;
-  background: var(--color-fondo);
+  background: var(--color-bg);
   text-align: left;
   cursor: pointer;
 }
-.semana-comida-tipo { display: block; font-size: 0.7rem; color: var(--color-texto-suave); }
-.semana-comida.vacia .semana-comida-nombre { color: var(--color-texto-suave); }
+.semana-comida-tipo { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
+.semana-comida.vacia .semana-comida-nombre { color: var(--color-text-muted); }
 
 /* Vista diaria */
 .bloque {
   margin-bottom: 0.75rem;
-  background: var(--color-superficie);
-  border-left: 5px solid var(--color-tipo);
-  border-radius: var(--radio);
-  box-shadow: var(--sombra);
+  background: var(--color-surface);
+  border-left: 5px solid var(--color-type);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
-.bloque-cabecera { display: block; width: 100%; padding: 0.8rem var(--espacio); border: none; background: none; text-align: left; cursor: pointer; }
-.bloque-tipo { display: block; font-size: var(--texto-pequeno); font-weight: 600; color: var(--color-tipo); }
-.bloque-resumen { font-size: var(--texto-normal); }
-.bloque-vacio { padding: 0.8rem var(--espacio); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.bloque-vacio p { margin: 0; color: var(--color-texto-suave); }
-.bloque-detalle { padding: 0 var(--espacio) var(--espacio); }
-.detalle-plato { margin-bottom: var(--espacio); }
-.detalle-plato h3 { margin: 0 0 0.3rem; font-size: var(--texto-normal); }
-.detalle-subtitulo { margin: 0.5rem 0 0.2rem; font-size: var(--texto-pequeno); color: var(--color-texto-suave); }
+.bloque-cabecera { display: block; width: 100%; padding: 0.8rem var(--space); border: none; background: none; text-align: left; cursor: pointer; }
+.bloque-tipo { display: block; font-size: var(--text-small); font-weight: 600; color: var(--color-type); }
+.bloque-resumen { font-size: var(--text-normal); }
+.bloque-vacio { padding: 0.8rem var(--space); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.bloque-vacio p { margin: 0; color: var(--color-text-muted); }
+.bloque-detalle { padding: 0 var(--space) var(--space); }
+.detalle-plato { margin-bottom: var(--space); }
+.detalle-plato h3 { margin: 0 0 0.3rem; font-size: var(--text-normal); }
+.detalle-subtitulo { margin: 0.5rem 0 0.2rem; font-size: var(--text-small); color: var(--color-text-muted); }
 .detalle-plato ul { margin: 0; padding-left: 1.2rem; }
 .detalle-receta { margin: 0; white-space: pre-wrap; }
-.detalle-plato a { color: var(--color-primario); word-break: break-all; }
+.detalle-plato a { color: var(--color-primary); word-break: break-all; }
 .detalle-botones { display: flex; gap: 0.5rem; }
 
 /* ===== Diálogos ===== */
 .dialogo {
   width: min(600px, calc(100% - 1rem));
   max-height: calc(100vh - 1rem);
-  padding: var(--espacio);
+  padding: var(--space);
   border: none;
-  border-radius: var(--radio);
+  border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 .dialogo::backdrop { background: rgba(0, 0, 0, 0.4); }
 .dialogo-pequeno { width: min(380px, calc(100% - 1rem)); }
-.dialogo-botones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--espacio); }
+.dialogo-botones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--space); }
 
-.plato { margin: 0 0 var(--espacio); padding: var(--espacio); border: 1px solid var(--color-borde); border-radius: var(--radio); }
+.plato { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
 .plato-titulo { padding: 0 0.3rem; font-weight: 600; }
 .ingrediente { display: grid; grid-template-columns: 1fr 4.5rem 4.5rem auto; gap: 0.3rem; margin-bottom: 0.3rem; }
 
@@ -254,5 +254,5 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   .mes-comida-nombre { display: block; }
   .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .semana-comida-nombre { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .navegacion .titulo-periodo { font-size: var(--texto-grande); }
+  .navegacion .titulo-periodo { font-size: var(--text-large); }
 }
