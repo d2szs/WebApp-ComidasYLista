@@ -603,16 +603,16 @@ function readForm() {
 }
 
 // Marca los campos que devuelve la validación: { field: 'date' } o { dish, field, row? }
-function marcarInvalidos(invalidos) {
-  const platos = [formulario.plato1, formulario.plato2];
-  const campoFila = { name: 'nombre', quantity: 'cantidad', unit: 'unidad' };
-  const campoPlato = { name: 'nombre', reference: 'referencia' };
-  for (const { dish, field, row } of invalidos) {
-    let nodo;
-    if (field === 'date') nodo = $('form-fecha');
-    else if (row !== undefined) nodo = leerFilas(platos[dish])[row][campoFila[field]];
-    else nodo = platos[dish][campoPlato[field]];
-    nodo.classList.add('campo-invalido');
+function markInvalid(invalid) {
+  const dishes = [formulario.plato1, formulario.plato2];
+  const rowField = { name: 'nombre', quantity: 'cantidad', unit: 'unidad' };
+  const dishField = { name: 'nombre', reference: 'referencia' };
+  for (const { dish, field, row } of invalid) {
+    let node;
+    if (field === 'date') node = $('form-fecha');
+    else if (row !== undefined) node = leerFilas(dishes[dish])[row][rowField[field]];
+    else node = dishes[dish][dishField[field]];
+    node.classList.add('campo-invalido');
   }
 }
 
@@ -622,7 +622,7 @@ function validarFormulario() {
   const raw = readForm();
   const resultado = validateMealForm(raw);
   if (!resultado.error) return resultado;
-  marcarInvalidos(resultado.invalid);
+  markInvalid(resultado.invalid);
   // Desayuno con dos platos: se vuelve a enseñar el botón "Eliminar segundo plato", como antes
   if (formDishLayout(raw.type, dishHasData(raw.dishes[1])).showRemoveSecond) actualizarPlatos();
   return resultado;
