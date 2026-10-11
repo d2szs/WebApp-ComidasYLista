@@ -311,7 +311,7 @@ function buildWeekView() {
       const meal = mealAt(date, type.id);
       const onClick = meal
         ? () => openDay(date, type.id)
-        : () => openForm({ fecha: date, tipo: type.id });
+        : () => openForm({ date, type: type.id });
       const row = button('week-meal type-' + type.id + (meal ? '' : ' empty'), undefined, onClick);
       row.append(
         el('span', 'week-meal-type', type.name),
@@ -339,7 +339,7 @@ function buildBlock(date, type) {
     const empty = el('div', 'block-empty');
     const texts = el('div');
     texts.append(el('span', 'block-type', type.name), el('p', null, 'Nada registrado'));
-    empty.append(texts, button('btn', 'Añadir', () => openForm({ fecha: date, tipo: type.id })));
+    empty.append(texts, button('btn', 'Añadir', () => openForm({ date, type: type.id })));
     block.append(empty);
     return block;
   }
@@ -362,7 +362,7 @@ function buildDetail(meal) {
 
   const buttons = el('div', 'detail-buttons');
   buttons.append(
-    button('btn', 'Editar', () => openForm({ comida: meal })),
+    button('btn', 'Editar', () => openForm({ meal })),
     button('btn btn-danger', 'Borrar', () => deleteMeal(meal)),
   );
   detail.append(buttons);
@@ -393,90 +393,90 @@ function buildDishDetail(dish, title) {
 }
 
 // ===== Confirmación =====
-function askConfirm(texto, textoAceptar = 'Aceptar') {
-  const dialogo = $('confirm-dialog');
-  $('confirm-text').textContent = texto;
-  $('confirm-yes').textContent = textoAceptar;
-  dialogo.returnValue = '';
-  return new Promise((resolver) => {
-    dialogo.addEventListener('close', () => resolver(dialogo.returnValue === 'si'), { once: true });
-    dialogo.showModal();
+function askConfirm(text, acceptText = 'Aceptar') {
+  const dialog = $('confirm-dialog');
+  $('confirm-text').textContent = text;
+  $('confirm-yes').textContent = acceptText;
+  dialog.returnValue = '';
+  return new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'yes'), { once: true });
+    dialog.showModal();
   });
 }
 
 // ===== Formulario: platos e ingredientes =====
-function buildFormDish(contenedor) {
-  const nodo = $('dish-template').content.firstElementChild.cloneNode(true);
-  const buscar = (selector) => nodo.querySelector(selector);
-  const plato = {
-    nodo,
-    titulo: buscar('.dish-title'),
-    etiquetaNombre: buscar('.dish-name-label'),
-    nombre: buscar('.dish-name'),
-    ingredientes: buscar('.ingredients'),
-    receta: buscar('.dish-recipe'),
-    referencia: buscar('.dish-reference'),
+function buildFormDish(container) {
+  const node = $('dish-template').content.firstElementChild.cloneNode(true);
+  const find = (selector) => node.querySelector(selector);
+  const dish = {
+    node,
+    title: find('.dish-title'),
+    nameLabel: find('.dish-name-label'),
+    name: find('.dish-name'),
+    ingredients: find('.ingredients'),
+    recipe: find('.dish-recipe'),
+    reference: find('.dish-reference'),
   };
-  buscar('.dish-add-ingredient').addEventListener('click', () => addIngredient(plato));
-  contenedor.append(nodo);
-  return plato;
+  find('.dish-add-ingredient').addEventListener('click', () => addIngredient(dish));
+  container.append(node);
+  return dish;
 }
 
-function addIngredient(plato, datos = {}) {
-  const fila = $('ingredient-template').content.firstElementChild.cloneNode(true);
-  fila.querySelector('.ingredient-name').value = datos.nombre || '';
-  fila.querySelector('.ingredient-quantity').value = datos.cantidad ?? '';
-  fila.querySelector('.ingredient-unit').value = datos.unidad || '';
-  fila.querySelector('.ingredient-remove').addEventListener('click', () => fila.remove());
-  plato.ingredientes.append(fila);
+function addIngredient(dish, data = {}) {
+  const row = $('ingredient-template').content.firstElementChild.cloneNode(true);
+  row.querySelector('.ingredient-name').value = data.nombre || '';
+  row.querySelector('.ingredient-quantity').value = data.cantidad ?? '';
+  row.querySelector('.ingredient-unit').value = data.unidad || '';
+  row.querySelector('.ingredient-remove').addEventListener('click', () => row.remove());
+  dish.ingredients.append(row);
 }
 
-function fillDish(plato, datos) {
-  plato.nombre.value = datos?.nombre || '';
-  plato.receta.value = datos?.receta || '';
-  plato.referencia.value = datos?.referencia || '';
-  plato.ingredientes.replaceChildren();
-  const ingredientes = datos?.ingredientes || [];
-  if (ingredientes.length) ingredientes.forEach((ing) => addIngredient(plato, ing));
-  else addIngredient(plato);
+function fillDish(dish, data) {
+  dish.name.value = data?.nombre || '';
+  dish.recipe.value = data?.receta || '';
+  dish.reference.value = data?.referencia || '';
+  dish.ingredients.replaceChildren();
+  const ingredients = data?.ingredientes || [];
+  if (ingredients.length) ingredients.forEach((ingredient) => addIngredient(dish, ingredient));
+  else addIngredient(dish);
 }
 
-function readRows(plato) {
-  return [...plato.ingredientes.querySelectorAll('.ingredient')].map((fila) => ({
-    fila,
-    nombre: fila.querySelector('.ingredient-name'),
-    cantidad: fila.querySelector('.ingredient-quantity'),
-    unidad: fila.querySelector('.ingredient-unit'),
+function readRows(dish) {
+  return [...dish.ingredients.querySelectorAll('.ingredient')].map((row) => ({
+    row,
+    name: row.querySelector('.ingredient-name'),
+    quantity: row.querySelector('.ingredient-quantity'),
+    unit: row.querySelector('.ingredient-unit'),
   }));
 }
 
 // Valores en bruto de una fila y de un plato, para la lógica (D-6)
-function readRow(f) {
-  return { name: f.nombre.value, quantity: f.cantidad.value, badInput: f.cantidad.validity.badInput, unit: f.unidad.value };
+function readRow(row) {
+  return { name: row.name.value, quantity: row.quantity.value, badInput: row.quantity.validity.badInput, unit: row.unit.value };
 }
 
-function readDish(plato) {
+function readDish(dish) {
   return {
-    name: plato.nombre.value,
-    recipe: plato.receta.value,
-    reference: plato.referencia.value,
-    rows: readRows(plato).map(readRow),
+    name: dish.name.value,
+    recipe: dish.recipe.value,
+    reference: dish.reference.value,
+    rows: readRows(dish).map(readRow),
   };
 }
 
 // Muestra u oculta el segundo plato según el tipo elegido
 function updateDishes() {
   const layout = formDishLayout(formState.type, dishHasData(readDish(formState.dish2)));
-  formState.dish1.titulo.textContent = layout.firstTitle;
-  formState.dish2.titulo.textContent = layout.secondTitle;
-  formState.dish2.nodo.hidden = layout.secondHidden;
+  formState.dish1.title.textContent = layout.firstTitle;
+  formState.dish2.title.textContent = layout.secondTitle;
+  formState.dish2.node.hidden = layout.secondHidden;
   $('form-remove-second').hidden = !layout.showRemoveSecond;
   if (layout.error) showFormError(layout.error);
 }
 
-function chooseType(tipo) {
-  formState.type = tipo;
-  document.querySelectorAll('.type-button').forEach((b) => b.classList.toggle('active', b.dataset.type === tipo));
+function chooseType(type) {
+  formState.type = type;
+  document.querySelectorAll('.type-button').forEach((b) => b.classList.toggle('active', b.dataset.type === type));
   showFormError('');
   updateDishes();
 }
@@ -488,71 +488,71 @@ function removeSecondDish() {
 }
 
 // ===== Formulario: abrir y cargar =====
-function showFormError(texto) {
-  $('form-error').textContent = texto;
-  $('form-error').hidden = !texto;
+function showFormError(text) {
+  $('form-error').textContent = text;
+  $('form-error').hidden = !text;
 }
 
-function showFormNotice(texto) {
-  $('form-notice').textContent = texto;
-  $('form-notice').hidden = !texto;
+function showFormNotice(text) {
+  $('form-notice').textContent = text;
+  $('form-notice').hidden = !text;
 }
 
 function clearMarks() {
   document.querySelectorAll('#meal-form .invalid-field').forEach((n) => n.classList.remove('invalid-field'));
 }
 
-function fillForm({ id = null, fecha, tipo = null, platos = [] }) {
+function fillForm({ id = null, fecha: date, tipo: type = null, platos: dishes = [] }) {
   formState.id = id;
   $('form-title').textContent = id ? 'Editar comida' : 'Añadir comida';
-  $('form-date').value = fecha;
-  fillDish(formState.dish1, platos[0]);
-  fillDish(formState.dish2, platos[1]);
+  $('form-date').value = date;
+  fillDish(formState.dish1, dishes[0]);
+  fillDish(formState.dish2, dishes[1]);
   clearMarks();
   showFormNotice('');
-  chooseType(tipo);
+  chooseType(type);
 }
 
 // Abre el formulario para una comida concreta, o para una fecha/tipo (edita si ya existe)
-function openForm({ comida = null, fecha = null, tipo = null } = {}) {
-  const existente = comida || (fecha && tipo ? mealAt(fecha, tipo) : null);
-  if (existente) {
-    fillForm(existente);
+function openForm({ meal = null, date = null, type = null } = {}) {
+  const existing = meal || (date && type ? mealAt(date, type) : null);
+  if (existing) {
+    fillForm(existing);
   } else {
-    const fechaInicial = fecha || initialFormDate(state.view, state.refDate, getToday());
-    fillForm({ fecha: toISODate(fechaInicial), tipo });
-    if (tipo) checkExisting();
+    const initialDate = date || initialFormDate(state.view, state.refDate, getToday());
+    fillForm({ fecha: toISODate(initialDate), tipo: type });
+    if (type) checkExisting();
   }
   $('meal-dialog').showModal();
 }
 
-async function fetchMeal(fechaISO, tipo) {
+async function fetchMeal(isoDate, type) {
   const { data, error } = await client.from('comidas').select('*')
-    .eq('fecha', fechaISO).eq('tipo', tipo).maybeSingle();
+    .eq('fecha', isoDate).eq('tipo', type).maybeSingle();
   if (error) throw error;
   return data;
 }
 
 // En una entrada nueva: si la fecha y el tipo ya tienen comida, se pasa a editarla
 async function checkExisting() {
-  const fechaISO = $('form-date').value;
-  if (formState.id || !fechaISO || !formState.type) return;
-  const busqueda = ++formState.searchId;
-  let existente;
+  const isoDate = $('form-date').value;
+  if (formState.id || !isoDate || !formState.type) return;
+  const searchId = ++formState.searchId;
+  let existing;
   try {
-    existente = await fetchMeal(fechaISO, formState.type);
+    existing = await fetchMeal(isoDate, formState.type);
   } catch {
     return; // se volverá a comprobar al guardar
   }
-  if (!existente || busqueda !== formState.searchId || formState.id) return;
+  if (!existing || searchId !== formState.searchId || formState.id) return;
 
-  const hayDatos = dishHasData(readDish(formState.dish1)) || dishHasData(readDish(formState.dish2));
-  if (hayDatos) {
-    const cargar = await askConfirm(duplicateMessage(formState.type, 'confirm'), 'Editar la existente');
-    if (!cargar) return;
+  const hasData = dishHasData(readDish(formState.dish1)) || dishHasData(readDish(formState.dish2));
+  if (hasData) {
+    const load = await askConfirm(duplicateMessage(formState.type, 'confirm'), 'Editar la existente');
+    if (!load) return;
   }
-  fillForm(existente);
-  showFormNotice(duplicateMessage(existente.tipo, 'editing'));
+  fillForm(existing);
+  showFormNotice(duplicateMessage(existing.tipo, 'editing'));
 }
 
 // ===== Formulario: validación y guardado =====
@@ -568,13 +568,11 @@ function readForm() {
 // Marca los campos que devuelve la validación: { field: 'date' } o { dish, field, row? }
 function markInvalid(invalid) {
   const dishes = [formState.dish1, formState.dish2];
-  const rowField = { name: 'nombre', quantity: 'cantidad', unit: 'unidad' };
-  const dishField = { name: 'nombre', reference: 'referencia' };
   for (const { dish, field, row } of invalid) {
     let node;
     if (field === 'date') node = $('form-date');
-    else if (row !== undefined) node = readRows(dishes[dish])[row][rowField[field]];
-    else node = dishes[dish][dishField[field]];
+    else if (row !== undefined) node = readRows(dishes[dish])[row][field];
+    else node = dishes[dish][field];
     node.classList.add('invalid-field');
   }
 }
@@ -583,50 +581,50 @@ function markInvalid(invalid) {
 function validateForm() {
   clearMarks();
   const raw = readForm();
-  const resultado = validateMealForm(raw);
-  if (!resultado.error) return resultado;
-  markInvalid(resultado.invalid);
+  const result = validateMealForm(raw);
+  if (!result.error) return result;
+  markInvalid(result.invalid);
   // Desayuno con dos platos: se vuelve a enseñar el botón "Eliminar segundo plato", como antes
   if (formDishLayout(raw.type, dishHasData(raw.dishes[1])).showRemoveSecond) updateDishes();
-  return resultado;
+  return result;
 }
 
-async function saveMeal(evento) {
-  evento.preventDefault();
+async function saveMeal(event) {
+  event.preventDefault();
   showFormError('');
-  const { data: datos, error } = validateForm();
+  const { data: meal, error } = validateForm();
   if (error) return showFormError(error);
 
   $('form-save').disabled = true;
   try {
     // Una sola entrada por día y tipo
-    const existente = await fetchMeal(datos.fecha, datos.tipo);
-    if (isOtherMeal(existente, formState.id)) return showFormError(duplicateMessage(datos.tipo, 'error'));
+    const existing = await fetchMeal(meal.fecha, meal.tipo);
+    if (isOtherMeal(existing, formState.id)) return showFormError(duplicateMessage(meal.tipo, 'error'));
 
     if (formState.id) {
-      const { data, error: errorGuardar } = await client.from('comidas')
-        .update(datos).eq('id', formState.id).select('id');
-      if (errorGuardar) throw errorGuardar;
+      const { data, error: saveError } = await client.from('comidas')
+        .update(meal).eq('id', formState.id).select('id');
+      if (saveError) throw saveError;
       if (wasDeleted(data)) return showFormError('Esta comida ya no existe; puede que la haya borrado la otra persona.');
     } else {
-      const { error: errorGuardar } = await client.from('comidas').insert(datos);
-      if (errorGuardar) throw errorGuardar;
+      const { error: saveError } = await client.from('comidas').insert(meal);
+      if (saveError) throw saveError;
     }
     $('meal-dialog').close();
     loadData();
-  } catch (errorGuardar) {
-    showFormError(saveErrorMessage(errorGuardar, datos.tipo, navigator.onLine));
+  } catch (saveError) {
+    showFormError(saveErrorMessage(saveError, meal.tipo, navigator.onLine));
   } finally {
     $('form-save').disabled = false;
   }
 }
 
 // ===== Borrado =====
-async function deleteMeal(comida) {
-  const texto = deleteConfirmText(comida);
-  if (!(await askConfirm(texto, 'Borrar'))) return;
+async function deleteMeal(meal) {
+  const text = deleteConfirmText(meal);
+  if (!(await askConfirm(text, 'Borrar'))) return;
 
-  const { error } = await client.from('comidas').delete().eq('id', comida.id);
+  const { error } = await client.from('comidas').delete().eq('id', meal.id);
   if (error) return showError('No se ha podido borrar la comida. ' + translateError(error, navigator.onLine));
   state.openType = null;
   loadData();
@@ -647,7 +645,7 @@ function bindEvents() {
 
   formState.dish1 = buildFormDish($('form-dish-1'));
   formState.dish2 = buildFormDish($('form-dish-2'));
-  formState.dish1.etiquetaNombre.textContent = 'Nombre de receta *';
+  formState.dish1.nameLabel.textContent = 'Nombre de receta *';
   document.querySelectorAll('.type-button').forEach((b) => b.addEventListener('click', () => {
     chooseType(b.dataset.type);
     checkExisting();
@@ -657,7 +655,7 @@ function bindEvents() {
   $('form-cancel').addEventListener('click', () => $('meal-dialog').close());
   $('meal-form').addEventListener('submit', saveMeal);
 
-  $('confirm-yes').addEventListener('click', () => $('confirm-dialog').close('si'));
+  $('confirm-yes').addEventListener('click', () => $('confirm-dialog').close('yes'));
   $('confirm-no').addEventListener('click', () => $('confirm-dialog').close('no'));
 
   // Recargar al volver a primer plano y al recuperar la conexión
