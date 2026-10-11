@@ -9,79 +9,79 @@
 <body>
 
   <!-- Pantalla de configuración: claves sin definir o Supabase sin respuesta -->
-  <section id="screen-config" class="pantalla pantalla-centrada" hidden>
-    <div class="tarjeta">
+  <section id="screen-config" class="screen screen-centered" hidden>
+    <div class="card">
       <h1>No se puede conectar</h1>
       <p id="config-message"></p>
-      <button type="button" id="config-retry" class="boton boton-primario">Reintentar</button>
+      <button type="button" id="config-retry" class="btn btn-primary">Reintentar</button>
     </div>
   </section>
 
   <!-- Pantalla inicial mientras se comprueba la sesión -->
-  <section id="screen-start" class="pantalla pantalla-centrada">
-    <div class="cargando-texto">Cargando…</div>
+  <section id="screen-start" class="screen screen-centered">
+    <div class="loading-text">Cargando…</div>
   </section>
 
   <!-- Inicio de sesión -->
-  <section id="screen-login" class="pantalla pantalla-centrada" hidden>
-    <form id="form-login" class="tarjeta" novalidate>
+  <section id="screen-login" class="screen screen-centered" hidden>
+    <form id="form-login" class="card" novalidate>
       <h1>Calendario de comidas</h1>
-      <label class="campo">
+      <label class="field">
         <span>Email</span>
         <input type="email" id="login-email" autocomplete="username" required>
       </label>
-      <label class="campo">
+      <label class="field">
         <span>Contraseña</span>
         <input type="password" id="login-password" autocomplete="current-password" required>
       </label>
-      <p id="login-error" class="mensaje-error" hidden></p>
-      <button type="submit" id="login-button" class="boton boton-primario boton-ancho">Entrar</button>
+      <p id="login-error" class="error-message" hidden></p>
+      <button type="submit" id="login-button" class="btn btn-primary btn-wide">Entrar</button>
     </form>
   </section>
 
   <!-- Aplicación -->
-  <section id="screen-app" class="pantalla" hidden>
-    <header class="cabecera">
-      <div class="cabecera-fila">
-        <h1 class="titulo-app">Comidas</h1>
-        <button type="button" id="logout-button" class="boton boton-texto">Cerrar sesión</button>
+  <section id="screen-app" class="screen" hidden>
+    <header class="header">
+      <div class="header-row">
+        <h1 class="app-title">Comidas</h1>
+        <button type="button" id="logout-button" class="btn btn-text">Cerrar sesión</button>
       </div>
       <div class="selector-vista" role="group" aria-label="Vista">
         <button type="button" class="boton-vista" data-vista="mes">Mes</button>
         <button type="button" class="boton-vista" data-vista="semana">Semana</button>
         <button type="button" class="boton-vista" data-vista="dia">Día</button>
       </div>
-      <div class="navegacion">
-        <button type="button" id="prev-button" class="boton boton-icono" aria-label="Anterior">‹</button>
-        <button type="button" id="today-button" class="boton">Hoy</button>
-        <button type="button" id="next-button" class="boton boton-icono" aria-label="Siguiente">›</button>
+      <div class="navigation">
+        <button type="button" id="prev-button" class="btn btn-icon" aria-label="Anterior">‹</button>
+        <button type="button" id="today-button" class="btn">Hoy</button>
+        <button type="button" id="next-button" class="btn btn-icon" aria-label="Siguiente">›</button>
         <span id="period-title" class="period-title"></span>
       </div>
     </header>
 
     <div id="error-notice" class="error-notice" role="alert" hidden>
       <span id="error-notice-text"></span>
-      <button type="button" id="error-notice-close" class="boton-texto" aria-label="Cerrar aviso">✕</button>
+      <button type="button" id="error-notice-close" class="btn-text" aria-label="Cerrar aviso">✕</button>
     </div>
     <div id="loading-indicator" class="loading-indicator" hidden>Cargando…</div>
 
     <main id="calendar" class="calendar"></main>
 
-    <button type="button" id="add-button" class="boton boton-primario boton-flotante">+ Añadir comida</button>
+    <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>
   </section>
 
   <!-- Formulario de comida -->
-  <dialog id="meal-dialog" class="dialogo">
+  <dialog id="meal-dialog" class="dialog">
     <form id="meal-form" novalidate>
       <h2 id="form-title">Añadir comida</h2>
-      <p id="form-notice" class="mensaje-info" hidden></p>
+      <p id="form-notice" class="info-message" hidden></p>
 
-      <label class="campo">
+      <label class="field">
         <span>Fecha</span>
         <input type="date" id="form-date" required>
       </label>
 
-      <div class="campo">
+      <div class="field">
         <span>Tipo</span>
         <div class="selector-tipo" role="group" aria-label="Tipo de comida">
           <button type="button" class="boton-tipo" data-tipo="desayuno">Desayuno</button>
@@ -93,61 +93,61 @@
       <div id="form-dish-1"></div>
       <div id="form-dish-2"></div>
 
-      <p id="form-error" class="mensaje-error" hidden></p>
-      <button type="button" id="form-remove-second" class="boton boton-peligro" hidden>Eliminar segundo plato</button>
+      <p id="form-error" class="error-message" hidden></p>
+      <button type="button" id="form-remove-second" class="btn btn-danger" hidden>Eliminar segundo plato</button>
 
-      <div class="dialogo-botones">
-        <button type="button" id="form-cancel" class="boton">Cancelar</button>
-        <button type="submit" id="form-save" class="boton boton-primario">Guardar</button>
+      <div class="dialog-buttons">
+        <button type="button" id="form-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="form-save" class="btn btn-primary">Guardar</button>
       </div>
     </form>
   </dialog>
 
   <!-- Confirmaciones -->
-  <dialog id="confirm-dialog" class="dialogo dialogo-pequeno">
+  <dialog id="confirm-dialog" class="dialog dialog-small">
     <p id="confirm-text"></p>
-    <div class="dialogo-botones">
-      <button type="button" id="confirm-no" class="boton">Cancelar</button>
-      <button type="button" id="confirm-yes" class="boton boton-peligro">Aceptar</button>
+    <div class="dialog-buttons">
+      <button type="button" id="confirm-no" class="btn">Cancelar</button>
+      <button type="button" id="confirm-yes" class="btn btn-danger">Aceptar</button>
     </div>
   </dialog>
 
   <!-- Plantilla de un plato del formulario -->
   <template id="dish-template">
-    <fieldset class="plato">
-      <legend class="plato-titulo"></legend>
-      <label class="campo">
-        <span class="plato-etiqueta-nombre">Nombre de receta</span>
-        <input type="text" class="plato-nombre" maxlength="200">
+    <fieldset class="dish">
+      <legend class="dish-title"></legend>
+      <label class="field">
+        <span class="dish-name-label">Nombre de receta</span>
+        <input type="text" class="dish-name" maxlength="200">
       </label>
-      <div class="campo">
+      <div class="field">
         <span>Ingredientes</span>
-        <div class="ingredientes"></div>
-        <button type="button" class="boton boton-texto plato-anadir-ingrediente">+ Añadir ingrediente</button>
+        <div class="ingredients"></div>
+        <button type="button" class="btn btn-text dish-add-ingredient">+ Añadir ingrediente</button>
       </div>
-      <label class="campo">
+      <label class="field">
         <span>Receta</span>
-        <textarea class="plato-receta" rows="4"></textarea>
+        <textarea class="dish-recipe" rows="4"></textarea>
       </label>
-      <label class="campo">
+      <label class="field">
         <span>Referencia (enlace web)</span>
-        <input type="url" class="plato-referencia" placeholder="https://…">
+        <input type="url" class="dish-reference" placeholder="https://…">
       </label>
     </fieldset>
   </template>
 
   <!-- Plantilla de una fila de ingrediente -->
   <template id="ingredient-template">
-    <div class="ingrediente">
-      <input type="text" class="ingrediente-nombre" placeholder="Ingrediente" aria-label="Ingrediente">
-      <input type="number" class="ingrediente-cantidad" placeholder="Cant." min="0" step="any" inputmode="decimal" aria-label="Cantidad">
-      <select class="ingrediente-unidad" aria-label="Unidad">
+    <div class="ingredient">
+      <input type="text" class="ingredient-name" placeholder="Ingrediente" aria-label="Ingrediente">
+      <input type="number" class="ingredient-quantity" placeholder="Cant." min="0" step="any" inputmode="decimal" aria-label="Cantidad">
+      <select class="ingredient-unit" aria-label="Unidad">
         <option value="">—</option>
         <option value="und">und.</option>
         <option value="kg">kg.</option>
         <option value="gr">gr.</option>
       </select>
-      <button type="button" class="boton boton-icono ingrediente-quitar" aria-label="Quitar ingrediente">✕</button>
+      <button type="button" class="btn btn-icon ingredient-remove" aria-label="Quitar ingrediente">✕</button>
     </div>
   </template>
 

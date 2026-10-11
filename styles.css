@@ -55,25 +55,25 @@ input, select, textarea {
 
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
 
-.campo-invalido { border-color: var(--color-error); background: var(--color-error-bg); }
+.invalid-field { border-color: var(--color-error); background: var(--color-error-bg); }
 
 /* ===== Botones ===== */
-.boton {
+.btn {
   padding: 0.5rem 0.9rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface);
   cursor: pointer;
 }
-.boton:hover { filter: brightness(0.97); }
-.boton:disabled { opacity: 0.6; cursor: default; }
-.boton-primario { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
-.boton-peligro { background: var(--color-error); border-color: var(--color-error); color: #fff; }
-.boton-texto { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primary); cursor: pointer; }
-.boton-icono { padding: 0.4rem 0.7rem; line-height: 1; }
-.boton-ancho { width: 100%; }
+.btn:hover { filter: brightness(0.97); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
+.btn-danger { background: var(--color-error); border-color: var(--color-error); color: #fff; }
+.btn-text { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primary); cursor: pointer; }
+.btn-icon { padding: 0.4rem 0.7rem; line-height: 1; }
+.btn-wide { width: 100%; }
 
-.boton-flotante {
+.btn-floating {
   position: fixed;
   right: var(--space);
   bottom: var(--space);
@@ -84,7 +84,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 
 /* ===== Pantallas ===== */
-.pantalla-centrada {
+.screen-centered {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -92,7 +92,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   padding: var(--space);
 }
 
-.tarjeta {
+.card {
   width: 100%;
   max-width: 380px;
   padding: calc(var(--space) * 1.5);
@@ -101,16 +101,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   box-shadow: var(--shadow);
 }
 
-.cargando-texto { color: var(--color-text-muted); }
+.loading-text { color: var(--color-text-muted); }
 
-.campo { display: block; margin-bottom: var(--space); }
-.campo > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
+.field { display: block; margin-bottom: var(--space); }
+.field > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
 
-.mensaje-error { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
-.mensaje-info { background: var(--color-info-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
+.error-message { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
+.info-message { background: var(--color-info-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
 
 /* ===== Cabecera ===== */
-.cabecera {
+.header {
   position: sticky;
   top: 0;
   z-index: 5;
@@ -118,9 +118,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
-.cabecera > * { max-width: var(--max-width); margin-left: auto; margin-right: auto; }
-.cabecera-fila { display: flex; align-items: center; justify-content: space-between; }
-.titulo-app { margin: 0; }
+.header > * { max-width: var(--max-width); margin-left: auto; margin-right: auto; }
+.header-row { display: flex; align-items: center; justify-content: space-between; }
+.app-title { margin: 0; }
 
 .selector-vista, .selector-tipo { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
 .boton-vista, .boton-tipo {
@@ -136,7 +136,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .boton-tipo[data-tipo="comida"].activo { background: var(--color-comida); border-color: var(--color-comida); color: #fff; }
 .boton-tipo[data-tipo="cena"].activo { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
 
-.navegacion { display: flex; align-items: center; gap: 0.4rem; }
+.navigation { display: flex; align-items: center; gap: 0.4rem; }
 .period-title { display: inline-block; margin-left: 0.4rem; font-weight: 600; }
 .period-title::first-letter, .semana-fecha::first-letter { text-transform: uppercase; }
 
@@ -153,7 +153,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   color: var(--color-error);
   border-radius: var(--radius);
 }
-.error-notice .boton-texto { color: var(--color-error); }
+.error-notice .btn-text { color: var(--color-error); }
 .loading-indicator { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); }
 
 /* ===== Calendario ===== */
@@ -231,7 +231,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .detalle-botones { display: flex; gap: 0.5rem; }
 
 /* ===== Diálogos ===== */
-.dialogo {
+.dialog {
   width: min(600px, calc(100% - 1rem));
   max-height: calc(100vh - 1rem);
   padding: var(--space);
@@ -239,13 +239,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
 }
-.dialogo::backdrop { background: rgba(0, 0, 0, 0.4); }
-.dialogo-pequeno { width: min(380px, calc(100% - 1rem)); }
-.dialogo-botones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--space); }
+.dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
+.dialog-small { width: min(380px, calc(100% - 1rem)); }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--space); }
 
-.plato { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
-.plato-titulo { padding: 0 0.3rem; font-weight: 600; }
-.ingrediente { display: grid; grid-template-columns: 1fr 4.5rem 4.5rem auto; gap: 0.3rem; margin-bottom: 0.3rem; }
+.dish { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
+.dish-title { padding: 0 0.3rem; font-weight: 600; }
+.ingredient { display: grid; grid-template-columns: 1fr 4.5rem 4.5rem auto; gap: 0.3rem; margin-bottom: 0.3rem; }
 
 /* ===== Pantallas grandes ===== */
 @media (min-width: 768px) {
@@ -254,5 +254,5 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   .mes-comida-nombre { display: block; }
   .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .semana-comida-nombre { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .navegacion .period-title { font-size: var(--text-large); }
+  .navigation .period-title { font-size: var(--text-large); }
 }

@@ -341,7 +341,7 @@ function crearBloque(fecha, tipo) {
     const vacio = el('div', 'bloque-vacio');
     const textos = el('div');
     textos.append(el('span', 'bloque-tipo', tipo.name), el('p', null, 'Nada registrado'));
-    vacio.append(textos, boton('boton', 'Añadir', () => abrirFormulario({ fecha, tipo: tipo.id })));
+    vacio.append(textos, boton('btn', 'Añadir', () => abrirFormulario({ fecha, tipo: tipo.id })));
     bloque.append(vacio);
     return bloque;
   }
@@ -364,8 +364,8 @@ function crearDetalle(comida) {
 
   const botones = el('div', 'detalle-botones');
   botones.append(
-    boton('boton', 'Editar', () => abrirFormulario({ comida })),
-    boton('boton boton-peligro', 'Borrar', () => borrarComida(comida)),
+    boton('btn', 'Editar', () => abrirFormulario({ comida })),
+    boton('btn btn-danger', 'Borrar', () => borrarComida(comida)),
   );
   detalle.append(botones);
   return detalle;
@@ -412,24 +412,24 @@ function crearPlatoFormulario(contenedor) {
   const buscar = (selector) => nodo.querySelector(selector);
   const plato = {
     nodo,
-    titulo: buscar('.plato-titulo'),
-    etiquetaNombre: buscar('.plato-etiqueta-nombre'),
-    nombre: buscar('.plato-nombre'),
-    ingredientes: buscar('.ingredientes'),
-    receta: buscar('.plato-receta'),
-    referencia: buscar('.plato-referencia'),
+    titulo: buscar('.dish-title'),
+    etiquetaNombre: buscar('.dish-name-label'),
+    nombre: buscar('.dish-name'),
+    ingredientes: buscar('.ingredients'),
+    receta: buscar('.dish-recipe'),
+    referencia: buscar('.dish-reference'),
   };
-  buscar('.plato-anadir-ingrediente').addEventListener('click', () => anadirIngrediente(plato));
+  buscar('.dish-add-ingredient').addEventListener('click', () => anadirIngrediente(plato));
   contenedor.append(nodo);
   return plato;
 }
 
 function anadirIngrediente(plato, datos = {}) {
   const fila = $('ingredient-template').content.firstElementChild.cloneNode(true);
-  fila.querySelector('.ingrediente-nombre').value = datos.nombre || '';
-  fila.querySelector('.ingrediente-cantidad').value = datos.cantidad ?? '';
-  fila.querySelector('.ingrediente-unidad').value = datos.unidad || '';
-  fila.querySelector('.ingrediente-quitar').addEventListener('click', () => fila.remove());
+  fila.querySelector('.ingredient-name').value = datos.nombre || '';
+  fila.querySelector('.ingredient-quantity').value = datos.cantidad ?? '';
+  fila.querySelector('.ingredient-unit').value = datos.unidad || '';
+  fila.querySelector('.ingredient-remove').addEventListener('click', () => fila.remove());
   plato.ingredientes.append(fila);
 }
 
@@ -444,11 +444,11 @@ function rellenarPlato(plato, datos) {
 }
 
 function leerFilas(plato) {
-  return [...plato.ingredientes.querySelectorAll('.ingrediente')].map((fila) => ({
+  return [...plato.ingredientes.querySelectorAll('.ingredient')].map((fila) => ({
     fila,
-    nombre: fila.querySelector('.ingrediente-nombre'),
-    cantidad: fila.querySelector('.ingrediente-cantidad'),
-    unidad: fila.querySelector('.ingrediente-unidad'),
+    nombre: fila.querySelector('.ingredient-name'),
+    cantidad: fila.querySelector('.ingredient-quantity'),
+    unidad: fila.querySelector('.ingredient-unit'),
   }));
 }
 
@@ -501,7 +501,7 @@ function mostrarAvisoFormulario(texto) {
 }
 
 function limpiarMarcas() {
-  document.querySelectorAll('#meal-form .campo-invalido').forEach((n) => n.classList.remove('campo-invalido'));
+  document.querySelectorAll('#meal-form .invalid-field').forEach((n) => n.classList.remove('invalid-field'));
 }
 
 function cargarEnFormulario({ id = null, fecha, tipo = null, platos = [] }) {
@@ -577,7 +577,7 @@ function markInvalid(invalid) {
     if (field === 'date') node = $('form-date');
     else if (row !== undefined) node = leerFilas(dishes[dish])[row][rowField[field]];
     else node = dishes[dish][dishField[field]];
-    node.classList.add('campo-invalido');
+    node.classList.add('invalid-field');
   }
 }
 
