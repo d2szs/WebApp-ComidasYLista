@@ -193,10 +193,10 @@ function validateDish(rawDish, index, nameMessage) {
     error = error || message;
   };
 
-  const nombre = rawDish.name.trim();
-  if (!nombre) fail(nameMessage, 'name');
+  const dishName = rawDish.name.trim();
+  if (!dishName) fail(nameMessage, 'name');
 
-  const ingredientes = [];
+  const ingredients = [];
   rawDish.rows.forEach((row, i) => {
     if (isIngredientRowEmpty(row)) return;
     const name = row.name.trim();
@@ -206,14 +206,14 @@ function validateDish(rawDish, index, nameMessage) {
     if (!name) fail(INGREDIENT_ERROR, 'name', i);
     if (!quantityOk) fail(INGREDIENT_ERROR, 'quantity', i);
     if (!unitOk) fail(INGREDIENT_ERROR, 'unit', i);
-    if (name && quantityOk && unitOk) ingredientes.push({ nombre: name, cantidad: quantity, unidad: row.unit });
+    if (name && quantityOk && unitOk) ingredients.push({ nombre: name, cantidad: quantity, unidad: row.unit });
   });
 
-  const referencia = rawDish.reference.trim();
-  if (referencia && !safeLink(referencia)) fail(REFERENCE_ERROR, 'reference');
+  const reference = rawDish.reference.trim();
+  if (reference && !safeLink(reference)) fail(REFERENCE_ERROR, 'reference');
 
   if (error) return { error, invalid };
-  return { dish: { nombre, ingredientes, receta: rawDish.recipe.trim(), referencia } };
+  return { dish: { nombre: dishName, ingredientes: ingredients, receta: rawDish.recipe.trim(), referencia: reference } };
 }
 
 // Valida el formulario en bruto { date, type, dishes }: { data } listo para guardar, o { error, invalid }.
@@ -241,25 +241,25 @@ function validateMealForm(rawForm) {
 // Las claves están rellenas y no son las de la plantilla
 function keysDefined(url, key) {
   return Boolean(url && key)
-    && !url.includes('TU_URL')
-    && !key.includes('TU_CLAVE_PUBLICA');
+    && !url.includes('YOUR_URL')
+    && !key.includes('YOUR_PUBLIC_KEY');
 }
 
 // Texto de la pantalla "No se puede conectar", o null si todo va bien.
 // check: { libraryLoaded, keysDefined, status }; status es null si el servidor no responde.
-// Los textos citan los nombres actuales de app.js (spec 001-codigo-ingles los cambiará).
+// Los textos citan los nombres actuales de app.js.
 function configMessage(check) {
   if (!check.libraryLoaded) {
     return 'No se ha podido cargar la librería de Supabase. Comprueba que el archivo supabase.js está junto a index.html.';
   }
   if (!check.keysDefined) {
-    return 'Faltan las claves de Supabase. Abre app.js y rellena SUPABASE_URL y SUPABASE_CLAVE_PUBLICA con los datos de tu proyecto.';
+    return 'Faltan las claves de Supabase. Abre app.js y rellena SUPABASE_URL y SUPABASE_PUBLIC_KEY con los datos de tu proyecto.';
   }
   if (check.status === null) {
     return 'Supabase no responde. Comprueba tu conexión a internet y que SUPABASE_URL en app.js es correcta.';
   }
   if (check.status === 401 || check.status === 403) {
-    return 'Supabase rechaza la clave pública. Revisa SUPABASE_CLAVE_PUBLICA en app.js.';
+    return 'Supabase rechaza la clave pública. Revisa SUPABASE_PUBLIC_KEY en app.js.';
   }
   const ok = check.status >= 200 && check.status < 300;
   return ok ? null : 'Supabase responde con un error. Prueba de nuevo en unos minutos.';

@@ -2,7 +2,7 @@
 
 // ===== Claves de Supabase (solo la clave pública, nunca la secreta) =====
 const SUPABASE_URL = 'https://beyarsihdhzpxzvsxeep.supabase.co';
-const SUPABASE_CLAVE_PUBLICA = 'sb_publishable_BLEWWv74RigJ6Jo977E59A_2vs3nYk2';
+const SUPABASE_PUBLIC_KEY = 'sb_publishable_BLEWWv74RigJ6Jo977E59A_2vs3nYk2';
 
 // ===== Constantes =====
 const CONNECTION_TIMEOUT = 8000;
@@ -86,7 +86,7 @@ async function checkServer() {
   const timer = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
   try {
     const response = await fetch(SUPABASE_URL + '/auth/v1/health', {
-      headers: { apikey: SUPABASE_CLAVE_PUBLICA },
+      headers: { apikey: SUPABASE_PUBLIC_KEY },
       signal: controller.signal,
     });
     return response.status;
@@ -101,7 +101,7 @@ async function connect() {
   showScreen('start');
   const check = {
     libraryLoaded: Boolean(window.supabase),
-    keysDefined: keysDefined(SUPABASE_URL, SUPABASE_CLAVE_PUBLICA),
+    keysDefined: keysDefined(SUPABASE_URL, SUPABASE_PUBLIC_KEY),
     status: null,
   };
   // Solo se pregunta al servidor si hay librería y claves
@@ -109,7 +109,7 @@ async function connect() {
   const problem = configMessage(check);
   if (problem) return showConfig(problem);
 
-  if (!client) client = window.supabase.createClient(SUPABASE_URL, SUPABASE_CLAVE_PUBLICA);
+  if (!client) client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
   if (!authListening) {
     authListening = true;
     // Se lanza también al suscribirse (INITIAL_SESSION). setTimeout evita bloquear el cliente.
