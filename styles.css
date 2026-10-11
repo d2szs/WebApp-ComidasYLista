@@ -122,8 +122,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .header-row { display: flex; align-items: center; justify-content: space-between; }
 .app-title { margin: 0; }
 
-.selector-vista, .selector-tipo { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
-.boton-vista, .boton-tipo {
+.view-selector, .type-selector { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
+.view-button, .type-button {
   flex: 1;
   padding: 0.45rem;
   border: 1px solid var(--color-border);
@@ -131,14 +131,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   background: var(--color-bg);
   cursor: pointer;
 }
-.boton-vista.activo { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
-.boton-tipo[data-tipo="desayuno"].activo { background: var(--color-desayuno); border-color: var(--color-desayuno); color: #fff; }
-.boton-tipo[data-tipo="comida"].activo { background: var(--color-comida); border-color: var(--color-comida); color: #fff; }
-.boton-tipo[data-tipo="cena"].activo { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
+.view-button.active { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
+.type-button[data-type="desayuno"].active { background: var(--color-desayuno); border-color: var(--color-desayuno); color: #fff; }
+.type-button[data-type="comida"].active { background: var(--color-comida); border-color: var(--color-comida); color: #fff; }
+.type-button[data-type="cena"].active { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
 
 .navigation { display: flex; align-items: center; gap: 0.4rem; }
 .period-title { display: inline-block; margin-left: 0.4rem; font-weight: 600; }
-.period-title::first-letter, .semana-fecha::first-letter { text-transform: uppercase; }
+.period-title::first-letter, .week-date::first-letter { text-transform: uppercase; }
 
 /* ===== Avisos ===== */
 .error-notice {
@@ -160,14 +160,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .calendar { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
 
 /* Colores por tipo de comida */
-.tipo-desayuno { --color-type: var(--color-desayuno); }
-.tipo-comida { --color-type: var(--color-comida); }
-.tipo-cena { --color-type: var(--color-cena); }
+.type-desayuno { --color-type: var(--color-desayuno); }
+.type-comida { --color-type: var(--color-comida); }
+.type-cena { --color-type: var(--color-cena); }
 
 /* Vista mensual */
-.mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
-.mes-cabecera { padding: 0.3rem 0; text-align: center; font-size: var(--text-small); color: var(--color-text-muted); }
-.mes-dia {
+.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.month-header { padding: 0.3rem 0; text-align: center; font-size: var(--text-small); color: var(--color-text-muted); }
+.month-day {
   min-height: 3.5rem;
   padding: 0.3rem;
   border: none;
@@ -180,20 +180,20 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   flex-direction: column;
   justify-content: flex-start;
 }
-.mes-dia.fuera { opacity: 0.45; }
-.mes-dia.hoy { background: var(--color-today); outline: 2px solid var(--color-primary); }
-.mes-numero { font-size: var(--text-small); font-weight: 600; }
-.mes-comidas { display: flex; gap: 3px; margin-top: 0.25rem; flex-wrap: wrap; }
-.mes-comida { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; font-size: 0.75rem; }
-.punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-type); }
-.mes-comida-nombre { display: none; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-day.outside { opacity: 0.45; }
+.month-day.today { background: var(--color-today); outline: 2px solid var(--color-primary); }
+.month-number { font-size: var(--text-small); font-weight: 600; }
+.month-meals { display: flex; gap: 3px; margin-top: 0.25rem; flex-wrap: wrap; }
+.month-meal { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; font-size: 0.75rem; }
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--color-type); }
+.month-meal-name { display: none; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Vista semanal */
-.semana { display: grid; gap: 0.6rem; }
-.semana-dia { background: var(--color-surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.6rem; }
-.semana-dia.hoy { outline: 2px solid var(--color-primary); }
-.semana-fecha { display: block; width: 100%; margin-bottom: 0.4rem; padding: 0; border: none; background: none; text-align: left; font-weight: 600; cursor: pointer; }
-.semana-comida {
+.week { display: grid; gap: 0.6rem; }
+.week-day { background: var(--color-surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.6rem; }
+.week-day.today { outline: 2px solid var(--color-primary); }
+.week-date { display: block; width: 100%; margin-bottom: 0.4rem; padding: 0; border: none; background: none; text-align: left; font-weight: 600; cursor: pointer; }
+.week-meal {
   display: block;
   width: 100%;
   margin-top: 0.3rem;
@@ -205,30 +205,30 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   text-align: left;
   cursor: pointer;
 }
-.semana-comida-tipo { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
-.semana-comida.vacia .semana-comida-nombre { color: var(--color-text-muted); }
+.week-meal-type { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
+.week-meal.empty .week-meal-name { color: var(--color-text-muted); }
 
 /* Vista diaria */
-.bloque {
+.block {
   margin-bottom: 0.75rem;
   background: var(--color-surface);
   border-left: 5px solid var(--color-type);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
-.bloque-cabecera { display: block; width: 100%; padding: 0.8rem var(--space); border: none; background: none; text-align: left; cursor: pointer; }
-.bloque-tipo { display: block; font-size: var(--text-small); font-weight: 600; color: var(--color-type); }
-.bloque-resumen { font-size: var(--text-normal); }
-.bloque-vacio { padding: 0.8rem var(--space); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.bloque-vacio p { margin: 0; color: var(--color-text-muted); }
-.bloque-detalle { padding: 0 var(--space) var(--space); }
-.detalle-plato { margin-bottom: var(--space); }
-.detalle-plato h3 { margin: 0 0 0.3rem; font-size: var(--text-normal); }
-.detalle-subtitulo { margin: 0.5rem 0 0.2rem; font-size: var(--text-small); color: var(--color-text-muted); }
-.detalle-plato ul { margin: 0; padding-left: 1.2rem; }
-.detalle-receta { margin: 0; white-space: pre-wrap; }
-.detalle-plato a { color: var(--color-primary); word-break: break-all; }
-.detalle-botones { display: flex; gap: 0.5rem; }
+.block-header { display: block; width: 100%; padding: 0.8rem var(--space); border: none; background: none; text-align: left; cursor: pointer; }
+.block-type { display: block; font-size: var(--text-small); font-weight: 600; color: var(--color-type); }
+.block-summary { font-size: var(--text-normal); }
+.block-empty { padding: 0.8rem var(--space); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.block-empty p { margin: 0; color: var(--color-text-muted); }
+.block-detail { padding: 0 var(--space) var(--space); }
+.detail-dish { margin-bottom: var(--space); }
+.detail-dish h3 { margin: 0 0 0.3rem; font-size: var(--text-normal); }
+.detail-subtitle { margin: 0.5rem 0 0.2rem; font-size: var(--text-small); color: var(--color-text-muted); }
+.detail-dish ul { margin: 0; padding-left: 1.2rem; }
+.detail-recipe { margin: 0; white-space: pre-wrap; }
+.detail-dish a { color: var(--color-primary); word-break: break-all; }
+.detail-buttons { display: flex; gap: 0.5rem; }
 
 /* ===== Diálogos ===== */
 .dialog {
@@ -249,10 +249,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 /* ===== Pantallas grandes ===== */
 @media (min-width: 768px) {
-  .mes-dia { min-height: 6rem; }
-  .mes-comidas { flex-direction: column; }
-  .mes-comida-nombre { display: block; }
-  .semana { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-  .semana-comida-nombre { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .month-day { min-height: 6rem; }
+  .month-meals { flex-direction: column; }
+  .month-meal-name { display: block; }
+  .week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .week-meal-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .navigation .period-title { font-size: var(--text-large); }
 }

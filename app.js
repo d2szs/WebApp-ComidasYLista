@@ -6,12 +6,10 @@ const SUPABASE_CLAVE_PUBLICA = 'sb_publishable_BLEWWv74RigJ6Jo977E59A_2vs3nYk2';
 
 // ===== Constantes =====
 const TIEMPO_MAXIMO_CONEXION = 8000;
-// Nombre de cada vista en logic.js
-const VISTA_LOGICA = { dia: 'day', semana: 'week', mes: 'month' };
 
 // ===== Estado =====
 const estado = {
-  vista: 'semana',      // 'mes' | 'semana' | 'dia'
+  vista: 'week',        // 'month' | 'week' | 'day'
   fechaRef: hoy(),      // día de referencia del periodo visible
   comidas: new Map(),   // 'aaaa-mm-dd|tipo' → fila
   abierto: null,        // tipo desplegado en la vista diaria
@@ -174,7 +172,7 @@ function comidaDe(fecha, tipo) {
 
 // Periodo visible según la vista y el día de referencia (logic.js)
 function rangoVisible() {
-  return visibleRange(VISTA_LOGICA[estado.vista], estado.fechaRef);
+  return visibleRange(estado.vista, estado.fechaRef);
 }
 
 async function cargarDatos() {
@@ -238,7 +236,7 @@ function cambiarVista(vista) {
 }
 
 function moverPeriodo(sentido) {
-  estado.fechaRef = movePeriod(VISTA_LOGICA[estado.vista], estado.fechaRef, sentido);
+  estado.fechaRef = movePeriod(estado.vista, estado.fechaRef, sentido);
   estado.abierto = null;
   render();
   cargarDatos();
@@ -252,7 +250,7 @@ function irAHoy() {
 }
 
 function abrirDia(fecha, tipoAbierto = null) {
-  estado.vista = 'dia';
+  estado.vista = 'day';
   estado.fechaRef = fecha;
   estado.abierto = tipoAbierto;
   render();
@@ -263,37 +261,37 @@ function abrirDia(fecha, tipoAbierto = null) {
 function render() {
   actualizarCabecera();
   const calendario = $('calendar');
-  if (estado.vista === 'mes') calendario.replaceChildren(crearVistaMes());
-  else if (estado.vista === 'semana') calendario.replaceChildren(crearVistaSemana());
+  if (estado.vista === 'month') calendario.replaceChildren(crearVistaMes());
+  else if (estado.vista === 'week') calendario.replaceChildren(crearVistaSemana());
   else calendario.replaceChildren(crearVistaDia());
 }
 
 function actualizarCabecera() {
-  document.querySelectorAll('.boton-vista').forEach((b) => {
-    b.classList.toggle('activo', b.dataset.vista === estado.vista);
+  document.querySelectorAll('.view-button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.view === estado.vista);
   });
-  $('period-title').textContent = periodTitle(VISTA_LOGICA[estado.vista], estado.fechaRef);
+  $('period-title').textContent = periodTitle(estado.vista, estado.fechaRef);
 }
 
 // Vista mensual: cuadrícula de días con puntos (móvil) o nombres (pantalla grande)
 function crearVistaMes() {
-  const rejilla = el('div', 'mes');
-  for (const inicial of ['L', 'M', 'X', 'J', 'V', 'S', 'D']) rejilla.append(el('div', 'mes-cabecera', inicial));
+  const rejilla = el('div', 'month');
+  for (const inicial of ['L', 'M', 'X', 'J', 'V', 'S', 'D']) rejilla.append(el('div', 'month-header', inicial));
 
   for (const { date: fecha, outside, isToday } of monthGrid(estado.fechaRef, hoy())) {
-    const celda = boton('mes-dia', undefined, () => abrirDia(fecha));
-    if (outside) celda.classList.add('fuera');
-    if (isToday) celda.classList.add('hoy');
+    const celda = boton('month-day', undefined, () => abrirDia(fecha));
+    if (outside) celda.classList.add('outside');
+    if (isToday) celda.classList.add('today');
     celda.setAttribute('aria-label', longDate(fecha));
-    celda.append(el('div', 'mes-numero', String(fecha.getDate())));
+    celda.append(el('div', 'month-number', String(fecha.getDate())));
 
-    const lista = el('div', 'mes-comidas');
+    const lista = el('div', 'month-meals');
     for (const tipo of MEAL_TYPES) {
       const comida = comidaDe(fecha, tipo.id);
       if (!comida) continue;
-      const item = el('div', 'mes-comida tipo-' + tipo.id);
+      const item = el('div', 'month-meal type-' + tipo.id);
       item.title = tipo.name + ': ' + comida.platos[0].nombre;
-      item.append(el('span', 'punto'), el('span', 'mes-comida-nombre', comida.platos[0].nombre));
+      item.append(el('span', 'dot'), el('span', 'month-meal-name', comida.platos[0].nombre));
       lista.append(item);
     }
     celda.append(lista);
@@ -304,20 +302,20 @@ function crearVistaMes() {
 
 // Vista semanal: siete días con sus tres comidas
 function crearVistaSemana() {
-  const semana = el('div', 'semana');
+  const semana = el('div', 'week');
   for (const { date: fecha, isToday } of weekDays(estado.fechaRef, hoy())) {
-    const tarjeta = el('section', 'semana-dia' + (isToday ? ' hoy' : ''));
-    tarjeta.append(boton('semana-fecha', formatDate(fecha, { weekday: 'long', day: 'numeric' }), () => abrirDia(fecha)));
+    const tarjeta = el('section', 'week-day' + (isToday ? ' today' : ''));
+    tarjeta.append(boton('week-date', formatDate(fecha, { weekday: 'long', day: 'numeric' }), () => abrirDia(fecha)));
 
     for (const tipo of MEAL_TYPES) {
       const comida = comidaDe(fecha, tipo.id);
       const alPulsar = comida
         ? () => abrirDia(fecha, tipo.id)
         : () => abrirFormulario({ fecha, tipo: tipo.id });
-      const fila = boton('semana-comida tipo-' + tipo.id + (comida ? '' : ' vacia'), undefined, alPulsar);
+      const fila = boton('week-meal type-' + tipo.id + (comida ? '' : ' empty'), undefined, alPulsar);
       fila.append(
-        el('span', 'semana-comida-tipo', tipo.name),
-        el('span', 'semana-comida-nombre', comida ? dishNames(comida) : '—'),
+        el('span', 'week-meal-type', tipo.name),
+        el('span', 'week-meal-name', comida ? dishNames(comida) : '—'),
       );
       tarjeta.append(fila);
     }
@@ -328,41 +326,41 @@ function crearVistaSemana() {
 
 // Vista diaria: un bloque por tipo de comida
 function crearVistaDia() {
-  const contenedor = el('div', 'dia');
+  const contenedor = el('div', 'day');
   for (const tipo of MEAL_TYPES) contenedor.append(crearBloque(estado.fechaRef, tipo));
   return contenedor;
 }
 
 function crearBloque(fecha, tipo) {
-  const bloque = el('section', 'bloque tipo-' + tipo.id);
+  const bloque = el('section', 'block type-' + tipo.id);
   const comida = comidaDe(fecha, tipo.id);
 
   if (!comida) {
-    const vacio = el('div', 'bloque-vacio');
+    const vacio = el('div', 'block-empty');
     const textos = el('div');
-    textos.append(el('span', 'bloque-tipo', tipo.name), el('p', null, 'Nada registrado'));
+    textos.append(el('span', 'block-type', tipo.name), el('p', null, 'Nada registrado'));
     vacio.append(textos, boton('btn', 'Añadir', () => abrirFormulario({ fecha, tipo: tipo.id })));
     bloque.append(vacio);
     return bloque;
   }
 
   const abierto = estado.abierto === tipo.id;
-  const cabecera = boton('bloque-cabecera', undefined, () => {
+  const cabecera = boton('block-header', undefined, () => {
     estado.abierto = abierto ? null : tipo.id;
     render();
   });
   cabecera.setAttribute('aria-expanded', String(abierto));
-  cabecera.append(el('span', 'bloque-tipo', tipo.name), el('span', 'bloque-resumen', dishNames(comida)));
+  cabecera.append(el('span', 'block-type', tipo.name), el('span', 'block-summary', dishNames(comida)));
   bloque.append(cabecera);
   if (abierto) bloque.append(crearDetalle(comida));
   return bloque;
 }
 
 function crearDetalle(comida) {
-  const detalle = el('div', 'bloque-detalle');
+  const detalle = el('div', 'block-detail');
   comida.platos.forEach((plato, indice) => detalle.append(crearDetallePlato(plato, dishTitle(comida.tipo, indice))));
 
-  const botones = el('div', 'detalle-botones');
+  const botones = el('div', 'detail-buttons');
   botones.append(
     boton('btn', 'Editar', () => abrirFormulario({ comida })),
     boton('btn btn-danger', 'Borrar', () => borrarComida(comida)),
@@ -372,16 +370,16 @@ function crearDetalle(comida) {
 }
 
 function crearDetallePlato(plato, titulo) {
-  const caja = el('div', 'detalle-plato');
-  caja.append(el('p', 'detalle-subtitulo', titulo), el('h3', null, plato.nombre));
+  const caja = el('div', 'detail-dish');
+  caja.append(el('p', 'detail-subtitle', titulo), el('h3', null, plato.nombre));
 
   if (plato.ingredientes?.length) {
     const lista = el('ul');
     for (const ing of plato.ingredientes) lista.append(el('li', null, formatIngredient(ing)));
-    caja.append(el('p', 'detalle-subtitulo', 'Ingredientes'), lista);
+    caja.append(el('p', 'detail-subtitle', 'Ingredientes'), lista);
   }
   if (plato.receta) {
-    caja.append(el('p', 'detalle-subtitulo', 'Receta'), el('p', 'detalle-receta', plato.receta));
+    caja.append(el('p', 'detail-subtitle', 'Receta'), el('p', 'detail-recipe', plato.receta));
   }
   const enlace = safeLink(plato.referencia);
   if (enlace) {
@@ -389,7 +387,7 @@ function crearDetallePlato(plato, titulo) {
     a.href = enlace;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    caja.append(el('p', 'detalle-subtitulo', 'Referencia'), a);
+    caja.append(el('p', 'detail-subtitle', 'Referencia'), a);
   }
   return caja;
 }
@@ -478,7 +476,7 @@ function actualizarPlatos() {
 
 function elegirTipo(tipo) {
   formulario.tipo = tipo;
-  document.querySelectorAll('.boton-tipo').forEach((b) => b.classList.toggle('activo', b.dataset.tipo === tipo));
+  document.querySelectorAll('.type-button').forEach((b) => b.classList.toggle('active', b.dataset.type === tipo));
   mostrarErrorFormulario('');
   actualizarPlatos();
 }
@@ -521,7 +519,7 @@ function abrirFormulario({ comida = null, fecha = null, tipo = null } = {}) {
   if (existente) {
     cargarEnFormulario(existente);
   } else {
-    const fechaInicial = fecha || initialFormDate(VISTA_LOGICA[estado.vista], estado.fechaRef, hoy());
+    const fechaInicial = fecha || initialFormDate(estado.vista, estado.fechaRef, hoy());
     cargarEnFormulario({ fecha: toISODate(fechaInicial), tipo });
     if (tipo) buscarExistente();
   }
@@ -640,7 +638,7 @@ function conectarEventos() {
   $('form-login').addEventListener('submit', enviarLogin);
   $('logout-button').addEventListener('click', cerrarSesion);
 
-  document.querySelectorAll('.boton-vista').forEach((b) => b.addEventListener('click', () => cambiarVista(b.dataset.vista)));
+  document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => cambiarVista(b.dataset.view)));
   $('prev-button').addEventListener('click', () => moverPeriodo(-1));
   $('next-button').addEventListener('click', () => moverPeriodo(1));
   $('today-button').addEventListener('click', irAHoy);
@@ -650,8 +648,8 @@ function conectarEventos() {
   formulario.plato1 = crearPlatoFormulario($('form-dish-1'));
   formulario.plato2 = crearPlatoFormulario($('form-dish-2'));
   formulario.plato1.etiquetaNombre.textContent = 'Nombre de receta *';
-  document.querySelectorAll('.boton-tipo').forEach((b) => b.addEventListener('click', () => {
-    elegirTipo(b.dataset.tipo);
+  document.querySelectorAll('.type-button').forEach((b) => b.addEventListener('click', () => {
+    elegirTipo(b.dataset.type);
     buscarExistente();
   }));
   $('form-date').addEventListener('change', buscarExistente);
