@@ -14,7 +14,7 @@ const state = {
   meals: new Map(),     // 'aaaa-mm-dd|tipo' → fila
   openType: null,       // tipo desplegado en la vista diaria
   requestId: 0,         // para descartar respuestas antiguas
-  noticeKind: null,     // origen del aviso visible: 'carga' | 'sync' | 'accion'
+  noticeKind: null,     // origen del aviso visible: 'load' | 'sync' | 'action'
 };
 
 const formState = {
@@ -40,60 +40,60 @@ function getToday() {
 }
 
 // ===== Utilidades del DOM =====
-function el(etiqueta, clase, texto) {
-  const nodo = document.createElement(etiqueta);
-  if (clase) nodo.className = clase;
-  if (texto !== undefined) nodo.textContent = texto;
-  return nodo;
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-function button(clase, texto, alPulsar) {
-  const nodo = el('button', clase, texto);
-  nodo.type = 'button';
-  nodo.addEventListener('click', alPulsar);
-  return nodo;
+function button(className, text, onClick) {
+  const node = el('button', className, text);
+  node.type = 'button';
+  node.addEventListener('click', onClick);
+  return node;
 }
 
-function showScreen(nombre) {
-  for (const pantalla of ['config', 'start', 'login', 'app']) {
-    $('screen-' + pantalla).hidden = pantalla !== nombre;
+function showScreen(name) {
+  for (const screen of ['config', 'start', 'login', 'app']) {
+    $('screen-' + screen).hidden = screen !== name;
   }
 }
 
 // ===== Avisos y errores =====
-function showError(texto, tipo = 'accion') {
-  $('error-notice-text').textContent = texto;
+function showError(text, kind = 'action') {
+  $('error-notice-text').textContent = text;
   $('error-notice').hidden = false;
-  state.noticeKind = tipo;
+  state.noticeKind = kind;
 }
 
-// Oculta el aviso (si se indica tipo, solo cuando el aviso es de ese tipo)
-function hideError(tipo) {
-  if (tipo && state.noticeKind !== tipo) return;
+// Oculta el aviso (si se indica kind, solo cuando el aviso es de ese origen)
+function hideError(kind) {
+  if (kind && state.noticeKind !== kind) return;
   $('error-notice').hidden = true;
   state.noticeKind = null;
 }
 
 // ===== Arranque y conexión =====
-function showConfig(mensaje) {
-  $('config-message').textContent = mensaje;
+function showConfig(message) {
+  $('config-message').textContent = message;
   showScreen('config');
 }
 
 // Pregunta a Supabase si responde. Devuelve el código HTTP, o null si no responde a tiempo.
 async function checkServer() {
-  const control = new AbortController();
-  const temporizador = setTimeout(() => control.abort(), CONNECTION_TIMEOUT);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
   try {
-    const respuesta = await fetch(SUPABASE_URL + '/auth/v1/health', {
+    const response = await fetch(SUPABASE_URL + '/auth/v1/health', {
       headers: { apikey: SUPABASE_CLAVE_PUBLICA },
-      signal: control.signal,
+      signal: controller.signal,
     });
-    return respuesta.status;
+    return response.status;
   } catch {
     return null;
   } finally {
-    clearTimeout(temporizador);
+    clearTimeout(timer);
   }
 }
 
@@ -113,21 +113,21 @@ async function connect() {
   if (!authListening) {
     authListening = true;
     // Se lanza también al suscribirse (INITIAL_SESSION). setTimeout evita bloquear el cliente.
-    client.auth.onAuthStateChange((_evento, sesion) => setTimeout(() => applySession(sesion), 0));
+    client.auth.onAuthStateChange((_event, session) => setTimeout(() => applySession(session), 0));
   } else {
     const { data } = await client.auth.getSession();
     applySession(data.session);
   }
 }
 
-function applySession(sesion) {
-  if (sesion && !sessionActive) {
+function applySession(session) {
+  if (session && !sessionActive) {
     sessionActive = true;
     showScreen('app');
     render();
     subscribeChanges();
     loadData();
-  } else if (!sesion) {
+  } else if (!session) {
     sessionActive = false;
     unsubscribeChanges();
     state.meals.clear();
@@ -137,22 +137,22 @@ function applySession(sesion) {
 }
 
 // ===== Inicio y cierre de sesión =====
-function showLoginError(texto) {
-  $('login-error').textContent = texto;
-  $('login-error').hidden = !texto;
+function showLoginError(text) {
+  $('login-error').textContent = text;
+  $('login-error').hidden = !text;
 }
 
-async function submitLogin(evento) {
-  evento.preventDefault();
+async function submitLogin(event) {
+  event.preventDefault();
   const email = $('login-email').value.trim();
-  const clave = $('login-password').value;
-  const inputError = loginInputError(email, clave);
+  const password = $('login-password').value;
+  const inputError = loginInputError(email, password);
   if (inputError) return showLoginError(inputError);
 
   showLoginError('');
   $('login-button').disabled = true;
   $('login-button').textContent = 'Entrando…';
-  const { error } = await client.auth.signInWithPassword({ email, password: clave });
+  const { error } = await client.auth.signInWithPassword({ email, password });
   $('login-button').disabled = false;
   $('login-button').textContent = 'Entrar';
   if (error) return showLoginError(translateLoginError(error, navigator.onLine));
@@ -166,8 +166,8 @@ async function logOut() {
 }
 
 // ===== Carga de datos =====
-function mealAt(fecha, tipo) {
-  return state.meals.get(mealKey(toISODate(fecha), tipo)) || null;
+function mealAt(date, type) {
+  return state.meals.get(mealKey(toISODate(date), type)) || null;
 }
 
 // Periodo visible según la vista y el día de referencia (logic.js)
@@ -177,26 +177,26 @@ function currentRange() {
 
 async function loadData() {
   if (!sessionActive) return;
-  const peticion = ++state.requestId;
-  const { from: desde, to: hasta } = currentRange();
+  const requestId = ++state.requestId;
+  const { from, to } = currentRange();
   $('loading-indicator').hidden = false;
 
-  let resultado;
+  let result;
   try {
-    resultado = await client.from('comidas').select('*')
-      .gte('fecha', toISODate(desde)).lte('fecha', toISODate(hasta));
+    result = await client.from('comidas').select('*')
+      .gte('fecha', toISODate(from)).lte('fecha', toISODate(to));
   } catch (error) {
-    resultado = { error };
+    result = { error };
   }
-  if (peticion !== state.requestId) return; // llegó una petición más reciente
+  if (requestId !== state.requestId) return; // llegó una petición más reciente
 
   $('loading-indicator').hidden = true;
-  if (resultado.error) {
-    showError('No se han podido cargar las comidas. ' + translateError(resultado.error, navigator.onLine), 'carga');
+  if (result.error) {
+    showError('No se han podido cargar las comidas. ' + translateError(result.error, navigator.onLine), 'load');
     return;
   }
-  hideError('carga');
-  state.meals = new Map(resultado.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
+  hideError('load');
+  state.meals = new Map(result.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
   render();
 }
 
@@ -209,14 +209,14 @@ function scheduleReload() {
 // ===== Sincronización en tiempo real =====
 function subscribeChanges() {
   unsubscribeChanges();
-  channel = client.channel('comidas-cambios')
+  channel = client.channel('meal-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, scheduleReload)
-    .subscribe((estadoCanal) => {
-      const accion = syncStatusAction(estadoCanal, state.noticeKind);
-      if (accion === 'recover') {
+    .subscribe((channelStatus) => {
+      const action = syncStatusAction(channelStatus, state.noticeKind);
+      if (action === 'recover') {
         hideError('sync');
         scheduleReload();
-      } else if (accion === 'show') {
+      } else if (action === 'show') {
         showError('Se ha perdido la sincronización en tiempo real. Reintentando…', 'sync');
       }
     });
@@ -228,15 +228,15 @@ function unsubscribeChanges() {
 }
 
 // ===== Navegación =====
-function changeView(vista) {
-  state.view = vista;
+function changeView(view) {
+  state.view = view;
   state.openType = null;
   render();
   loadData();
 }
 
-function shiftPeriod(sentido) {
-  state.refDate = movePeriod(state.view, state.refDate, sentido);
+function shiftPeriod(direction) {
+  state.refDate = movePeriod(state.view, state.refDate, direction);
   state.openType = null;
   render();
   loadData();
@@ -249,10 +249,10 @@ function goToToday() {
   loadData();
 }
 
-function openDay(fecha, tipoAbierto = null) {
+function openDay(date, openType = null) {
   state.view = 'day';
-  state.refDate = fecha;
-  state.openType = tipoAbierto;
+  state.refDate = date;
+  state.openType = openType;
   render();
   loadData();
 }
@@ -260,10 +260,10 @@ function openDay(fecha, tipoAbierto = null) {
 // ===== Render =====
 function render() {
   updateHeader();
-  const calendario = $('calendar');
-  if (state.view === 'month') calendario.replaceChildren(buildMonthView());
-  else if (state.view === 'week') calendario.replaceChildren(buildWeekView());
-  else calendario.replaceChildren(buildDayView());
+  const calendar = $('calendar');
+  if (state.view === 'month') calendar.replaceChildren(buildMonthView());
+  else if (state.view === 'week') calendar.replaceChildren(buildWeekView());
+  else calendar.replaceChildren(buildDayView());
 }
 
 function updateHeader() {
@@ -275,121 +275,121 @@ function updateHeader() {
 
 // Vista mensual: cuadrícula de días con puntos (móvil) o nombres (pantalla grande)
 function buildMonthView() {
-  const rejilla = el('div', 'month');
-  for (const inicial of ['L', 'M', 'X', 'J', 'V', 'S', 'D']) rejilla.append(el('div', 'month-header', inicial));
+  const grid = el('div', 'month');
+  for (const initial of ['L', 'M', 'X', 'J', 'V', 'S', 'D']) grid.append(el('div', 'month-header', initial));
 
-  for (const { date: fecha, outside, isToday } of monthGrid(state.refDate, getToday())) {
-    const celda = button('month-day', undefined, () => openDay(fecha));
-    if (outside) celda.classList.add('outside');
-    if (isToday) celda.classList.add('today');
-    celda.setAttribute('aria-label', longDate(fecha));
-    celda.append(el('div', 'month-number', String(fecha.getDate())));
+  for (const { date, outside, isToday } of monthGrid(state.refDate, getToday())) {
+    const cell = button('month-day', undefined, () => openDay(date));
+    if (outside) cell.classList.add('outside');
+    if (isToday) cell.classList.add('today');
+    cell.setAttribute('aria-label', longDate(date));
+    cell.append(el('div', 'month-number', String(date.getDate())));
 
-    const lista = el('div', 'month-meals');
-    for (const tipo of MEAL_TYPES) {
-      const comida = mealAt(fecha, tipo.id);
-      if (!comida) continue;
-      const item = el('div', 'month-meal type-' + tipo.id);
-      item.title = tipo.name + ': ' + comida.platos[0].nombre;
-      item.append(el('span', 'dot'), el('span', 'month-meal-name', comida.platos[0].nombre));
-      lista.append(item);
+    const list = el('div', 'month-meals');
+    for (const type of MEAL_TYPES) {
+      const meal = mealAt(date, type.id);
+      if (!meal) continue;
+      const item = el('div', 'month-meal type-' + type.id);
+      item.title = type.name + ': ' + meal.platos[0].nombre;
+      item.append(el('span', 'dot'), el('span', 'month-meal-name', meal.platos[0].nombre));
+      list.append(item);
     }
-    celda.append(lista);
-    rejilla.append(celda);
+    cell.append(list);
+    grid.append(cell);
   }
-  return rejilla;
+  return grid;
 }
 
 // Vista semanal: siete días con sus tres comidas
 function buildWeekView() {
-  const semana = el('div', 'week');
-  for (const { date: fecha, isToday } of weekDays(state.refDate, getToday())) {
-    const tarjeta = el('section', 'week-day' + (isToday ? ' today' : ''));
-    tarjeta.append(button('week-date', formatDate(fecha, { weekday: 'long', day: 'numeric' }), () => openDay(fecha)));
+  const week = el('div', 'week');
+  for (const { date, isToday } of weekDays(state.refDate, getToday())) {
+    const card = el('section', 'week-day' + (isToday ? ' today' : ''));
+    card.append(button('week-date', formatDate(date, { weekday: 'long', day: 'numeric' }), () => openDay(date)));
 
-    for (const tipo of MEAL_TYPES) {
-      const comida = mealAt(fecha, tipo.id);
-      const alPulsar = comida
-        ? () => openDay(fecha, tipo.id)
-        : () => openForm({ fecha, tipo: tipo.id });
-      const fila = button('week-meal type-' + tipo.id + (comida ? '' : ' empty'), undefined, alPulsar);
-      fila.append(
-        el('span', 'week-meal-type', tipo.name),
-        el('span', 'week-meal-name', comida ? dishNames(comida) : '—'),
+    for (const type of MEAL_TYPES) {
+      const meal = mealAt(date, type.id);
+      const onClick = meal
+        ? () => openDay(date, type.id)
+        : () => openForm({ fecha: date, tipo: type.id });
+      const row = button('week-meal type-' + type.id + (meal ? '' : ' empty'), undefined, onClick);
+      row.append(
+        el('span', 'week-meal-type', type.name),
+        el('span', 'week-meal-name', meal ? dishNames(meal) : '—'),
       );
-      tarjeta.append(fila);
+      card.append(row);
     }
-    semana.append(tarjeta);
+    week.append(card);
   }
-  return semana;
+  return week;
 }
 
 // Vista diaria: un bloque por tipo de comida
 function buildDayView() {
-  const contenedor = el('div', 'day');
-  for (const tipo of MEAL_TYPES) contenedor.append(buildBlock(state.refDate, tipo));
-  return contenedor;
+  const container = el('div', 'day');
+  for (const type of MEAL_TYPES) container.append(buildBlock(state.refDate, type));
+  return container;
 }
 
-function buildBlock(fecha, tipo) {
-  const bloque = el('section', 'block type-' + tipo.id);
-  const comida = mealAt(fecha, tipo.id);
+function buildBlock(date, type) {
+  const block = el('section', 'block type-' + type.id);
+  const meal = mealAt(date, type.id);
 
-  if (!comida) {
-    const vacio = el('div', 'block-empty');
-    const textos = el('div');
-    textos.append(el('span', 'block-type', tipo.name), el('p', null, 'Nada registrado'));
-    vacio.append(textos, button('btn', 'Añadir', () => openForm({ fecha, tipo: tipo.id })));
-    bloque.append(vacio);
-    return bloque;
+  if (!meal) {
+    const empty = el('div', 'block-empty');
+    const texts = el('div');
+    texts.append(el('span', 'block-type', type.name), el('p', null, 'Nada registrado'));
+    empty.append(texts, button('btn', 'Añadir', () => openForm({ fecha: date, tipo: type.id })));
+    block.append(empty);
+    return block;
   }
 
-  const abierto = state.openType === tipo.id;
-  const cabecera = button('block-header', undefined, () => {
-    state.openType = abierto ? null : tipo.id;
+  const isOpen = state.openType === type.id;
+  const header = button('block-header', undefined, () => {
+    state.openType = isOpen ? null : type.id;
     render();
   });
-  cabecera.setAttribute('aria-expanded', String(abierto));
-  cabecera.append(el('span', 'block-type', tipo.name), el('span', 'block-summary', dishNames(comida)));
-  bloque.append(cabecera);
-  if (abierto) bloque.append(buildDetail(comida));
-  return bloque;
+  header.setAttribute('aria-expanded', String(isOpen));
+  header.append(el('span', 'block-type', type.name), el('span', 'block-summary', dishNames(meal)));
+  block.append(header);
+  if (isOpen) block.append(buildDetail(meal));
+  return block;
 }
 
-function buildDetail(comida) {
-  const detalle = el('div', 'block-detail');
-  comida.platos.forEach((plato, indice) => detalle.append(buildDishDetail(plato, dishTitle(comida.tipo, indice))));
+function buildDetail(meal) {
+  const detail = el('div', 'block-detail');
+  meal.platos.forEach((dish, index) => detail.append(buildDishDetail(dish, dishTitle(meal.tipo, index))));
 
-  const botones = el('div', 'detail-buttons');
-  botones.append(
-    button('btn', 'Editar', () => openForm({ comida })),
-    button('btn btn-danger', 'Borrar', () => deleteMeal(comida)),
+  const buttons = el('div', 'detail-buttons');
+  buttons.append(
+    button('btn', 'Editar', () => openForm({ comida: meal })),
+    button('btn btn-danger', 'Borrar', () => deleteMeal(meal)),
   );
-  detalle.append(botones);
-  return detalle;
+  detail.append(buttons);
+  return detail;
 }
 
-function buildDishDetail(plato, titulo) {
-  const caja = el('div', 'detail-dish');
-  caja.append(el('p', 'detail-subtitle', titulo), el('h3', null, plato.nombre));
+function buildDishDetail(dish, title) {
+  const box = el('div', 'detail-dish');
+  box.append(el('p', 'detail-subtitle', title), el('h3', null, dish.nombre));
 
-  if (plato.ingredientes?.length) {
-    const lista = el('ul');
-    for (const ing of plato.ingredientes) lista.append(el('li', null, formatIngredient(ing)));
-    caja.append(el('p', 'detail-subtitle', 'Ingredientes'), lista);
+  if (dish.ingredientes?.length) {
+    const list = el('ul');
+    for (const ingredient of dish.ingredientes) list.append(el('li', null, formatIngredient(ingredient)));
+    box.append(el('p', 'detail-subtitle', 'Ingredientes'), list);
   }
-  if (plato.receta) {
-    caja.append(el('p', 'detail-subtitle', 'Receta'), el('p', 'detail-recipe', plato.receta));
+  if (dish.receta) {
+    box.append(el('p', 'detail-subtitle', 'Receta'), el('p', 'detail-recipe', dish.receta));
   }
-  const enlace = safeLink(plato.referencia);
-  if (enlace) {
-    const a = el('a', null, enlace);
-    a.href = enlace;
+  const link = safeLink(dish.referencia);
+  if (link) {
+    const a = el('a', null, link);
+    a.href = link;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    caja.append(el('p', 'detail-subtitle', 'Referencia'), a);
+    box.append(el('p', 'detail-subtitle', 'Referencia'), a);
   }
-  return caja;
+  return box;
 }
 
 // ===== Confirmación =====
@@ -669,7 +669,7 @@ function bindEvents() {
     else if (!$('screen-config').hidden) connect();
   });
   window.addEventListener('offline', () => {
-    if (sessionActive) showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'carga');
+    if (sessionActive) showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'load');
   });
 }
 
