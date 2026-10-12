@@ -72,6 +72,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .btn-text { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primary); cursor: pointer; }
 .btn-icon { padding: 0.4rem 0.7rem; line-height: 1; }
 .btn-wide { width: 100%; }
+.btn-centered { display: block; margin: 0.6rem auto 0; }
 
 .btn-floating {
   position: fixed;

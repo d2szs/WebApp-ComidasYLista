@@ -142,8 +142,28 @@ function showLoginError(text) {
   $('login-error').hidden = !text;
 }
 
+function showLoginInfo(text) {
+  $('login-info').textContent = text;
+  $('login-info').hidden = !text;
+}
+
+// Alterna los dos formularios de la pantalla de login
+function showLoginForm(name) {
+  $('form-login').hidden = name !== 'login';
+  $('form-recovery').hidden = name !== 'recovery';
+  showLoginInfo('');
+}
+
+function showRecovery(email) {
+  $('recovery-email').value = email;
+  $('recovery-error').hidden = true;
+  $('recovery-info').hidden = true;
+  showLoginForm('recovery');
+}
+
 async function submitLogin(event) {
   event.preventDefault();
+  showLoginInfo('');
   const email = $('login-email').value.trim();
   const password = $('login-password').value;
   const inputError = loginInputError(email, password);
@@ -634,6 +654,9 @@ async function deleteMeal(meal) {
 function bindEvents() {
   $('config-retry').addEventListener('click', connect);
   $('form-login').addEventListener('submit', submitLogin);
+  $('forgot-button').addEventListener('click', () => showRecovery($('login-email').value.trim()));
+  $('recovery-back').addEventListener('click', () => showLoginForm('login'));
+  $('form-recovery').addEventListener('submit', (event) => event.preventDefault());
   $('logout-button').addEventListener('click', logOut);
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));

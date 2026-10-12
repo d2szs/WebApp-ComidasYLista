@@ -35,7 +35,22 @@
         <input type="password" id="login-password" autocomplete="current-password" required>
       </label>
       <p id="login-error" class="error-message" hidden></p>
+      <p id="login-info" class="info-message" hidden></p>
       <button type="submit" id="login-button" class="btn btn-primary btn-wide">Entrar</button>
+      <button type="button" id="forgot-button" class="btn btn-text btn-centered">¿Has olvidado la contraseña?</button>
+    </form>
+
+    <!-- Recuperación de la contraseña: se alterna con el formulario de login -->
+    <form id="form-recovery" class="card" novalidate hidden>
+      <h1>Calendario de comidas</h1>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="recovery-email" autocomplete="username" required>
+      </label>
+      <p id="recovery-error" class="error-message" hidden></p>
+      <p id="recovery-info" class="info-message" hidden></p>
+      <button type="submit" id="recovery-button" class="btn btn-primary btn-wide">Enviar enlace</button>
+      <button type="button" id="recovery-back" class="btn btn-centered">Volver</button>
     </form>
   </section>
 
