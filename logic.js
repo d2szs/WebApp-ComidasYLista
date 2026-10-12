@@ -306,6 +306,40 @@ function translateRecoveryError(error, online) {
   return 'Ha ocurrido un error inesperado. Inténtalo de nuevo.';
 }
 
+const LINK_EXPIRED_MESSAGE = 'El enlace ha caducado o ya se ha usado. Pide otro.';
+const PASSWORD_CHANGED_MESSAGE = 'Contraseña cambiada. Entra con la nueva.';
+const SESSION_CLOSED_MESSAGE = 'La sesión se ha cerrado. Vuelve a entrar.';
+const MIN_PASSWORD_LENGTH = 8;
+
+// Primer fallo de la contraseña nueva, sin recortar espacios; cuenta caracteres, no unidades UTF-16 (RF-9)
+function newPasswordError(password, repeat) {
+  if (!password) return 'Escribe la contraseña nueva.';
+  if ([...password].length < MIN_PASSWORD_LENGTH) return 'La contraseña debe tener al menos 8 caracteres.';
+  if (password !== repeat) return 'Las contraseñas no coinciden.';
+  return null;
+}
+
+const SESSION_GONE_CODES = ['session_not_found', 'session_expired', 'refresh_token_not_found',
+  'refresh_token_already_used', 'user_not_found', 'bad_jwt'];
+
+// La sesión ya no existe en el servidor; un error de red nunca lo es (RF-15, CL-6)
+function isSessionGone(error) {
+  if (!error || isNetworkError(error, true)) return false;
+  return error.name === 'AuthSessionMissingError'
+    || SESSION_GONE_CODES.includes(error.code)
+    || error.status === 401 || error.status === 403;
+}
+
+// Error al guardar la contraseña nueva; linkExpired: la sesión del enlace ha caducado (RF-12, CL-6)
+function translatePasswordError(error, online) {
+  const result = (message, linkExpired = false) => ({ message, linkExpired });
+  if (error?.code === 'weak_password') return result('El servidor no acepta esa contraseña. Prueba con otra más larga o distinta.');
+  if (error?.code === 'same_password') return result('La contraseña nueva debe ser distinta de la actual.');
+  if (isSessionGone(error)) return result(LINK_EXPIRED_MESSAGE, true);
+  if (isNetworkError(error, online)) return result('No hay conexión con el servidor. Revisa tu conexión a internet.');
+  return result('Ha ocurrido un error inesperado. Inténtalo de nuevo.');
+}
+
 // Traduce un error de Supabase a un mensaje en español (online: navigator.onLine)
 function translateError(error, online) {
   if (isNetworkError(error, online)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
@@ -362,5 +396,7 @@ if (typeof module !== 'undefined') {
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
     RECOVERY_SENT_MESSAGE, recoveryInputError, translateRecoveryError,
+    LINK_EXPIRED_MESSAGE, PASSWORD_CHANGED_MESSAGE, SESSION_CLOSED_MESSAGE, MIN_PASSWORD_LENGTH,
+    newPasswordError, isSessionGone, translatePasswordError,
   };
 }
