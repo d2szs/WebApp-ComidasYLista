@@ -413,6 +413,25 @@ function recoveryRedirect(origin, pathname) {
   return path === '/' ? origin : origin + path;
 }
 
+// Pantalla al arrancar: link es el tipo de readAuthLink, linkOk dice si supabase-js aceptó el
+// enlace, pending es la marca de un cambio de contraseña a medias (D-4) o null.
+// closeSession: hay que cerrar la sesión de este dispositivo antes de mostrarla (CL-1, CL-4)
+function startScreen({ link, linkOk, hasSession, pending }) {
+  if (link === 'recovery' && linkOk && hasSession) return { screen: 'newPassword', closeSession: false }; // RF-8, CL-7
+  if (link === 'error' || link === 'recovery') return { screen: 'linkExpired', closeSession: hasSession }; // CL-1
+  if (pending) return { screen: 'linkExpired', closeSession: hasSession }; // CL-4
+  if (hasSession) return { screen: 'app', closeSession: false }; // 000-base RF-9
+  return { screen: 'login', closeSession: false };
+}
+
+// Qué hacer con un evento de sesión de supabase-js: 'app' (abrir el calendario),
+// 'sessionClosed' (login con el aviso de RF-15) o 'none'
+function authEventScreen(event, { onNewPassword, signingOut }) {
+  if (event === 'SIGNED_OUT') return signingOut ? 'none' : 'sessionClosed'; // RF-15
+  if (event === 'SIGNED_IN') return onNewPassword || signingOut ? 'none' : 'app'; // 000-base RF-4
+  return 'none';
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -426,6 +445,6 @@ if (typeof module !== 'undefined') {
     RECOVERY_SENT_MESSAGE, recoveryInputError, translateRecoveryError,
     LINK_EXPIRED_MESSAGE, PASSWORD_CHANGED_MESSAGE, SESSION_CLOSED_MESSAGE, MIN_PASSWORD_LENGTH,
     newPasswordError, isSessionGone, translatePasswordError,
-    readAuthLink, urlWithoutAuthData, recoveryRedirect,
+    readAuthLink, urlWithoutAuthData, recoveryRedirect, startScreen, authEventScreen,
   };
 }
