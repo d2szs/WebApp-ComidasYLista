@@ -474,6 +474,46 @@ function updatePeers(peers, presenceState, ownKey, now) {
   return next;
 }
 
+// 004-edicion-simultanea: textos de los avisos (RF-1, RF-3)
+const MATCH_MESSAGE = 'Esta comida también se está editando en otro sitio.';
+const SAVED_ELSEWHERE_MESSAGE = 'Esta comida se ha guardado desde otro sitio. Cambia el día o el tipo para poder guardar la tuya.';
+
+// Qué aviso toca y si "Guardar" queda desactivado (RF-3, RF-4, RF-7, RF-8, CL-3, 000-base RF-36)
+function matchNotice({ match, savedElsewhere, saving }) {
+  let text = null;
+  if (savedElsewhere) text = SAVED_ELSEWHERE_MESSAGE;
+  else if (match) text = MATCH_MESSAGE;
+  return { text, saveDisabled: Boolean(savedElsewhere || saving) };
+}
+
+// Qué hacer con lo que devuelve guardar_comida_si_no_cambio (CL-4, CL-5)
+function saveOutcome(result) {
+  if (result === 'guardada') return 'saved';
+  if (result === 'cambiada') return 'changed';
+  if (result === 'borrada') return 'deleted';
+  return 'error';
+}
+
+// Igualdad por contenido: el orden de las claves no cuenta, el de las listas sí (D-12)
+function sameContent(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((k) => Object.prototype.hasOwnProperty.call(b, k) && sameContent(a[k], b[k]));
+}
+
+// true si la comida de la fecha y el tipo del formulario se ha guardado desde que
+// el formulario supo lo que había en ellos (RF-3, D-12); una borrada no cuenta (CL-5)
+function savedSince(seen, slot, current) {
+  if (!seen || !sameSlot(seen, slot) || !current) return false;
+  if (!seen.meal) return true;
+  if (seen.meal.id !== current.id) return true;
+  return !sameContent(seen.meal.platos, current.platos);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -490,5 +530,6 @@ if (typeof module !== 'undefined') {
     readAuthLink, urlWithoutAuthData, recoveryRedirect, startScreen, authEventScreen,
     PEER_REFRESH_MS, PEER_MAX_AGE_MS, PEER_CHECK_MS, PEER_LEAVE_GRACE_MS,
     sameSlot, activePeers, updatePeers, hasMatch,
+    MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince,
   };
 }
