@@ -54,6 +54,27 @@
     </form>
   </section>
 
+  <!-- Nueva contraseña: solo se llega con un enlace de recuperación válido -->
+  <section id="screen-new-password" class="screen screen-centered" hidden>
+    <form id="form-new-password" class="card" novalidate>
+      <h1>Calendario de comidas</h1>
+      <p id="new-password-account">Cambiando la contraseña de <strong id="new-password-email"></strong></p>
+      <label class="field">
+        <span>Contraseña nueva</span>
+        <input type="password" id="new-password" autocomplete="new-password" required>
+      </label>
+      <label class="field">
+        <span>Repite la contraseña</span>
+        <input type="password" id="new-password-repeat" autocomplete="new-password" required>
+      </label>
+      <p id="new-password-error" class="error-message" hidden></p>
+      <div class="dialog-buttons">
+        <button type="button" id="new-password-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="new-password-save" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </section>
+
   <!-- Aplicación -->
   <section id="screen-app" class="screen" hidden>
     <header class="header">

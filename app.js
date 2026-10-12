@@ -31,7 +31,8 @@ let sessionActive = false;
 let reloadTimer = null;
 let ready = false;          // connect() ya eligió la pantalla de arranque (D-2)
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
-let onNewPassword = false;  // en la pantalla de nueva contraseña (T8)
+let onNewPassword = false;  // en la pantalla de nueva contraseña
+let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
 
 // Datos del enlace de recuperación, leídos al cargar y antes de crear el cliente (D-2)
 let authLink = readAuthLink(location.hash, location.search);
@@ -62,7 +63,7 @@ function button(className, text, onClick) {
 }
 
 function showScreen(name) {
-  for (const screen of ['config', 'start', 'login', 'app']) {
+  for (const screen of ['config', 'start', 'login', 'new-password', 'app']) {
     $('screen-' + screen).hidden = screen !== name;
   }
 }
@@ -131,11 +132,12 @@ async function connect() {
   authLink = { kind: 'none' }; // "Reintentar" no vuelve a usarlo
   ready = true;
 
-  // Hasta T8 no existe la pantalla de nueva contraseña: se trata como enlace caducado
-  if (route.screen === 'newPassword') Object.assign(route, { screen: 'linkExpired', closeSession: true });
-  if (route.screen === 'linkExpired') {
+  if (route.screen === 'newPassword') {
+    showNewPassword(session.user); // RF-8, CL-7
+  } else if (route.screen === 'linkExpired') {
     if (route.closeSession) await closeLocalSession(); // CL-1, CL-4: solo en este dispositivo
     const email = pending?.email || $('login-email').value.trim();
+    clearPending(); // CL-4 ya atendido: la marca no debe repetirlo en el siguiente arranque
     applySession(null);
     showRecovery(email, LINK_EXPIRED_MESSAGE);
   } else {
@@ -165,6 +167,15 @@ function readPending() {
     return value ? JSON.parse(value) : null;
   } catch {
     return null;
+  }
+}
+
+// Sin localStorage, CL-4 no se detecta, pero la sesión del enlace caduca en el servidor (D-4)
+function savePending(email) {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ email }));
+  } catch {
+    // Sin localStorage no se guarda la marca
   }
 }
 
@@ -202,11 +213,24 @@ function applySession(session) {
     loadData();
   } else if (!session) {
     sessionActive = false;
+    onNewPassword = false;
     unsubscribeChanges();
     state.meals.clear();
     hideError();
     showScreen('login');
   }
+}
+
+// Pantalla de nueva contraseña con la cuenta del enlace (RF-8); la marca detecta CL-4
+function showNewPassword(user) {
+  onNewPassword = true;
+  recoveryUserId = user.id;
+  savePending(user.email);
+  $('new-password-email').textContent = user.email;
+  $('new-password').value = '';
+  $('new-password-repeat').value = '';
+  $('new-password-error').hidden = true;
+  showScreen('new-password');
 }
 
 // ===== Inicio y cierre de sesión =====

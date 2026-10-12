@@ -109,6 +109,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 .error-message { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
 .info-message { background: var(--color-info-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
+#new-password-account { overflow-wrap: anywhere; }
 
 /* ===== Cabecera ===== */
 .header {
