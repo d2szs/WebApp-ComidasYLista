@@ -179,6 +179,33 @@ async function submitLogin(event) {
   $('login-password').value = '';
 }
 
+// Pide el enlace de recuperación; el mensaje es el mismo exista o no la cuenta (RNF-3)
+async function submitRecovery(event) {
+  event.preventDefault();
+  const email = $('recovery-email').value.trim();
+  const inputError = recoveryInputError(email);
+  $('recovery-info').hidden = true;
+  showRecoveryError(inputError);
+  if (inputError) return;
+
+  const button = $('recovery-button');
+  button.disabled = true;
+  button.textContent = 'Enviando…';
+  const { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: recoveryRedirect(location.origin, location.pathname),
+  });
+  button.disabled = false;
+  button.textContent = 'Enviar enlace';
+  if (error) return showRecoveryError(translateRecoveryError(error, navigator.onLine));
+  $('recovery-info').textContent = RECOVERY_SENT_MESSAGE;
+  $('recovery-info').hidden = false;
+}
+
+function showRecoveryError(text) {
+  $('recovery-error').textContent = text || '';
+  $('recovery-error').hidden = !text;
+}
+
 async function logOut() {
   // Solo en este dispositivo: la otra sesión abierta sigue funcionando
   const { error } = await client.auth.signOut({ scope: 'local' });
@@ -656,7 +683,7 @@ function bindEvents() {
   $('form-login').addEventListener('submit', submitLogin);
   $('forgot-button').addEventListener('click', () => showRecovery($('login-email').value.trim()));
   $('recovery-back').addEventListener('click', () => showLoginForm('login'));
-  $('form-recovery').addEventListener('submit', (event) => event.preventDefault());
+  $('form-recovery').addEventListener('submit', submitRecovery);
   $('logout-button').addEventListener('click', logOut);
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));
