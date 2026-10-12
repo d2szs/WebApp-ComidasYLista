@@ -385,6 +385,34 @@ function wasDeleted(updatedRows) {
   return updatedRows.length === 0;
 }
 
+// Datos de autenticación que trae la dirección (hash: "#…", search: "?…"):
+// 'recovery' (enlace de recuperación válido), 'error' (enlace caducado o ya usado) o 'none' (RF-16)
+const AUTH_ERROR_PARAMS = ['error', 'error_code', 'error_description'];
+
+function readAuthLink(hash, search) {
+  const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+  const searchParams = new URLSearchParams(search);
+  const hasError = AUTH_ERROR_PARAMS.some((name) => hashParams.has(name) || searchParams.has(name));
+  if (hasError) return { kind: 'error' };
+  if (hashParams.has('access_token') && hashParams.get('type') === 'recovery') return { kind: 'recovery' };
+  return { kind: 'none' };
+}
+
+// Dirección de la app sin el "#…" ni los parámetros de error del enlace; conserva el resto (RF-16)
+function urlWithoutAuthData(pathname, search) {
+  const params = new URLSearchParams(search);
+  AUTH_ERROR_PARAMS.forEach((name) => params.delete(name));
+  const rest = params.toString();
+  return rest ? `${pathname}?${rest}` : pathname;
+}
+
+// Dirección a la que vuelve el enlace de recuperación: sin index.html; en la raíz, solo el
+// origen, como está en Redirect URLs (RNF-4, D-8)
+function recoveryRedirect(origin, pathname) {
+  const path = pathname.replace(/index\.html$/, '');
+  return path === '/' ? origin : origin + path;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -398,5 +426,6 @@ if (typeof module !== 'undefined') {
     RECOVERY_SENT_MESSAGE, recoveryInputError, translateRecoveryError,
     LINK_EXPIRED_MESSAGE, PASSWORD_CHANGED_MESSAGE, SESSION_CLOSED_MESSAGE, MIN_PASSWORD_LENGTH,
     newPasswordError, isSessionGone, translatePasswordError,
+    readAuthLink, urlWithoutAuthData, recoveryRedirect,
   };
 }
