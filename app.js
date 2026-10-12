@@ -28,8 +28,15 @@ const formState = {
 let client = null;
 let channel = null;
 let sessionActive = false;
-let authListening = false;
 let reloadTimer = null;
+let ready = false;          // connect() ya eligió la pantalla de arranque (D-2)
+let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
+let onNewPassword = false;  // en la pantalla de nueva contraseña (T8)
+
+// Datos del enlace de recuperación, leídos al cargar y antes de crear el cliente (D-2)
+let authLink = readAuthLink(location.hash, location.search);
+
+const PENDING_KEY = 'pending-recovery';
 
 const $ = (id) => document.getElementById(id);
 
@@ -109,15 +116,81 @@ async function connect() {
   const problem = configMessage(check);
   if (problem) return showConfig(problem);
 
-  if (!client) client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
-  if (!authListening) {
-    authListening = true;
-    // Se lanza también al suscribirse (INITIAL_SESSION). setTimeout evita bloquear el cliente.
-    client.auth.onAuthStateChange((_event, session) => setTimeout(() => applySession(session), 0));
-  } else {
-    const { data } = await client.auth.getSession();
-    applySession(data.session);
+  if (!client) {
+    client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+    // setTimeout evita bloquear el cliente; los eventos no deciden la pantalla de arranque (D-2)
+    client.auth.onAuthStateChange((event, session) => setTimeout(() => onAuthEvent(event, session), 0));
   }
+  // initialize() devuelve el resultado de leer el enlace de la dirección
+  const { error } = await client.auth.initialize();
+  const { data } = await client.auth.getSession();
+  const session = data.session;
+  history.replaceState(null, '', urlWithoutAuthData(location.pathname, location.search)); // RF-16 (D-3)
+  const pending = readPending();
+  const route = startScreen({ link: authLink.kind, linkOk: !error, hasSession: Boolean(session), pending });
+  authLink = { kind: 'none' }; // "Reintentar" no vuelve a usarlo
+  ready = true;
+
+  // Hasta T8 no existe la pantalla de nueva contraseña: se trata como enlace caducado
+  if (route.screen === 'newPassword') Object.assign(route, { screen: 'linkExpired', closeSession: true });
+  if (route.screen === 'linkExpired') {
+    if (route.closeSession) await closeLocalSession(); // CL-1, CL-4: solo en este dispositivo
+    const email = pending?.email || $('login-email').value.trim();
+    applySession(null);
+    showRecovery(email, LINK_EXPIRED_MESSAGE);
+  } else {
+    applySession(route.screen === 'app' ? session : null);
+  }
+}
+
+// Eventos de sesión tras el arranque: entrar (aquí o en otra pestaña) y cierre desde fuera (RF-15)
+async function onAuthEvent(event) {
+  if (!ready) return;
+  const action = authEventScreen(event, { onNewPassword, signingOut });
+  if (action === 'app') {
+    const { data } = await client.auth.getSession();
+    if (data.session) applySession(data.session);
+  } else if (action === 'sessionClosed') {
+    clearPending();
+    applySession(null);
+    showLoginForm('login');
+    showLoginInfo(SESSION_CLOSED_MESSAGE);
+  }
+}
+
+// Marca de un cambio de contraseña a medias (D-4); sin localStorage, no hay marca
+function readPending() {
+  try {
+    const value = localStorage.getItem(PENDING_KEY);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPending() {
+  try {
+    localStorage.removeItem(PENDING_KEY);
+  } catch {
+    // Sin localStorage no hay marca que borrar
+  }
+}
+
+// signingOut se mantiene hasta que se atiende el SIGNED_OUT propio (también va por setTimeout)
+function finishSigningOut() {
+  setTimeout(() => { signingOut = false; }, 0);
+}
+
+// Cierra la sesión solo en este dispositivo; sin respuesta del servidor, la borra igualmente (D-6)
+async function closeLocalSession() {
+  signingOut = true;
+  try {
+    const { error } = await client.auth.signOut({ scope: 'local' });
+    if (error) localStorage.removeItem(client.auth.storageKey);
+  } catch {
+    // Sin localStorage no queda sesión guardada que borrar
+  }
+  finishSigningOut();
 }
 
 function applySession(session) {
@@ -154,9 +227,10 @@ function showLoginForm(name) {
   showLoginInfo('');
 }
 
-function showRecovery(email) {
+// message: el error con el que se abre (CL-1, CL-4, CL-6), o vacío
+function showRecovery(email, message = '') {
   $('recovery-email').value = email;
-  $('recovery-error').hidden = true;
+  showRecoveryError(message);
   $('recovery-info').hidden = true;
   showLoginForm('recovery');
 }
@@ -207,9 +281,13 @@ function showRecoveryError(text) {
 }
 
 async function logOut() {
-  // Solo en este dispositivo: la otra sesión abierta sigue funcionando
+  // Solo en este dispositivo: la otra sesión abierta sigue funcionando. Sin el aviso de RF-15
+  // aquí; las otras pestañas sí lo muestran
+  signingOut = true;
   const { error } = await client.auth.signOut({ scope: 'local' });
+  finishSigningOut();
   if (error) showError('No se ha podido cerrar la sesión. ' + translateError(error, navigator.onLine));
+  else applySession(null);
 }
 
 // ===== Carga de datos =====
