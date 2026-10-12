@@ -233,6 +233,61 @@ function showNewPassword(user) {
   showScreen('new-password');
 }
 
+function showNewPasswordError(text) {
+  $('new-password-error').textContent = text || '';
+  $('new-password-error').hidden = !text;
+}
+
+// Guarda la contraseña nueva y cierra las sesiones de la cuenta en todos los dispositivos (RF-10, RF-14)
+async function submitNewPassword(event) {
+  event.preventDefault();
+  const password = $('new-password').value;
+  const inputError = newPasswordError(password, $('new-password-repeat').value);
+  showNewPasswordError(inputError); // RF-9: sin consultar al servidor
+  if (inputError) return;
+
+  const email = $('new-password-email').textContent;
+  const { data } = await client.auth.getSession();
+  if (data.session?.user.id !== recoveryUserId) return endRecovery(email, LINK_EXPIRED_MESSAGE); // como CL-6
+
+  const button = $('new-password-save');
+  button.disabled = true;
+  button.textContent = 'Guardando…';
+  const { error } = await client.auth.updateUser({ password });
+  button.disabled = false;
+  button.textContent = 'Guardar';
+  if (error) {
+    const { message, linkExpired } = translatePasswordError(error, navigator.onLine);
+    if (linkExpired) return endRecovery(email, message); // CL-6
+    return showNewPasswordError(message); // RF-12: sigue el formulario para reintentar
+  }
+
+  signingOut = true;
+  const { error: signOutError } = await client.auth.signOut({ scope: 'global' }); // RF-14 (D-5)
+  if (signOutError) await closeLocalSession(); // CL-5: al menos la de este dispositivo
+  else finishSigningOut();
+  clearPending();
+  applySession(null);
+  showLoginForm('login');
+  showLoginInfo(PASSWORD_CHANGED_MESSAGE);
+}
+
+// Cierra solo aquí la sesión del enlace y muestra el formulario de recuperación (CL-6)
+async function endRecovery(email, message) {
+  await closeLocalSession();
+  clearPending();
+  applySession(null);
+  showRecovery(email, message);
+}
+
+// Sale sin cambiar la contraseña, cerrando solo la sesión de este dispositivo (RF-13)
+async function cancelNewPassword() {
+  await closeLocalSession();
+  clearPending();
+  applySession(null);
+  showLoginForm('login');
+}
+
 // ===== Inicio y cierre de sesión =====
 function showLoginError(text) {
   $('login-error').textContent = text;
@@ -786,6 +841,8 @@ function bindEvents() {
   $('forgot-button').addEventListener('click', () => showRecovery($('login-email').value.trim()));
   $('recovery-back').addEventListener('click', () => showLoginForm('login'));
   $('form-recovery').addEventListener('submit', submitRecovery);
+  $('form-new-password').addEventListener('submit', submitNewPassword);
+  $('new-password-cancel').addEventListener('click', cancelNewPassword);
   $('logout-button').addEventListener('click', logOut);
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));
