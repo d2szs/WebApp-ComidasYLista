@@ -140,9 +140,23 @@ async function connect() {
     clearPending(); // CL-4 ya atendido: la marca no debe repetirlo en el siguiente arranque
     applySession(null);
     showRecovery(email, LINK_EXPIRED_MESSAGE);
+  } else if (route.screen === 'app') {
+    applySession(session);
+    checkSessionAlive(); // RF-15 al abrir la app
   } else {
-    applySession(route.screen === 'app' ? session : null);
+    applySession(null);
   }
+}
+
+// Pregunta al servidor si la sesión sigue existiendo; un error de red no la cierra (D-7, RF-15)
+async function checkSessionAlive() {
+  if (!sessionActive) return;
+  const { error } = await client.auth.getUser();
+  if (!error || !isSessionGone(error) || !sessionActive) return;
+  await closeLocalSession();
+  applySession(null);
+  showLoginForm('login');
+  showLoginInfo(SESSION_CLOSED_MESSAGE);
 }
 
 // Eventos de sesión tras el arranque: entrar (aquí o en otra pestaña) y cierre desde fuera (RF-15)
@@ -869,7 +883,9 @@ function bindEvents() {
 
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') loadData();
+    if (document.visibilityState !== 'visible') return;
+    loadData();
+    checkSessionAlive();
   });
   window.addEventListener('online', () => {
     if (sessionActive) loadData();
