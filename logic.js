@@ -286,6 +286,26 @@ function translateLoginError(error, online) {
   return 'No se ha podido iniciar sesión. Inténtalo de nuevo.';
 }
 
+// ===== Recuperar contraseña (002-recuperar-contrasena) =====
+
+// Mismo texto exista o no la cuenta, para no revelar cuáles hay (RNF-3)
+const RECOVERY_SENT_MESSAGE = 'Si el email es de una cuenta, te llegará un enlace para cambiar la contraseña.';
+
+// email llega ya recortado desde app.js (RF-4)
+function recoveryInputError(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? null : 'Escribe un email válido.';
+}
+
+// Los dos límites de envío dan el mismo mensaje (RF-7, CL-3)
+function translateRecoveryError(error, online) {
+  const code = error?.code;
+  if (error?.status === 429 || code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit') {
+    return 'Demasiados intentos. Espera un momento y vuelve a probar.';
+  }
+  if (isNetworkError(error, online)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
+  return 'Ha ocurrido un error inesperado. Inténtalo de nuevo.';
+}
+
 // Traduce un error de Supabase a un mensaje en español (online: navigator.onLine)
 function translateError(error, online) {
   if (isNetworkError(error, online)) return 'No hay conexión con el servidor. Revisa tu conexión a internet.';
@@ -341,5 +361,6 @@ if (typeof module !== 'undefined') {
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
+    RECOVERY_SENT_MESSAGE, recoveryInputError, translateRecoveryError,
   };
 }
