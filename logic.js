@@ -432,6 +432,48 @@ function authEventScreen(event, { onNewPassword, signingOut }) {
   return 'none';
 }
 
+// 004-edicion-simultanea: otros formularios abiertos (peers) y su caducidad (D-4, D-6)
+const PEER_REFRESH_MS = 8000; // cada cuánto se reanuncia el formulario propio
+const PEER_MAX_AGE_MS = 20000; // sin reanuncio en este tiempo, el peer caduca (RNF-4)
+const PEER_CHECK_MS = 2000; // cada cuánto se revisa la caducidad
+const PEER_LEAVE_GRACE_MS = 1500; // margen tras salir, para que un guardado pase a RF-3 (RF-6)
+
+// true si los dos tienen fecha y tipo elegidos y son iguales
+function sameSlot(a, b) {
+  if (!a || !b || !a.date || !a.type || !b.date || !b.type) return false;
+  return a.date === b.date && a.type === b.type;
+}
+
+// Peers vigentes: vistos hace como mucho PEER_MAX_AGE_MS y, si salieron, dentro del margen
+function activePeers(peers, now) {
+  return peers.filter((p) => now - p.seenAt <= PEER_MAX_AGE_MS
+    && (p.goneAt === undefined || now - p.goneAt <= PEER_LEAVE_GRACE_MS));
+}
+
+// true si el formulario propio coincide con algún peer vigente (RF-1, RF-6)
+function hasMatch(own, peers, now) {
+  return activePeers(peers, now).some((p) => sameSlot(own, p));
+}
+
+// Lista nueva de peers a partir de channel.presenceState() ({ key: [{ date, type, seq }] })
+function updatePeers(peers, presenceState, ownKey, now) {
+  const previous = new Map(peers.map((p) => [p.key, p]));
+  const next = [];
+  for (const [key, metas] of Object.entries(presenceState || {})) {
+    if (key === ownKey || !metas || metas.length === 0) continue;
+    const { date, type, seq } = metas[metas.length - 1]; // el anuncio más reciente
+    const old = previous.get(key);
+    const seenAt = old && old.seq === seq ? old.seenAt : now;
+    next.push({ key, date, type, seq, seenAt });
+    previous.delete(key);
+  }
+  for (const old of previous.values()) { // ya no están: salen tras el margen
+    const goneAt = old.goneAt === undefined ? now : old.goneAt;
+    if (now - goneAt <= PEER_LEAVE_GRACE_MS) next.push({ ...old, goneAt });
+  }
+  return next;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -446,5 +488,7 @@ if (typeof module !== 'undefined') {
     LINK_EXPIRED_MESSAGE, PASSWORD_CHANGED_MESSAGE, SESSION_CLOSED_MESSAGE, MIN_PASSWORD_LENGTH,
     newPasswordError, isSessionGone, translatePasswordError,
     readAuthLink, urlWithoutAuthData, recoveryRedirect, startScreen, authEventScreen,
+    PEER_REFRESH_MS, PEER_MAX_AGE_MS, PEER_CHECK_MS, PEER_LEAVE_GRACE_MS,
+    sameSlot, activePeers, updatePeers, hasMatch,
   };
 }
