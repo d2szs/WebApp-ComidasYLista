@@ -546,8 +546,15 @@ function refreshMatch() {
   $('form-save').disabled = saveDisabled;
 }
 
-// Cambio de fecha o tipo en el formulario (RF-6 en el otro formulario)
+// Cambio de fecha o tipo en el formulario (RF-6 en el otro formulario). Con el aviso de
+// RF-3 pasa a ser una comida nueva (RF-5, D-7); checkExisting aplica 000-base RF-39/RF-40 (CL-2)
 function onSlotChange() {
+  if (formState.savedElsewhere) {
+    formState.savedElsewhere = false;
+    formState.id = null;
+    $('form-title').textContent = 'Añadir comida';
+    showFormNotice(''); // el aviso de 000-base RF-39 ya no vale: no se edita la existente
+  }
   announceForm();
   refreshMatch();
   checkExisting();
