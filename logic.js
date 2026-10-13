@@ -489,6 +489,20 @@ function updatePeers(peers, message, ownKey, now) {
   return [...others, left];
 }
 
+// Qué mensaje "form" enviar ahora, sin key ni seq (D-3, D-8): anuncio con fecha y tipo si el
+// formulario está abierto y a la vista; si no, salida si estaba anunciado o null (RF-1, RF-6, RNF-5).
+// El primer anuncio tras no estar anunciado siempre pide respuesta (hello), para no perderla
+function formMessage({ open, date, type, visible, announced, hello }) {
+  if (open && visible && date && type) return { date, type, hello: Boolean(hello || !announced) };
+  return announced ? { gone: true } : null;
+}
+
+// true si hay que contestar: anuncio válido de otro formulario que pide respuesta (RF-1)
+function needsReply(message, ownKey) {
+  return isFormMessage(message) && message.gone !== true
+    && message.key !== ownKey && message.hello === true;
+}
+
 // 004-edicion-simultanea: textos de los avisos (RF-1, RF-3)
 const MATCH_MESSAGE = 'Esta comida también se está editando en otro sitio.';
 const SAVED_ELSEWHERE_MESSAGE = 'Esta comida se ha guardado desde otro sitio. Cambia el día o el tipo para poder guardar la tuya.';
@@ -544,7 +558,7 @@ if (typeof module !== 'undefined') {
     newPasswordError, isSessionGone, translatePasswordError,
     readAuthLink, urlWithoutAuthData, recoveryRedirect, startScreen, authEventScreen,
     PEER_REFRESH_MS, PEER_MAX_AGE_MS, PEER_CHECK_MS, PEER_LEAVE_GRACE_MS,
-    sameSlot, activePeers, updatePeers, hasMatch,
+    sameSlot, activePeers, updatePeers, hasMatch, formMessage, needsReply,
     MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince,
   };
 }
