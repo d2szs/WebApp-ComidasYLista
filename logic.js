@@ -455,23 +455,38 @@ function hasMatch(own, peers, now) {
   return activePeers(peers, now).some((p) => sameSlot(own, p));
 }
 
-// Lista nueva de peers a partir de channel.presenceState() ({ key: [{ date, type, seq }] })
-function updatePeers(peers, presenceState, ownKey, now) {
-  const previous = new Map(peers.map((p) => [p.key, p]));
-  const next = [];
-  for (const [key, metas] of Object.entries(presenceState || {})) {
-    if (key === ownKey || !metas || metas.length === 0) continue;
-    const { date, type, seq } = metas[metas.length - 1]; // el anuncio más reciente
-    const old = previous.get(key);
-    const seenAt = old && old.seq === seq ? old.seenAt : now;
-    next.push({ key, date, type, seq, seenAt });
-    previous.delete(key);
+// true si es un mensaje "form" bien formado: anuncio { key, date, type, seq } o salida { key, seq, gone: true } (D-3)
+function isFormMessage(message) {
+  if (!message || typeof message !== 'object') return false;
+  if (typeof message.key !== 'string' || message.key === '') return false;
+  if (!Number.isInteger(message.seq) || message.seq < 0) return false;
+  if (message.gone === true) return true;
+  return typeof message.date === 'string' && message.date !== ''
+    && typeof message.type === 'string' && message.type !== '';
+}
+
+// Peers que se recuerdan: los vigentes y las salidas de hace PEER_MAX_AGE_MS o menos (guardan su seq)
+function keptPeers(peers, now) {
+  const active = new Set(activePeers(peers, now));
+  return peers.filter((p) => active.has(p)
+    || (p.goneAt !== undefined && now - p.goneAt <= PEER_MAX_AGE_MS));
+}
+
+// Lista nueva de peers tras recibir un mensaje "form" de otro formulario (D-3); no modifica la que recibe
+function updatePeers(peers, message, ownKey, now) {
+  const kept = keptPeers(peers, now);
+  if (!isFormMessage(message) || message.key === ownKey) return kept;
+  const old = kept.find((p) => p.key === message.key);
+  if (old && old.seq >= message.seq) return kept; // atrasado o repetido
+  const others = kept.filter((p) => p !== old);
+  const { key, seq } = message;
+  if (message.gone !== true) {
+    return [...others, { key, date: message.date, type: message.type, seq, seenAt: now }];
   }
-  for (const old of previous.values()) { // ya no están: salen tras el margen
-    const goneAt = old.goneAt === undefined ? now : old.goneAt;
-    if (now - goneAt <= PEER_LEAVE_GRACE_MS) next.push({ ...old, goneAt });
-  }
-  return next;
+  const left = old
+    ? { ...old, seq, goneAt: old.goneAt === undefined ? now : old.goneAt }
+    : { key, seq, seenAt: now, goneAt: now }; // clave desconocida: sin fecha ni tipo, no coincide
+  return [...others, left];
 }
 
 // 004-edicion-simultanea: textos de los avisos (RF-1, RF-3)
