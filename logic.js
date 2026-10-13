@@ -543,6 +543,14 @@ function savedSince(seen, slot, current) {
   return !sameContent(seen.meal.platos, current.platos);
 }
 
+// true si, con el aviso de RF-3, el cambio de fecha o tipo cuenta para RF-5: otro tipo, u
+// otra fecha no vacía (también una intermedia al teclear). Se compara siempre con prev, la
+// fecha y el tipo que había al llegar el aviso (CL-7: el mismo día y tipo no cuenta)
+function leavesSlot(prev, next) {
+  if (next.type !== prev.type) return true;
+  return next.date !== '' && next.date !== prev.date;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -559,6 +567,6 @@ if (typeof module !== 'undefined') {
     readAuthLink, urlWithoutAuthData, recoveryRedirect, startScreen, authEventScreen,
     PEER_REFRESH_MS, PEER_MAX_AGE_MS, PEER_CHECK_MS, PEER_LEAVE_GRACE_MS,
     sameSlot, activePeers, updatePeers, hasMatch, formMessage, needsReply,
-    MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince,
+    MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince, leavesSlot,
   };
 }
