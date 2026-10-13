@@ -27,6 +27,7 @@ const formState = {
   saving: false,        // guardado en curso (000-base RF-36)
   savedElsewhere: false, // aviso de 004 RF-3 activo
   savedSlot: null,       // fecha y tipo al llegar el aviso de RF-3 (RF-5, CL-7)
+  snapshot: null,        // { fecha, tipo, platos } de la comida abierta, o null si es nueva (CL-4)
 };
 
 let client = null;
@@ -566,6 +567,7 @@ function onSlotChange() {
     formState.savedElsewhere = false;
     formState.savedSlot = null;
     formState.id = null;
+    formState.snapshot = null;
     $('form-title').textContent = 'Añadir comida';
     showFormNotice(''); // el aviso de 000-base RF-39 ya no vale: no se edita la existente
   }
@@ -858,6 +860,7 @@ function clearMarks() {
 
 function fillForm({ id = null, fecha: date, tipo: type = null, platos: dishes = [] }) {
   formState.id = id;
+  formState.snapshot = id ? { fecha: date, tipo: type, platos: dishes } : null; // CL-4
   $('form-title').textContent = id ? 'Editar comida' : 'Añadir comida';
   $('form-date').value = date;
   fillDish(formState.dish1, dishes[0]);
@@ -964,10 +967,18 @@ async function saveMeal(event) {
     if (isOtherMeal(existing, formState.id)) return showFormError(duplicateMessage(meal.tipo, 'error'));
 
     if (formState.id) {
-      const { data, error: saveError } = await client.from('comidas')
-        .update(meal).eq('id', formState.id).select('id');
+      // CL-4 (D-5): compara con lo que había al abrir y guarda en un solo paso
+      const { snapshot } = formState;
+      const { data, error: saveError } = await client.rpc('guardar_comida_si_no_cambio', {
+        p_id: formState.id,
+        p_fecha_antes: snapshot.fecha, p_tipo_antes: snapshot.tipo, p_platos_antes: snapshot.platos,
+        p_fecha: meal.fecha, p_tipo: meal.tipo, p_platos: meal.platos,
+      });
       if (saveError) throw saveError;
-      if (wasDeleted(data)) return showFormError('Esta comida ya no existe; puede que la haya borrado la otra persona.');
+      const outcome = saveOutcome(data);
+      if (outcome === 'changed') return markSavedElsewhere(); // CL-4: aviso de RF-3, sin guardar
+      if (outcome === 'deleted') return showFormError('Esta comida ya no existe; puede que la haya borrado la otra persona.');
+      if (outcome === 'error') throw new Error('Respuesta inesperada al guardar');
     } else {
       const { error: saveError } = await client.from('comidas').insert(meal);
       if (saveError) throw saveError;
