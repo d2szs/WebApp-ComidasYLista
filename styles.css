@@ -10,6 +10,8 @@
   --color-error: #b42318;
   --color-error-bg: #fdecea;
   --color-info-bg: #eef4ff;
+  --color-alert-bg: #fff4d6;
+  --color-alert-text: #6b4a00;
   --color-today: #e8f3ef;
 
   --color-desayuno: #e0a100;
@@ -109,6 +111,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 .error-message { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
 .info-message { background: var(--color-info-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
+.alert-message {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  width: 100%;
+  background: var(--color-alert-bg);
+  color: var(--color-alert-text);
+  padding: 0.5rem 0.7rem;
+  border-radius: calc(var(--radius) - 4px);
+  overflow-wrap: anywhere;
+}
+.alert-icon { flex: none; }
 #new-password-account { overflow-wrap: anywhere; }
 
 /* ===== Cabecera ===== */

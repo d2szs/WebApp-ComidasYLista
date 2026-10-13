@@ -23,6 +23,9 @@ const formState = {
   dish1: null,
   dish2: null,
   searchId: 0,          // para descartar búsquedas antiguas de entradas existentes
+  open: false,          // el formulario está abierto (004 RF-1)
+  saving: false,        // guardado en curso (000-base RF-36)
+  savedElsewhere: false, // aviso de 004 RF-3 activo
 };
 
 let client = null;
@@ -33,6 +36,16 @@ let ready = false;          // connect() ya eligió la pantalla de arranque (D-2
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
 let onNewPassword = false;  // en la pantalla de nueva contraseña
 let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
+
+// Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
+let formsChannel = null;    // canal privado 'meal-forms' (D-1)
+let formsReady = false;     // canal suscrito (CL-3)
+let peers = [];             // otros formularios (updatePeers)
+const tabKey = crypto.randomUUID(); // clave de esta pestaña en los mensajes "form" (D-3)
+let announceSeq = 0;        // sube con cada mensaje "form", anuncio o salida (D-3)
+let announced = false;      // el último mensaje "form" enviado fue un anuncio
+let refreshTimer = null;    // reanuncio del formulario propio (RNF-4)
+let peerTimer = null;       // revisión de la caducidad de los peers (RNF-4)
 
 // Datos del enlace de recuperación, leídos al cargar y antes de crear el cliente (D-2)
 let authLink = readAuthLink(location.hash, location.search);
@@ -427,6 +440,7 @@ function scheduleReload() {
 // ===== Sincronización en tiempo real =====
 function subscribeChanges() {
   unsubscribeChanges();
+  subscribeForms();
   channel = client.channel('meal-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, scheduleReload)
     .subscribe((channelStatus) => {
@@ -443,6 +457,98 @@ function subscribeChanges() {
 function unsubscribeChanges() {
   if (channel) client.removeChannel(channel);
   channel = null;
+  unsubscribeForms();
+}
+
+// ===== Formularios abiertos en otro sitio (004-edicion-simultanea) =====
+// Se abre con la sesión, junto a 'meal-changes' (D-2); su caída no da el aviso global
+function subscribeForms() {
+  unsubscribeForms();
+  formsChannel = client.channel('meal-forms', { config: { private: true } })
+    .on('broadcast', { event: 'form' }, ({ payload }) => onPeerMessage(payload))
+    .subscribe((status) => {
+      formsReady = status === 'SUBSCRIBED';
+      if (formsReady) {
+        announceForm({ hello: true }); // CL-3: vuelve a anunciarse y pide respuesta
+      } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+        peers = [];
+        refreshMatch();
+      }
+    });
+  peerTimer = setInterval(refreshMatch, PEER_CHECK_MS); // RNF-4
+}
+
+function unsubscribeForms() {
+  clearInterval(peerTimer);
+  peerTimer = null;
+  if (formsChannel) client.removeChannel(formsChannel);
+  formsChannel = null;
+  formsReady = false;
+  announced = false;
+  peers = [];
+}
+
+// Envía solo con el canal unido y el socket conectado, sin esperar (D-3, D-6)
+function sendForms(event, payload) {
+  if (!formsReady || !client.realtime.isConnected()) return false;
+  formsChannel.send({ type: 'broadcast', event, payload }).catch(() => {});
+  return true;
+}
+
+// Fecha y tipo elegidos en el formulario propio
+function ownSlot() {
+  return { date: $('form-date').value, type: formState.type };
+}
+
+// Anuncio o salida del formulario propio: qué se envía lo decide formMessage (D-3, D-8)
+function announceForm({ hello = false } = {}) {
+  const message = formMessage({
+    open: formState.open, ...ownSlot(),
+    visible: document.visibilityState === 'visible', announced, hello,
+  });
+  if (!message) return;
+  if (sendForms('form', { key: tabKey, seq: ++announceSeq, ...message })) announced = !message.gone;
+}
+
+// Mensaje "form" de otro formulario (D-3): actualiza los peers y contesta a un hello
+function onPeerMessage(message) {
+  peers = updatePeers(peers, message, tabKey, Date.now());
+  refreshMatch();
+  if (needsReply(message, tabKey)) announceForm();
+}
+
+function startRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => announceForm(), PEER_REFRESH_MS); // RNF-4
+}
+
+function stopRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
+// Pinta el aviso de coincidencia; único sitio que activa o desactiva "Guardar"
+function refreshMatch() {
+  const match = formState.open && hasMatch(ownSlot(), peers, Date.now());
+  const { text, saveDisabled } = matchNotice({ match, savedElsewhere: formState.savedElsewhere, saving: formState.saving });
+  const shown = formState.open && text ? text : '';
+  $('form-match-text').textContent = shown;
+  $('form-match-notice').hidden = !shown;
+  $('form-save').disabled = saveDisabled;
+}
+
+// Cambio de fecha o tipo en el formulario (RF-6 en el otro formulario)
+function onSlotChange() {
+  announceForm();
+  refreshMatch();
+  checkExisting();
+}
+
+function onFormClosed() {
+  formState.open = false;
+  stopRefresh();
+  announceForm();
+  refreshMatch();
 }
 
 // ===== Navegación =====
@@ -742,6 +848,10 @@ function openForm({ meal = null, date = null, type = null } = {}) {
     if (type) checkExisting();
   }
   $('meal-dialog').showModal();
+  formState.open = true;
+  announceForm({ hello: true });
+  startRefresh();
+  refreshMatch();
 }
 
 async function fetchMeal(isoDate, type) {
@@ -813,7 +923,8 @@ async function saveMeal(event) {
   const { data: meal, error } = validateForm();
   if (error) return showFormError(error);
 
-  $('form-save').disabled = true;
+  formState.saving = true;
+  refreshMatch();
   try {
     // Una sola entrada por día y tipo
     const existing = await fetchMeal(meal.fecha, meal.tipo);
@@ -833,7 +944,8 @@ async function saveMeal(event) {
   } catch (saveError) {
     showFormError(saveErrorMessage(saveError, meal.tipo, navigator.onLine));
   } finally {
-    $('form-save').disabled = false;
+    formState.saving = false;
+    refreshMatch();
   }
 }
 
@@ -871,12 +983,13 @@ function bindEvents() {
   formState.dish1.nameLabel.textContent = 'Nombre de receta *';
   document.querySelectorAll('.type-button').forEach((b) => b.addEventListener('click', () => {
     chooseType(b.dataset.type);
-    checkExisting();
+    onSlotChange();
   }));
-  $('form-date').addEventListener('change', checkExisting);
+  $('form-date').addEventListener('change', onSlotChange);
   $('form-remove-second').addEventListener('click', removeSecondDish);
   $('form-cancel').addEventListener('click', () => $('meal-dialog').close());
   $('meal-form').addEventListener('submit', saveMeal);
+  $('meal-dialog').addEventListener('close', onFormClosed);
 
   $('confirm-yes').addEventListener('click', () => $('confirm-dialog').close('yes'));
   $('confirm-no').addEventListener('click', () => $('confirm-dialog').close('no'));
