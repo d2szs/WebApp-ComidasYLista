@@ -26,6 +26,7 @@ const formState = {
   open: false,          // el formulario está abierto (004 RF-1)
   saving: false,        // guardado en curso (000-base RF-36)
   savedElsewhere: false, // aviso de 004 RF-3 activo
+  savedSlot: null,       // fecha y tipo al llegar el aviso de RF-3 (RF-5, CL-7)
 };
 
 let client = null;
@@ -522,7 +523,13 @@ function onPeerMessage(message) {
 // puesto hasta cambiar de fecha o tipo (RF-4)
 function onSavedElsewhere(slot) {
   if (!formState.open || !sameSlot(ownSlot(), slot)) return;
+  markSavedElsewhere();
+}
+
+// Aviso de RF-3: único sitio que lo pone; guarda la fecha y el tipo de ese momento (D-7)
+function markSavedElsewhere() {
   formState.savedElsewhere = true;
+  formState.savedSlot = ownSlot();
   refreshMatch();
 }
 
@@ -547,10 +554,17 @@ function refreshMatch() {
 }
 
 // Cambio de fecha o tipo en el formulario (RF-6 en el otro formulario). Con el aviso de
-// RF-3 pasa a ser una comida nueva (RF-5, D-7); checkExisting aplica 000-base RF-39/RF-40 (CL-2)
+// RF-3, solo un cambio real (leavesSlot) pasa a comida nueva (RF-5, D-7); si no, el
+// formulario se queda como está (CL-7). checkExisting aplica 000-base RF-39/RF-40 (CL-2)
 function onSlotChange() {
   if (formState.savedElsewhere) {
+    if (!leavesSlot(formState.savedSlot, ownSlot())) {
+      announceForm();
+      refreshMatch();
+      return;
+    }
     formState.savedElsewhere = false;
+    formState.savedSlot = null;
     formState.id = null;
     $('form-title').textContent = 'Añadir comida';
     showFormNotice(''); // el aviso de 000-base RF-39 ya no vale: no se edita la existente
@@ -866,6 +880,7 @@ function openForm({ meal = null, date = null, type = null } = {}) {
   $('meal-dialog').showModal();
   formState.open = true;
   formState.savedElsewhere = false;
+  formState.savedSlot = null;
   announceForm({ hello: true });
   startRefresh();
   refreshMatch();
