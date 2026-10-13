@@ -466,6 +466,7 @@ function subscribeForms() {
   unsubscribeForms();
   formsChannel = client.channel('meal-forms', { config: { private: true } })
     .on('broadcast', { event: 'form' }, ({ payload }) => onPeerMessage(payload))
+    .on('broadcast', { event: 'saved' }, ({ payload }) => onSavedElsewhere(payload))
     .subscribe((status) => {
       formsReady = status === 'SUBSCRIBED';
       if (formsReady) {
@@ -515,6 +516,14 @@ function onPeerMessage(message) {
   peers = updatePeers(peers, message, tabKey, Date.now());
   refreshMatch();
   if (needsReply(message, tabKey)) announceForm();
+}
+
+// Mensaje "saved" (RF-3): otro formulario guardó esta fecha y tipo; el aviso queda
+// puesto hasta cambiar de fecha o tipo (RF-4)
+function onSavedElsewhere(slot) {
+  if (!formState.open || !sameSlot(ownSlot(), slot)) return;
+  formState.savedElsewhere = true;
+  refreshMatch();
 }
 
 function startRefresh() {
@@ -849,6 +858,7 @@ function openForm({ meal = null, date = null, type = null } = {}) {
   }
   $('meal-dialog').showModal();
   formState.open = true;
+  formState.savedElsewhere = false;
   announceForm({ hello: true });
   startRefresh();
   refreshMatch();
@@ -919,6 +929,7 @@ function validateForm() {
 
 async function saveMeal(event) {
   event.preventDefault();
+  if (formState.savedElsewhere) return; // RF-4: también al enviar con Enter
   showFormError('');
   const { data: meal, error } = validateForm();
   if (error) return showFormError(error);
@@ -939,6 +950,7 @@ async function saveMeal(event) {
       const { error: saveError } = await client.from('comidas').insert(meal);
       if (saveError) throw saveError;
     }
+    sendForms('saved', { date: meal.fecha, type: meal.tipo }); // RF-3 (D-6): sin esperar
     $('meal-dialog').close();
     loadData();
   } catch (saveError) {
