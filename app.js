@@ -28,6 +28,8 @@ const formState = {
   savedElsewhere: false, // aviso de 004 RF-3 activo
   savedSlot: null,       // fecha y tipo al llegar el aviso de RF-3 (RF-5, CL-7)
   snapshot: null,        // { fecha, tipo, platos } de la comida abierta, o null si es nueva (CL-4)
+  seen: null,            // { date, type, meal }: qué había en la fecha y el tipo del formulario (D-12)
+  recheckId: 0,          // para descartar relecturas antiguas (D-12)
 };
 
 let client = null;
@@ -473,6 +475,7 @@ function subscribeForms() {
       formsReady = status === 'SUBSCRIBED';
       if (formsReady) {
         announceForm({ hello: true }); // CL-3: vuelve a anunciarse y pide respuesta
+        recheckSaved(); // RF-3 perdido (D-12)
       } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
         peers = [];
         refreshMatch();
@@ -532,6 +535,36 @@ function markSavedElsewhere() {
   formState.savedElsewhere = true;
   formState.savedSlot = ownSlot();
   refreshMatch();
+}
+
+// Relectura (D-12): por si el "saved" no llegó (página congelada, socket caído, sin conexión)
+async function recheckSaved() {
+  if (!formState.open || formState.savedElsewhere || formState.saving) return;
+  const slot = ownSlot();
+  if (!slot.date || !slot.type) return;
+  const recheckId = ++formState.recheckId;
+  let current;
+  try {
+    current = await fetchMeal(slot.date, slot.type);
+  } catch {
+    return; // sin errores en pantalla: CL-4 protege al guardar
+  }
+  if (recheckId !== formState.recheckId || !formState.open || formState.saving) return;
+  if (formState.savedElsewhere || !sameSlot(ownSlot(), slot)) return;
+  if (savedSince(formState.seen, slot, current)) markSavedElsewhere(); // RF-3, RNF-6
+}
+
+// Pestaña o app oculta = formulario abandonado (RNF-5); al volver a verse, otra vez (RNF-6)
+function onVisibilityChange() {
+  if (document.visibilityState !== 'visible') {
+    stopRefresh();
+    announceForm(); // salida: el otro quita el aviso; se siguen recibiendo "form" y "saved"
+    return;
+  }
+  announceForm({ hello: true });
+  if (formState.open) startRefresh();
+  refreshMatch();
+  recheckSaved();
 }
 
 function startRefresh() {
@@ -861,6 +894,7 @@ function clearMarks() {
 function fillForm({ id = null, fecha: date, tipo: type = null, platos: dishes = [] }) {
   formState.id = id;
   formState.snapshot = id ? { fecha: date, tipo: type, platos: dishes } : null; // CL-4
+  formState.seen = id ? { date, type, meal: { id, platos: dishes } } : null; // D-12
   $('form-title').textContent = id ? 'Editar comida' : 'Añadir comida';
   $('form-date').value = date;
   fillDish(formState.dish1, dishes[0]);
@@ -907,12 +941,23 @@ async function checkExisting() {
   } catch {
     return; // se volverá a comprobar al guardar
   }
-  if (!existing || searchId !== formState.searchId || formState.id) return;
+  if (searchId !== formState.searchId || formState.id) return;
+  const seen = { date: isoDate, type: formState.type, meal: null }; // D-12: lo que había en el hueco
+  if (!existing) {
+    formState.seen = seen;
+    return;
+  }
 
   const hasData = dishHasData(readDish(formState.dish1)) || dishHasData(readDish(formState.dish2));
   if (hasData) {
     const load = await askConfirm(duplicateMessage(formState.type, 'confirm'), 'Editar la existente');
-    if (!load) return;
+    if (!load) {
+      // RF-40 cancelada: la comida que ya había no cuenta como guardada desde otro sitio
+      if (searchId === formState.searchId && !formState.id) {
+        formState.seen = { ...seen, meal: { id: existing.id, platos: existing.platos } };
+      }
+      return;
+    }
   }
   fillForm(existing);
   showFormNotice(duplicateMessage(existing.tipo, 'editing'));
@@ -1041,6 +1086,7 @@ function bindEvents() {
 
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {
+    onVisibilityChange(); // RNF-5, RNF-6 (004)
     if (document.visibilityState !== 'visible') return;
     loadData();
     checkSessionAlive();
@@ -1048,9 +1094,13 @@ function bindEvents() {
   window.addEventListener('online', () => {
     if (sessionActive) loadData();
     else if (!$('screen-config').hidden) connect();
+    announceForm({ hello: true }); // CL-3 (si el socket aún no ha vuelto, lo hace SUBSCRIBED)
+    recheckSaved(); // D-12
   });
   window.addEventListener('offline', () => {
     if (sessionActive) showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'load');
+    peers = []; // CL-3: sin conexión no hay aviso de RF-1
+    refreshMatch();
   });
 }
 
