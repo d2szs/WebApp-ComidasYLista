@@ -110,6 +110,19 @@ function initialFormDate(view, refDate, today) {
   return view === 'day' ? refDate : today;
 }
 
+// Tope de años del panel de meses: la app solo trabaja bien con años de cuatro cifras
+const PANEL_YEARS = { min: 1001, max: 9998 };
+
+// Año con que abre el panel: el del mes visible, llevado al tope más cercano si se sale
+function initialPanelYear(refDate) {
+  return Math.min(Math.max(refDate.getFullYear(), PANEL_YEARS.min), PANEL_YEARS.max);
+}
+
+// Si se puede bajar (‹) o subir (›) de año desde el año del panel
+function panelArrows(year) {
+  return { canGoBack: year > PANEL_YEARS.min, canGoForward: year < PANEL_YEARS.max };
+}
+
 // ===== Textos de comidas y enlaces =====
 
 // Clave de una comida en el mapa del periodo: 'aaaa-mm-dd|tipo'
@@ -570,6 +583,7 @@ if (typeof module !== 'undefined') {
     MEAL_TYPES, UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
+    initialPanelYear, panelArrows,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
     flattenLineBreaks, cleanIngredientName,
