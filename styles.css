@@ -280,6 +280,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   width: auto;
   margin-right: calc(var(--ingredient-remove-width) + var(--ingredient-gap));
 }
+/* Nombre en varias líneas si no cabe (RF-2): sin tirador ni barra; el alto lo pone app.js */
+textarea.ingredient-name {
+  display: block;
+  resize: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .ingredient-remove {
   grid-column: 2;
   grid-row: 1;

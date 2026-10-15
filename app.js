@@ -815,17 +815,83 @@ function buildFormDish(container) {
 
 function addIngredient(dish, data = {}) {
   const row = $('ingredient-template').content.firstElementChild.cloneNode(true);
-  row.querySelector('.ingredient-name').value = data.nombre || '';
+  const name = row.querySelector('.ingredient-name');
+  name.value = flattenLineBreaks(data.nombre || '');
   row.querySelector('.ingredient-quantity').value = data.cantidad ?? '';
   row.querySelector('.ingredient-unit').value = data.unidad || '';
-  row.querySelector('.ingredient-remove').addEventListener('click', () => row.remove());
+  name.addEventListener('keydown', onNameKeydown);
+  name.addEventListener('beforeinput', onNameBeforeInput);
+  name.addEventListener('input', (event) => onNameInput(name, event));
+  nameObserver.observe(name);
+  row.querySelector('.ingredient-remove').addEventListener('click', () => {
+    nameObserver.unobserve(name);
+    row.remove();
+  });
   dish.ingredients.append(row);
+}
+
+// ===== Nombre del ingrediente en varias líneas (RF-2, CL-1, CL-2) =====
+
+// Intro tecleado (no pegado) en el nombre (D-3)
+const TYPED_BREAKS = ['insertLineBreak', 'insertParagraph'];
+
+// Ajusta el alto del nombre a sus líneas. Con una línea queda sin alto propio, para que
+// en el pc se estire como la cantidad y la unidad (D-5, RF-3)
+function fitNameHeight(textarea) {
+  textarea.style.height = '';
+  if (textarea.scrollHeight <= textarea.clientHeight) return;
+  const border = textarea.offsetHeight - textarea.clientHeight;
+  textarea.style.height = `${textarea.scrollHeight + border}px`;
+}
+
+// Reajusta el alto cuando cambia el ancho del nombre: al abrir el diálogo o cambiar de
+// ancho. Fuera del aviso y solo si cambió el ancho, para no entrar en bucle (D-2)
+const nameWidths = new WeakMap();
+const nameObserver = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const width = entry.contentRect.width;
+    if (width === nameWidths.get(entry.target)) continue;
+    nameWidths.set(entry.target, width);
+    requestAnimationFrame(() => fitNameHeight(entry.target));
+  }
+});
+
+// Igual que el envío implícito de un campo de una línea: solo con "Guardar" activo
+function submitFromName() {
+  const save = $('form-save');
+  if (!save.disabled) $('meal-form').requestSubmit(save);
+}
+
+function onNameKeydown(event) {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  submitFromName();
+}
+
+// Teclados que no avisan de la tecla (keydown 229): el salto no entra y se envía (D-3)
+function onNameBeforeInput(event) {
+  if (!TYPED_BREAKS.includes(event.inputType)) return;
+  event.preventDefault();
+  submitFromName();
+}
+
+// Un salto pegado, o uno que no se pudo anular, pasa a espacio sin mover el cursor (CL-1)
+function onNameInput(name, event) {
+  const flat = flattenLineBreaks(name.value);
+  if (flat !== name.value) {
+    const { selectionStart, selectionEnd } = name;
+    name.value = flat;
+    name.setSelectionRange(selectionStart, selectionEnd);
+  }
+  fitNameHeight(name);
+  if (TYPED_BREAKS.includes(event.inputType)) submitFromName();
 }
 
 function fillDish(dish, data) {
   dish.name.value = data?.nombre || '';
   dish.recipe.value = data?.receta || '';
   dish.reference.value = data?.referencia || '';
+  dish.ingredients.querySelectorAll('.ingredient-name').forEach((name) => nameObserver.unobserve(name));
   dish.ingredients.replaceChildren();
   const ingredients = data?.ingredientes || [];
   if (ingredients.length) ingredients.forEach((ingredient) => addIngredient(dish, ingredient));
