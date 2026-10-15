@@ -45,7 +45,9 @@ let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
 let formsReady = false;     // canal suscrito (CL-3)
 let peers = [];             // otros formularios (updatePeers)
-const tabKey = crypto.randomUUID(); // clave de esta pestaña en los mensajes "form" (D-3)
+// Clave de esta pestaña en los mensajes "form" (D-3): 32 cifras hexadecimales aleatorias.
+// getRandomValues también funciona sin HTTPS; randomUUID no (005 D-6).
+const tabKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 let announceSeq = 0;        // sube con cada mensaje "form", anuncio o salida (D-3)
 let announced = false;      // el último mensaje "form" enviado fue un anuncio
 let refreshTimer = null;    // reanuncio del formulario propio (RNF-4)
