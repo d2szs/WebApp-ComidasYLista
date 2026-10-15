@@ -134,6 +134,17 @@ function monthPanel(year, refDate, today) {
   }));
 }
 
+// Vista y día de referencia al elegir un mes del panel: el día 1 en la vista Mes.
+// Solo se recargan las comidas si cambia el rango visible (no si ya estaba en ese mes en Mes).
+function chooseMonth(view, refDate, year, month) {
+  const sameMonth = refDate.getFullYear() === year && refDate.getMonth() === month;
+  return {
+    view: 'month',
+    refDate: new Date(year, month, 1), // año de 4 cifras por el tope del panel (D-4)
+    reload: !(view === 'month' && sameMonth),
+  };
+}
+
 // ===== Textos de comidas y enlaces =====
 
 // Clave de una comida en el mapa del periodo: 'aaaa-mm-dd|tipo'
@@ -594,7 +605,7 @@ if (typeof module !== 'undefined') {
     MEAL_TYPES, UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
-    initialPanelYear, panelArrows, monthPanel,
+    initialPanelYear, panelArrows, monthPanel, chooseMonth,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
     flattenLineBreaks, cleanIngredientName,
