@@ -179,6 +179,20 @@ function formDishLayout(type, secondHasData) {
 }
 
 // ===== Formulario: validación =====
+
+// Saltos de línea y tabuladores que pasan a espacio en el nombre del ingrediente (CL-1)
+const LINE_BREAKS = /[\r\n\t\v\f\u0085\u2028\u2029]/g;
+
+// Cambia cada salto de línea o tabulador por un espacio, sin cambiar la longitud (CL-1)
+function flattenLineBreaks(text) {
+  return text.replace(LINE_BREAKS, ' ');
+}
+
+// Nombre del ingrediente en una línea: sin saltos, sin espacios repetidos ni en los extremos (CL-1)
+function cleanIngredientName(text) {
+  return flattenLineBreaks(text).replace(/ {2,}/g, ' ').trim();
+}
+
 // invalid: lista de campos que fallan, { dish, field, row? } o { field: 'date' }; app.js los marca (D-6)
 
 const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
@@ -558,6 +572,7 @@ if (typeof module !== 'undefined') {
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
+    flattenLineBreaks, cleanIngredientName,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
