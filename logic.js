@@ -123,6 +123,17 @@ function panelArrows(year) {
   return { canGoBack: year > PANEL_YEARS.min, canGoForward: year < PANEL_YEARS.max };
 }
 
+// Los doce meses del panel de un año, con el mes visible y el de hoy marcados
+function monthPanel(year, refDate, today) {
+  const inMonth = (date, month) => date.getFullYear() === year && date.getMonth() === month;
+  return Array.from({ length: 12 }, (_, month) => ({
+    month,
+    label: formatDate(new Date(year, month, 1), { month: 'short' }),
+    isVisible: inMonth(refDate, month),
+    isToday: inMonth(today, month),
+  }));
+}
+
 // ===== Textos de comidas y enlaces =====
 
 // Clave de una comida en el mapa del periodo: 'aaaa-mm-dd|tipo'
@@ -583,7 +594,7 @@ if (typeof module !== 'undefined') {
     MEAL_TYPES, UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
-    initialPanelYear, panelArrows,
+    initialPanelYear, panelArrows, monthPanel,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
     flattenLineBreaks, cleanIngredientName,
