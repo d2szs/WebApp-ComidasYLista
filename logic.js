@@ -213,7 +213,7 @@ function validateDish(rawDish, index, nameMessage) {
   const ingredients = [];
   rawDish.rows.forEach((row, i) => {
     if (isIngredientRowEmpty(row)) return;
-    const name = row.name.trim();
+    const name = cleanIngredientName(row.name);
     const quantity = Number(row.quantity);
     const quantityOk = !row.badInput && row.quantity !== '' && Number.isFinite(quantity) && quantity > 0;
     const unitOk = Boolean(UNITS[row.unit]);
