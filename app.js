@@ -666,8 +666,8 @@ function renderMonthPanel() {
   const arrows = panelArrows(panelYear);
   $('panel-prev').disabled = !arrows.canGoBack;
   $('panel-next').disabled = !arrows.canGoForward;
-  const cells = monthPanel(panelYear, state.refDate, getToday()).map(({ label, isVisible, isToday }) => {
-    const cell = button('panel-month', label, () => {});
+  const cells = monthPanel(panelYear, state.refDate, getToday()).map(({ month, label, isVisible, isToday }) => {
+    const cell = button('panel-month', label, () => pickMonth(month));
     cell.classList.toggle('visible', isVisible);
     cell.classList.toggle('today', isToday);
     if (isVisible) cell.setAttribute('aria-current', 'date');
@@ -683,6 +683,18 @@ function shiftPanelYear(direction) {
   if ((direction < 0 && !arrows.canGoBack) || (direction > 0 && !arrows.canGoForward)) return;
   panelYear += direction;
   renderMonthPanel();
+}
+
+// Elegir un mes: vista Mes con el día 1 de ese mes (RF-7). Carga como ‹ › salvo si
+// ya estaba en ese mes en la vista Mes (CL-4, D-7); si falla, el aviso de siempre (CL-2)
+function pickMonth(month) {
+  const next = chooseMonth(state.view, state.refDate, panelYear, month);
+  $('month-panel').close();
+  state.view = next.view;
+  state.refDate = next.refDate;
+  state.openType = null;
+  render();
+  if (next.reload) loadData();
 }
 
 // Una pulsación fuera del panel cae en el fondo del modal, que también es el <dialog> (D-1)
