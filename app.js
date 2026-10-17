@@ -243,6 +243,7 @@ async function closeLocalSession() {
 function applySession(session) {
   if (session && !sessionActive) {
     sessionActive = true;
+    resetView(); // RF-54: semana de hoy al pasar del login al calendario
     showScreen('app');
     render();
     subscribeChanges();
@@ -256,6 +257,13 @@ function applySession(session) {
     closeMonthPanel(); // 006 CL-6
     showScreen('login');
   }
+}
+
+// Vista inicial: semana de hoy sin tipo desplegado (RF-11, RF-54); "hoy" se lee al entrar
+function resetView() {
+  state.view = 'week';
+  state.refDate = getToday();
+  state.openType = null;
 }
 
 // Pantalla de nueva contraseña con la cuenta del enlace (RF-8); la marca detecta CL-4
