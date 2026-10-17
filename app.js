@@ -18,6 +18,7 @@ const state = {
 };
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
+let panelPressedOutside = false; // la pulsación empezó fuera del panel (006 D-1)
 
 const formState = {
   id: null,             // id de la entrada en edición (null = nueva)
@@ -252,6 +253,7 @@ function applySession(session) {
     unsubscribeChanges();
     state.meals.clear();
     hideError();
+    closeMonthPanel(); // 006 CL-6
     showScreen('login');
   }
 }
@@ -681,6 +683,24 @@ function shiftPanelYear(direction) {
   if ((direction < 0 && !arrows.canGoBack) || (direction > 0 && !arrows.canGoForward)) return;
   panelYear += direction;
   renderMonthPanel();
+}
+
+// Una pulsación fuera del panel cae en el fondo del modal, que también es el <dialog> (D-1)
+function isOutsidePanel(event) {
+  const panel = $('month-panel');
+  if (event.target !== panel) return false;
+  const r = panel.getBoundingClientRect();
+  return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
+}
+
+// Solo cierra si la pulsación empezó y acabó fuera: pulsar dentro y soltar fuera no cierra (RF-9)
+function onMonthPanelClick(event) {
+  if (panelPressedOutside && isOutsidePanel(event)) $('month-panel').close();
+  panelPressedOutside = false;
+}
+
+function closeMonthPanel() {
+  if ($('month-panel').open) $('month-panel').close();
 }
 
 function placeMonthPanel() {
@@ -1177,6 +1197,8 @@ function bindEvents() {
   $('period-button').addEventListener('click', openMonthPanel);
   $('panel-prev').addEventListener('click', () => shiftPanelYear(-1));
   $('panel-next').addEventListener('click', () => shiftPanelYear(1));
+  $('month-panel').addEventListener('pointerdown', (event) => { panelPressedOutside = isOutsidePanel(event); });
+  $('month-panel').addEventListener('click', onMonthPanelClick);
   $('month-panel').addEventListener('close', () => $('period-button').setAttribute('aria-expanded', 'false'));
   window.addEventListener('resize', () => {
     if ($('month-panel').open) placeMonthPanel();
