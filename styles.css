@@ -174,6 +174,34 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .period-arrow { flex: none; margin-left: 0.25rem; font-weight: normal; }
 .period-title::first-letter, .week-date::first-letter { text-transform: uppercase; }
 
+/* ===== Panel de meses (006): debajo de la cabecera, sin oscurecer el calendario ===== */
+.month-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: none;
+  width: min(22rem, 100% - 2 * var(--space));
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.month-panel::backdrop { background: transparent; }
+.panel-year-row { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 0.75rem; }
+.panel-year { min-width: 3.5rem; text-align: center; font-weight: 600; }
+.panel-months { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; }
+.panel-month {
+  padding: 0.55rem 0.2rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  cursor: pointer;
+}
+.panel-month.visible { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
+.panel-month.today { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
 /* ===== Avisos ===== */
 .error-notice {
   display: flex;

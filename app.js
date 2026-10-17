@@ -17,6 +17,8 @@ const state = {
   noticeKind: null,     // origen del aviso visible: 'load' | 'sync' | 'action'
 };
 
+let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
+
 const formState = {
   id: null,             // id de la entrada en edición (null = nueva)
   type: null,
@@ -648,6 +650,33 @@ function openDay(date, openType = null) {
   loadData();
 }
 
+// Panel de meses (006): abre en el año del día de referencia, debajo de la cabecera
+function openMonthPanel() {
+  panelYear = initialPanelYear(state.refDate);
+  renderMonthPanel();
+  placeMonthPanel();
+  $('month-panel').showModal();
+  $('period-button').setAttribute('aria-expanded', 'true');
+}
+
+function renderMonthPanel() {
+  $('panel-year').textContent = String(panelYear);
+  const cells = monthPanel(panelYear, state.refDate, getToday()).map(({ label, isVisible, isToday }) => {
+    const cell = button('panel-month', label, () => {});
+    cell.classList.toggle('visible', isVisible);
+    cell.classList.toggle('today', isToday);
+    if (isVisible) cell.setAttribute('aria-current', 'date');
+    return cell;
+  });
+  $('panel-months').replaceChildren(...cells);
+}
+
+function placeMonthPanel() {
+  const panel = $('month-panel');
+  panel.style.top = document.querySelector('.header').getBoundingClientRect().bottom + 'px';
+  panel.style.left = document.querySelector('.navigation').getBoundingClientRect().left + 'px';
+}
+
 // ===== Render =====
 function render() {
   updateHeader();
@@ -1133,6 +1162,11 @@ function bindEvents() {
   $('prev-button').addEventListener('click', () => shiftPeriod(-1));
   $('next-button').addEventListener('click', () => shiftPeriod(1));
   $('today-button').addEventListener('click', goToToday);
+  $('period-button').addEventListener('click', openMonthPanel);
+  $('month-panel').addEventListener('close', () => $('period-button').setAttribute('aria-expanded', 'false'));
+  window.addEventListener('resize', () => {
+    if ($('month-panel').open) placeMonthPanel();
+  });
   $('add-button').addEventListener('click', () => openForm());
   $('error-notice-close').addEventListener('click', () => hideError());
 

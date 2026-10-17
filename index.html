@@ -98,6 +98,15 @@
       </div>
     </header>
 
+    <dialog id="month-panel" class="month-panel" aria-label="Elegir mes">
+      <div class="panel-year-row">
+        <button type="button" id="panel-prev" class="btn btn-icon" aria-label="Año anterior">‹</button>
+        <span id="panel-year" class="panel-year"></span>
+        <button type="button" id="panel-next" class="btn btn-icon" aria-label="Año siguiente">›</button>
+      </div>
+      <div id="panel-months" class="panel-months"></div>
+    </dialog>
+
     <div id="error-notice" class="error-notice" role="alert" hidden>
       <span id="error-notice-text"></span>
       <button type="button" id="error-notice-close" class="btn-text" aria-label="Cerrar aviso">✕</button>
