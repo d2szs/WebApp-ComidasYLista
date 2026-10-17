@@ -157,7 +157,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .type-button[data-type="cena"].active { background: var(--color-cena); border-color: var(--color-cena); color: #fff; }
 
 .navigation { display: flex; align-items: center; gap: 0.4rem; }
-.period-title { display: inline-block; margin-left: 0.4rem; font-weight: 600; }
+/* El título es un botón que ocupa el resto de la fila; el texto se corta con "…" y "▾" siempre se ve */
+.period-button {
+  display: flex;
+  align-items: baseline;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0.4rem;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.period-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.period-arrow { flex: none; margin-left: 0.25rem; font-weight: normal; }
 .period-title::first-letter, .week-date::first-letter { text-transform: uppercase; }
 
 /* ===== Avisos ===== */
@@ -305,7 +319,7 @@ textarea.ingredient-name {
   .month-meal-name { display: block; }
   .week { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .week-meal-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .navigation .period-title { font-size: var(--text-large); }
+  .navigation .period-button { font-size: var(--text-large); }
   /* Pc: la fila de ingrediente en una línea. El nombre ocupa también una segunda fila
      de la rejilla, que solo crece si el nombre ocupa varias líneas: así cantidad, unidad
      y ✕ miden lo mismo que el nombre de una línea y se quedan arriba si crece */
