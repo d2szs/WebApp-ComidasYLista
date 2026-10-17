@@ -661,6 +661,9 @@ function openMonthPanel() {
 
 function renderMonthPanel() {
   $('panel-year').textContent = String(panelYear);
+  const arrows = panelArrows(panelYear);
+  $('panel-prev').disabled = !arrows.canGoBack;
+  $('panel-next').disabled = !arrows.canGoForward;
   const cells = monthPanel(panelYear, state.refDate, getToday()).map(({ label, isVisible, isToday }) => {
     const cell = button('panel-month', label, () => {});
     cell.classList.toggle('visible', isVisible);
@@ -669,6 +672,15 @@ function renderMonthPanel() {
     return cell;
   });
   $('panel-months').replaceChildren(...cells);
+}
+
+// ‹ (-1) o › (1) del panel: cambia solo el año del panel, sin tocar el calendario (RF-6).
+// Una flecha desactivada no lanza `click`; la guarda es por si llega igual (CL-7).
+function shiftPanelYear(direction) {
+  const arrows = panelArrows(panelYear);
+  if ((direction < 0 && !arrows.canGoBack) || (direction > 0 && !arrows.canGoForward)) return;
+  panelYear += direction;
+  renderMonthPanel();
 }
 
 function placeMonthPanel() {
@@ -1163,6 +1175,8 @@ function bindEvents() {
   $('next-button').addEventListener('click', () => shiftPeriod(1));
   $('today-button').addEventListener('click', goToToday);
   $('period-button').addEventListener('click', openMonthPanel);
+  $('panel-prev').addEventListener('click', () => shiftPanelYear(-1));
+  $('panel-next').addEventListener('click', () => shiftPanelYear(1));
   $('month-panel').addEventListener('close', () => $('period-button').setAttribute('aria-expanded', 'false'));
   window.addEventListener('resize', () => {
     if ($('month-panel').open) placeMonthPanel();
