@@ -251,12 +251,24 @@ function applySession(session) {
   } else if (!session) {
     sessionActive = false;
     onNewPassword = false;
+    closeDialogs(); // CL-13: antes de quitar el canal, para anunciar el formulario cerrado
     unsubscribeChanges();
     state.meals.clear();
     hideError();
     closeMonthPanel(); // 006 CL-6
     showScreen('login');
   }
+}
+
+// CL-13: cierra la confirmación (askConfirm resuelve "no") y el formulario, sin guardar
+function closeDialogs() {
+  const confirmDialog = $('confirm-dialog');
+  if (confirmDialog.open) confirmDialog.close();
+  const mealDialog = $('meal-dialog');
+  if (!mealDialog.open) return;
+  formState.open = false;
+  announceForm(); // síncrono: el evento close llega ya sin canal (plan D-14)
+  mealDialog.close();
 }
 
 // Vista inicial: semana de hoy sin tipo desplegado (RF-11, RF-54); "hoy" se lee al entrar
@@ -1158,6 +1170,7 @@ async function saveMeal(event) {
   try {
     // Una sola entrada por día y tipo
     const existing = await fetchMeal(meal.fecha, meal.tipo);
+    if (!sessionActive) return; // CL-13: sesión cerrada mientras esperaba
     if (isOtherMeal(existing, formState.id)) return showFormError(duplicateMessage(meal.tipo, 'error'));
 
     if (formState.id) {
@@ -1168,6 +1181,7 @@ async function saveMeal(event) {
         p_fecha_antes: snapshot.fecha, p_tipo_antes: snapshot.tipo, p_platos_antes: snapshot.platos,
         p_fecha: meal.fecha, p_tipo: meal.tipo, p_platos: meal.platos,
       });
+      if (!sessionActive) return;
       if (saveError) throw saveError;
       const outcome = saveOutcome(data);
       if (outcome === 'changed') return markSavedElsewhere(); // CL-4: aviso de RF-3, sin guardar
@@ -1175,12 +1189,14 @@ async function saveMeal(event) {
       if (outcome === 'error') throw new Error('Respuesta inesperada al guardar');
     } else {
       const { error: saveError } = await client.from('comidas').insert(meal);
+      if (!sessionActive) return;
       if (saveError) throw saveError;
     }
     sendForms('saved', { date: meal.fecha, type: meal.tipo }); // RF-3 (D-6): sin esperar
     $('meal-dialog').close();
     loadData();
   } catch (saveError) {
+    if (!sessionActive) return; // CL-13: error de fetchMeal llegado tras el cierre
     showFormError(saveErrorMessage(saveError, meal.tipo, navigator.onLine));
   } finally {
     formState.saving = false;
@@ -1194,6 +1210,7 @@ async function deleteMeal(meal) {
   if (!(await askConfirm(text, 'Borrar'))) return;
 
   const { error } = await client.from('comidas').delete().eq('id', meal.id);
+  if (!sessionActive) return; // CL-13: respuesta llegada tras el cierre de sesión
   if (error) return showError('No se ha podido borrar la comida. ' + translateError(error, navigator.onLine));
   state.openType = null;
   loadData();
