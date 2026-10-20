@@ -536,6 +536,7 @@ function renderShopping() {
   $('pending-list').replaceChildren(...pending.map(buildPendingRow));
   $('pending-empty').hidden = pending.length > 0; // RF-10
   $('finish-button').hidden = struckCount === 0; // RF-41
+  $('finish-button').disabled = listState.finishing;
 
   $('saved-title').textContent = `Guardados (${savedCount})`;
   $('saved-toggle').setAttribute('aria-expanded', String(listState.savedOpen)); // RF-12
@@ -555,8 +556,7 @@ function articleNameParts(item) {
 function buildPendingRow(item) {
   const row = el('li', 'article-row');
   row.classList.toggle('struck', item.tachado);
-  const check = el('button', 'article-check');
-  check.type = 'button';
+  const check = button('article-check', '', () => setStruck(item, !item.tachado));
   check.setAttribute('aria-pressed', String(item.tachado));
   check.setAttribute('aria-label', `Tachar «${item.nombre}»`);
   row.append(check, ...articleNameParts(item));
@@ -668,6 +668,50 @@ async function recoverArticle(item) {
   if (rows.length === 0) return missingOrMoved(item.id, null); // CL-2 → false, CL-12 → true
   replaceItem(rows[0]);
   return true;
+}
+
+// Tacha o desmarca un artículo de Por comprar (RF-24, RF-40); value es fijo, lo contrario de lo
+// que se veía, para que dos toques a la vez en dos dispositivos den lo mismo (CL-1)
+async function setStruck(item, value) {
+  const { data: rows, error } = await client.from('articulos')
+    .update({ tachado: value })
+    .eq('id', item.id).eq('lista', 'por_comprar')
+    .select('id, nombre, cantidad, unidad, lista, tachado');
+  if (!sessionActive) return;
+  if (error) {
+    showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37
+    return;
+  }
+  if (rows.length === 0) {
+    await missingOrMoved(item.id, ARTICLE_CHANGED_MESSAGE); // CL-2 o CL-14
+    return;
+  }
+  replaceItem(rows[0]);
+}
+
+// "Terminar compra": pasa a Guardados los tachados de la base de datos, no los de la pantalla,
+// en una sola sentencia (RF-25, RF-42, CL-5, CL-11)
+async function finishShopping() {
+  if (listState.finishing) return;
+  const { struckCount } = shoppingLists(listState.items);
+  if (!(await askConfirm(finishConfirmText(struckCount), 'Aceptar'))) return; // RF-42
+  if (!sessionActive) return;
+  listState.finishing = true;
+  $('finish-button').disabled = true;
+  const { data: rows, error } = await client.from('articulos')
+    .update({ lista: 'guardados', tachado: false })
+    .eq('lista', 'por_comprar').eq('tachado', true)
+    .select('id');
+  if (!sessionActive) return;
+  listState.finishing = false;
+  $('finish-button').disabled = false;
+  if (error) {
+    // RF-36, RF-37: la lista se queda como estaba; recargar sin red taparía este aviso con el de carga
+    showError(articleErrorMessage('finish', error, navigator.onLine));
+    return;
+  }
+  if (rows.length === 0) showError(NO_STRUCK_MESSAGE); // CL-11
+  loadList();
 }
 
 // El artículo no estaba como se esperaba: ¿lo han borrado (CL-2) o movido (CL-12, CL-14)?
@@ -1582,6 +1626,7 @@ function bindEvents() {
   document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => showAppScreen(b.dataset.screen)));
   $('saved-toggle').addEventListener('click', toggleSaved);
   $('add-article-button').addEventListener('click', () => openArticleForm());
+  $('finish-button').addEventListener('click', finishShopping);
   $('article-cancel').addEventListener('click', closeArticleForm);
   $('article-form').addEventListener('submit', saveArticle);
   $('quick-add').addEventListener('submit', submitQuickAdd);
