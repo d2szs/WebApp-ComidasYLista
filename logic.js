@@ -163,10 +163,15 @@ function dishTitle(type, index) {
   return index === 0 ? 'Primer plato' : 'Segundo plato';
 }
 
+// "0,5 kg." o '' sin cantidad; una unidad desconocida se muestra tal cual (007-lista-compra RF-8, D-10)
+function formatQuantity(cantidad, unidad) {
+  if (cantidad === null || cantidad === undefined) return '';
+  return `${Number(cantidad).toLocaleString('es-ES')} ${UNITS[unidad] || unidad}`;
+}
+
 // "Harina: 0,5 kg."; una unidad desconocida se muestra tal cual
 function formatIngredient(ingredient) {
-  const quantity = Number(ingredient.cantidad).toLocaleString('es-ES');
-  return `${ingredient.nombre}: ${quantity} ${UNITS[ingredient.unidad] || ingredient.unidad}`;
+  return `${ingredient.nombre}: ${formatQuantity(ingredient.cantidad, ingredient.unidad)}`;
 }
 
 // Devuelve el enlace normalizado solo si es http/https válido; si no, null
@@ -228,6 +233,13 @@ function cleanIngredientName(text) {
   return flattenLineBreaks(text).replace(/ {2,}/g, ' ').trim();
 }
 
+// Cantidad del campo en bruto: número mayor que 0, o null si está vacía, no es un número
+// (badInput, CL-5) o no es mayor que 0. La comparten ingrediente y artículo (007-lista-compra D-10)
+function parseQuantity(raw, badInput) {
+  const quantity = Number(raw);
+  return !badInput && raw !== '' && Number.isFinite(quantity) && quantity > 0 ? quantity : null;
+}
+
 // invalid: lista de campos que fallan, { dish, field, row? } o { field: 'date' }; app.js los marca (D-6)
 
 const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
@@ -249,8 +261,8 @@ function validateDish(rawDish, index, nameMessage) {
   rawDish.rows.forEach((row, i) => {
     if (isIngredientRowEmpty(row)) return;
     const name = cleanIngredientName(row.name);
-    const quantity = Number(row.quantity);
-    const quantityOk = !row.badInput && row.quantity !== '' && Number.isFinite(quantity) && quantity > 0;
+    const quantity = parseQuantity(row.quantity, row.badInput);
+    const quantityOk = quantity !== null;
     const unitOk = Boolean(UNITS[row.unit]);
     if (!name) fail(INGREDIENT_ERROR, 'name', i);
     if (!quantityOk) fail(INGREDIENT_ERROR, 'quantity', i);
@@ -600,6 +612,78 @@ function leavesSlot(prev, next) {
   return next.date !== '' && next.date !== prev.date;
 }
 
+// ===== Lista de la compra (007-lista-compra) =====
+// Artículo como llega de la base de datos: { id, nombre, cantidad, unidad, lista, tachado }
+
+const MAX_ARTICLE_NAME = 200; // caracteres del nombre (RF-13, RF-14)
+const MAX_SUGGESTIONS = 5; // sugerencias bajo el campo rápido (RF-21)
+const ARTICLE_NAME_ERROR = 'Escribe el nombre del artículo.';
+const ARTICLE_QUANTITY_ERROR = 'Indica la cantidad (mayor que 0) y la unidad, o deja las dos vacías.';
+
+// Valida el formulario de artículo (añadir o editar, RF-29): { data } con las claves de la base de
+// datos, o { error, invalid } con los campos que fallan ('name', 'quantity', 'unit'). Con los dos
+// fallos se marcan todos y sale el mensaje del nombre (RF-16, RF-17, RF-18, CL-7)
+function validateArticleForm({ name, quantity, badInput, unit }) {
+  const invalid = [];
+  const nombre = cleanIngredientName(name);
+  if (!nombre) invalid.push('name');
+
+  const noQuantity = quantity === '' && !badInput;
+  const noUnit = !unit;
+  let cantidad = null;
+  if (!noQuantity || !noUnit) {
+    cantidad = parseQuantity(quantity, badInput);
+    if (cantidad === null) invalid.push('quantity');
+    if (!UNITS[unit]) invalid.push('unit');
+  }
+
+  if (invalid.length) {
+    return { error: invalid[0] === 'name' ? ARTICLE_NAME_ERROR : ARTICLE_QUANTITY_ERROR, invalid };
+  }
+  return { data: { nombre, cantidad, unidad: cantidad === null ? null : unit } };
+}
+
+// Clave de "Nombre equivalente": sin espacios sobrantes, en minúsculas y sin acentos salvo la ñ.
+// Misma regla que public.clave_articulo (D-2) · RF-19, RF-20, RF-30, CL-6
+function articleKey(name) {
+  return cleanIngredientName(name).normalize('NFC').toLowerCase()
+    .replace(/ñ/g, '\u0001').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\u0001/g, 'ñ');
+}
+
+const ARTICLE_COLLATOR = new Intl.Collator('es', { sensitivity: 'base' });
+
+// Orden alfabético español, sin distinguir mayúsculas ni tildes; la ñ va después de la n (RF-7)
+function compareArticles(a, b) {
+  return ARTICLE_COLLATOR.compare(a.nombre, b.nombre);
+}
+
+// Las dos listas en orden, con los tachados al final de Por comprar, y sus cuentas (RF-6, RF-7, RF-41)
+function shoppingLists(items) {
+  const sorted = [...items].sort(compareArticles);
+  const unstruck = sorted.filter((item) => item.lista === 'por_comprar' && !item.tachado);
+  const struck = sorted.filter((item) => item.lista === 'por_comprar' && item.tachado);
+  const saved = sorted.filter((item) => item.lista === 'guardados');
+  return {
+    pending: [...unstruck, ...struck],
+    saved,
+    pendingCount: unstruck.length,
+    savedCount: saved.length,
+    struckCount: struck.length,
+  };
+}
+
+// Hasta MAX_SUGGESTIONS artículos de Guardados, en orden, con alguna palabra que empieza por
+// lo escrito (sin mayúsculas ni acentos); [] si lo escrito queda vacío (RF-21, RF-22)
+function suggestions(items, typed) {
+  const key = articleKey(typed);
+  if (!key) return [];
+  return shoppingLists(items).saved
+    .filter((item) => (' ' + articleKey(item.nombre)).includes(' ' + key))
+    .slice(0, MAX_SUGGESTIONS);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -608,7 +692,7 @@ if (typeof module !== 'undefined') {
     initialPanelYear, panelArrows, monthPanel, chooseMonth,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
-    flattenLineBreaks, cleanIngredientName,
+    flattenLineBreaks, cleanIngredientName, parseQuantity, formatQuantity,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
@@ -619,5 +703,7 @@ if (typeof module !== 'undefined') {
     PEER_REFRESH_MS, PEER_MAX_AGE_MS, PEER_CHECK_MS, PEER_LEAVE_GRACE_MS,
     sameSlot, activePeers, updatePeers, hasMatch, formMessage, needsReply,
     MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince, leavesSlot,
+    MAX_ARTICLE_NAME, MAX_SUGGESTIONS, validateArticleForm, articleKey, compareArticles,
+    shoppingLists, suggestions,
   };
 }
