@@ -14,7 +14,7 @@ const state = {
   meals: new Map(),     // 'aaaa-mm-dd|tipo' → fila
   openType: null,       // tipo desplegado en la vista diaria
   requestId: 0,         // para descartar respuestas antiguas
-  noticeKind: null,     // origen del aviso visible: 'load' | 'sync' | 'action'
+  noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'sync' | 'action'
 };
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
@@ -39,6 +39,7 @@ let client = null;
 let channel = null;
 let sessionActive = false;
 let reloadTimer = null;
+let listReloadTimer = null; // 007: agrupa recargas seguidas de la lista
 let ready = false;          // connect() ya eligió la pantalla de arranque (D-2)
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
 let onNewPassword = false;  // en la pantalla de nueva contraseña
@@ -486,6 +487,7 @@ async function loadData() {
     return;
   }
   hideError('load');
+  hideError('offline'); // 007 D-8
   state.meals = new Map(result.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
   render();
 }
@@ -511,6 +513,7 @@ async function loadList() {
     return;
   }
   hideError('listLoad');
+  hideError('offline'); // RF-38 (D-8)
   listState.items = result.data;
   listState.loaded = true;
   renderShopping();
@@ -582,17 +585,25 @@ function scheduleReload() {
   reloadTimer = setTimeout(loadData, 300);
 }
 
+// Igual para la lista de la compra (007 RF-33, CL-10)
+function scheduleListReload() {
+  clearTimeout(listReloadTimer);
+  listReloadTimer = setTimeout(loadList, 300);
+}
+
 // ===== Sincronización en tiempo real =====
 function subscribeChanges() {
   unsubscribeChanges();
   subscribeForms();
   channel = client.channel('meal-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, scheduleReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, scheduleListReload) // 007 RF-33 (D-4)
     .subscribe((channelStatus) => {
       const action = syncStatusAction(channelStatus, state.noticeKind);
       if (action === 'recover') {
         hideError('sync');
         scheduleReload();
+        scheduleListReload(); // 007 RF-35
       } else if (action === 'show') {
         showError('Se ha perdido la sincronización en tiempo real. Reintentando…', 'sync');
       }
@@ -1382,16 +1393,19 @@ function bindEvents() {
     onVisibilityChange(); // RNF-5, RNF-6 (004)
     if (document.visibilityState !== 'visible') return;
     loadData();
+    loadList(); // 007 RF-34
     checkSessionAlive();
   });
   window.addEventListener('online', () => {
-    if (sessionActive) loadData();
-    else if (!$('screen-config').hidden) connect();
+    if (sessionActive) {
+      loadData();
+      loadList(); // 007 RF-34
+    } else if (!$('screen-config').hidden) connect();
     announceForm({ hello: true }); // CL-3 (si el socket aún no ha vuelto, lo hace SUBSCRIBED)
     recheckSaved(); // D-12
   });
   window.addEventListener('offline', () => {
-    if (sessionActive) showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'load');
+    if (sessionActive) showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'offline'); // 007 D-8
     peers = []; // CL-3: sin conexión no hay aviso de RF-1
     refreshMatch();
   });
