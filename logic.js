@@ -684,6 +684,70 @@ function suggestions(items, typed) {
     .slice(0, MAX_SUGGESTIONS);
 }
 
+// Artículo con nombre equivalente (RF-20) que no es excludeId, en cualquiera de las dos
+// listas, o null; al editar, el propio artículo no cuenta (RF-19, RF-30, CL-6, RF-45)
+function findEquivalent(items, name, excludeId = null) {
+  const key = articleKey(name);
+  return items.find((item) => item.id !== excludeId && articleKey(item.nombre) === key) ?? null;
+}
+
+// Aviso de nombre repetido, con el nombre guardado y según la lista del otro (RF-19, RF-30, RF-45)
+function articleExistsMessage(name, list) {
+  return list === 'guardados' ? `«${name}» ya está en Guardados.` : `«${name}» ya está en la lista.`;
+}
+
+// Confirmación de borrar un artículo (RF-31, RF-43)
+function articleDeleteText(name) {
+  return `¿Borrar «${name}»?`;
+}
+
+// Confirmación de "Terminar compra" con el número de tachados (RF-42)
+function finishConfirmText(count) {
+  return count === 1
+    ? '¿Pasar 1 artículo comprado a Guardados?'
+    : `¿Pasar ${count} artículos comprados a Guardados?`;
+}
+
+// Resultado de anadir_articulo ({ resultado, nombre }) → { kind, name, list }; name es el nombre
+// guardado y list solo se da con 'exists'; cualquier otro valor es 'error' (RF-15, RF-19, RF-20, RF-39, CL-4)
+const ADD_KINDS = { anadido: 'added', recuperado: 'recovered', en_lista: 'exists', en_guardados: 'exists' };
+
+function addOutcome(result) {
+  const kind = (result && Object.hasOwn(ADD_KINDS, result.resultado)) ? ADD_KINDS[result.resultado] : 'error';
+  if (kind === 'error') return { kind, name: null, list: null };
+  let list = null;
+  if (result.resultado === 'en_lista') list = 'por_comprar';
+  if (result.resultado === 'en_guardados') list = 'guardados';
+  return { kind, name: result.nombre ?? null, list };
+}
+
+const ARTICLE_UNEXPECTED_MESSAGE = 'No se ha podido guardar el artículo. Ha ocurrido un error inesperado. Inténtalo de nuevo.';
+const ARTICLE_GONE_MESSAGE = 'Ese artículo ya no existe.'; // CL-2
+const ARTICLE_CHANGED_MESSAGE = 'Ese artículo ya ha cambiado.'; // CL-14
+const NO_STRUCK_MESSAGE = 'No hay artículos tachados.'; // CL-11
+
+const ARTICLE_ERROR_PREFIXES = {
+  load: 'No se ha podido cargar la lista de la compra. ',
+  save: 'No se ha podido guardar el artículo. ',
+  finish: 'No se ha podido terminar la compra. ',
+  delete: 'No se ha podido borrar el artículo. ',
+};
+
+// Error de la lista: prefijo de la acción ('load', 'save', 'finish', 'delete') y la causa de las
+// comidas; un duplicado (23505) no usa el texto de las comidas (RF-36, RF-45)
+function articleErrorMessage(action, error, online) {
+  if (error?.code === '23505') return ARTICLE_UNEXPECTED_MESSAGE;
+  return ARTICLE_ERROR_PREFIXES[action] + translateError(error, online);
+}
+
+// Error al guardar un artículo: un duplicado nombra el equivalente de items (ya recargados) con su
+// nombre guardado y su lista; sin equivalente, el error inesperado (RF-45, RF-36)
+function articleSaveErrorMessage(error, items, name, excludeId, online) {
+  if (error?.code !== '23505') return articleErrorMessage('save', error, online);
+  const other = findEquivalent(items, name, excludeId);
+  return other ? articleExistsMessage(other.nombre, other.lista) : ARTICLE_UNEXPECTED_MESSAGE;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -705,5 +769,8 @@ if (typeof module !== 'undefined') {
     MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince, leavesSlot,
     MAX_ARTICLE_NAME, MAX_SUGGESTIONS, validateArticleForm, articleKey, compareArticles,
     shoppingLists, suggestions,
+    findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
+    articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
+    ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE,
   };
 }
