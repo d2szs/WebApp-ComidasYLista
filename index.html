@@ -193,6 +193,41 @@
     </form>
   </dialog>
 
+  <!-- Formulario de artículo (007 RF-14, RF-27); "Borrar" llega en T11 -->
+  <dialog id="article-dialog" class="dialog">
+    <form id="article-form" novalidate>
+      <h2 id="article-form-title">Añadir artículo</h2>
+
+      <label class="field">
+        <span>Nombre</span>
+        <input type="text" id="article-name" maxlength="200" autocomplete="off">
+      </label>
+
+      <div class="article-amount">
+        <label class="field">
+          <span>Cantidad</span>
+          <input type="number" id="article-quantity" min="0" step="any" inputmode="decimal">
+        </label>
+        <label class="field">
+          <span>Unidad</span>
+          <select id="article-unit">
+            <option value="">—</option>
+            <option value="und">und.</option>
+            <option value="kg">kg.</option>
+            <option value="gr">gr.</option>
+          </select>
+        </label>
+      </div>
+
+      <p id="article-form-error" class="error-message" role="alert" hidden></p>
+
+      <div class="dialog-buttons">
+        <button type="button" id="article-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="article-save" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Confirmaciones -->
   <dialog id="confirm-dialog" class="dialog dialog-small">
     <p id="confirm-text"></p>

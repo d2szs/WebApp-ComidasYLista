@@ -52,6 +52,8 @@ function initialListState(requestId = 0) {
   return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, finishing: false };
 }
 let listState = initialListState();
+// Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
+const articleForm = { id: null, saving: false, opened: 0 };
 
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
@@ -294,6 +296,7 @@ function applySession(session) {
 function closeDialogs() {
   const confirmDialog = $('confirm-dialog');
   if (confirmDialog.open) confirmDialog.close();
+  closeArticleForm(); // 007 CL-8
   const mealDialog = $('meal-dialog');
   if (!mealDialog.open) return;
   formState.open = false;
@@ -541,10 +544,9 @@ function renderShopping() {
   $('saved-empty').hidden = saved.length > 0; // RF-10
 }
 
-// Nombre y cantidad de una fila (RF-8); el nombre abrirá el formulario (T9)
+// Nombre y cantidad de una fila (RF-8); tocar el nombre abre "Editar artículo" (RF-27)
 function articleNameParts(item) {
-  const name = el('button', 'article-name', item.nombre);
-  name.type = 'button';
+  const name = button('article-name', item.nombre, () => openArticleForm(item));
   const quantity = el('span', 'article-quantity', formatQuantity(item.cantidad, item.unidad));
   return [name, quantity];
 }
@@ -685,10 +687,102 @@ async function missingOrMoved(id, movedMessage) {
   return true;
 }
 
-// Otra persona ya lo ha borrado (CL-2); cerrar el formulario de artículo llega en T9
+// Otra persona ya lo ha borrado (CL-2): se cierra el formulario de artículo si estaba abierto
 function articleGone() {
+  closeArticleForm();
   showError(ARTICLE_GONE_MESSAGE);
   loadList();
+}
+
+// ===== Formulario de artículo (RF-14, RF-15, RF-27 a RF-30, RF-32) =====
+const ARTICLE_FIELDS = { name: 'article-name', quantity: 'article-quantity', unit: 'article-unit' };
+
+function showArticleFormError(text) {
+  $('article-form-error').textContent = text;
+  $('article-form-error').hidden = !text;
+}
+
+function clearArticleMarks() {
+  document.querySelectorAll('#article-form .invalid-field').forEach((n) => n.classList.remove('invalid-field'));
+}
+
+// Sin item, "Añadir artículo"; con item, "Editar artículo" con sus datos (RF-14, RF-27)
+function openArticleForm(item = null) {
+  articleForm.id = item ? item.id : null;
+  articleForm.opened++;
+  $('article-form-title').textContent = item ? 'Editar artículo' : 'Añadir artículo';
+  $('article-name').value = item ? item.nombre : '';
+  $('article-quantity').value = item && item.cantidad !== null ? String(item.cantidad) : '';
+  $('article-unit').value = (item && item.unidad) || '';
+  clearArticleMarks();
+  showArticleFormError('');
+  $('article-dialog').showModal();
+}
+
+function closeArticleForm() {
+  if ($('article-dialog').open) $('article-dialog').close();
+}
+
+// Valores en bruto del formulario, para validateArticleForm (CL-7: badInput)
+function readArticleForm() {
+  const quantity = $('article-quantity');
+  return { name: $('article-name').value, quantity: quantity.value, badInput: quantity.validity.badInput, unit: $('article-unit').value };
+}
+
+async function saveArticle(event) {
+  event.preventDefault();
+  if (articleForm.saving) return; // RF-32
+  clearArticleMarks();
+  showArticleFormError('');
+  const result = validateArticleForm(readArticleForm()); // RF-16, RF-17, RF-18, RF-29
+  if (result.error) {
+    result.invalid.forEach((field) => $(ARTICLE_FIELDS[field]).classList.add('invalid-field'));
+    return showArticleFormError(result.error);
+  }
+  const { id, opened } = articleForm;
+  if (id) {
+    const other = findEquivalent(listState.items, result.data.nombre, id); // RF-30, CL-6
+    if (other) return showArticleFormError(articleExistsMessage(other.nombre, other.lista));
+  }
+
+  articleForm.saving = true;
+  $('article-save').disabled = true;
+  try {
+    const ok = id ? await updateArticle(id, result.data) : await addArticle(result.data, true);
+    if (ok && articleForm.opened === opened) closeArticleForm(); // RF-15, RF-28
+  } finally {
+    articleForm.saving = false;
+    $('article-save').disabled = false;
+  }
+}
+
+// Cambia solo nombre, cantidad y unidad: nunca la lista ni el tachado (CL-3); true si se guardó
+async function updateArticle(id, data) {
+  let result;
+  try {
+    result = await client.from('articulos').update(data).eq('id', id)
+      .select('id, nombre, cantidad, unidad, lista, tachado');
+  } catch (error) {
+    result = { error };
+  }
+  if (!sessionActive) return false; // CL-8
+  const { data: rows, error } = result;
+  if (error?.code === '23505') { // RF-45: otro ya tiene un nombre equivalente
+    await loadList();
+    if (!sessionActive) return false;
+    showArticleFormError(articleSaveErrorMessage(error, listState.items, data.nombre, id, navigator.onLine));
+    return false;
+  }
+  if (error) {
+    showArticleFormError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37
+    return false;
+  }
+  if (rows.length === 0) { // CL-2: lo han borrado
+    articleGone();
+    return false;
+  }
+  replaceItem(rows[0]);
+  return true;
 }
 
 // Despliega o pliega Guardados (RF-12)
@@ -1487,6 +1581,9 @@ function bindEvents() {
   $('add-button').addEventListener('click', () => openForm());
   document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => showAppScreen(b.dataset.screen)));
   $('saved-toggle').addEventListener('click', toggleSaved);
+  $('add-article-button').addEventListener('click', () => openArticleForm());
+  $('article-cancel').addEventListener('click', closeArticleForm);
+  $('article-form').addEventListener('submit', saveArticle);
   $('quick-add').addEventListener('submit', submitQuickAdd);
   $('quick-add-input').addEventListener('input', renderSuggestions); // RF-21, RF-22
   $('error-notice-close').addEventListener('click', () => hideError());
