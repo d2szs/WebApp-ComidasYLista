@@ -76,10 +76,10 @@
   </section>
 
   <!-- Aplicación -->
-  <section id="screen-app" class="screen" hidden>
+  <section id="screen-app" class="screen" data-screen="meals" hidden>
     <header class="header">
       <div class="header-row">
-        <h1 class="app-title">Comidas</h1>
+        <h1 id="app-title" class="app-title">Comidas</h1>
         <button type="button" id="logout-button" class="btn btn-text">Cerrar sesión</button>
       </div>
       <div class="view-selector" role="group" aria-label="Vista">
@@ -96,6 +96,11 @@
           <span class="period-arrow" aria-hidden="true">▾</span>
         </button>
       </div>
+      <!-- Barra de pantallas (007 RF-1): arriba en el pc, fija abajo en el móvil -->
+      <nav class="screen-bar" aria-label="Pantalla">
+        <button type="button" class="screen-button active" data-screen="meals" aria-current="page">Comidas</button>
+        <button type="button" class="screen-button" data-screen="list">Compra</button>
+      </nav>
     </header>
 
     <dialog id="month-panel" class="month-panel" aria-label="Elegir mes">
@@ -115,7 +120,11 @@
 
     <main id="calendar" class="calendar"></main>
 
+    <!-- Pantalla Compra (007): la lista llega en T6 -->
+    <main id="shopping" class="shopping"></main>
+
     <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>
+    <button type="button" id="add-article-button" class="btn btn-primary btn-floating">+ Añadir artículo</button>
   </section>
 
   <!-- Formulario de comida -->

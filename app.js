@@ -43,6 +43,7 @@ let ready = false;          // connect() ya eligió la pantalla de arranque (D-2
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
 let onNewPassword = false;  // en la pantalla de nueva contraseña
 let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
+let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' (007 RF-1)
 
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
@@ -88,6 +89,19 @@ function showScreen(name) {
   for (const screen of ['config', 'start', 'login', 'new-password', 'app']) {
     $('screen-' + screen).hidden = screen !== name;
   }
+}
+
+// Cambia entre Comidas y Compra sin tocar el calendario (007 RF-2, RF-3, D-7)
+function showAppScreen(name) {
+  currentScreen = name;
+  $('screen-app').dataset.screen = name;
+  $('app-title').textContent = name === 'list' ? 'Compra' : 'Comidas';
+  document.querySelectorAll('.screen-button').forEach((b) => {
+    const active = b.dataset.screen === name;
+    b.classList.toggle('active', active);
+    if (active) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
 }
 
 // ===== Avisos y errores =====
@@ -244,6 +258,7 @@ function applySession(session) {
   if (session && !sessionActive) {
     sessionActive = true;
     resetView(); // RF-54: semana de hoy al pasar del login al calendario
+    showAppScreen('meals'); // 007 RF-4: al entrar, siempre Comidas
     showScreen('app');
     render();
     subscribeChanges();
@@ -1241,6 +1256,7 @@ function bindEvents() {
     if ($('month-panel').open) placeMonthPanel();
   });
   $('add-button').addEventListener('click', () => openForm());
+  document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => showAppScreen(b.dataset.screen)));
   $('error-notice-close').addEventListener('click', () => hideError());
 
   formState.dish1 = buildFormDish($('form-dish-1'));
