@@ -248,6 +248,31 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .quick-add { display: flex; gap: 0.5rem; }
 .quick-add input { flex: 1 1 auto; min-width: 0; }
 .quick-add-button { min-width: 2.75rem; font-size: var(--text-large); line-height: 1; }
+/* Sugerencias de Guardados bajo el campo rápido (RF-21, RF-23); zona de toque de 40 px (RNF-7) */
+.suggestions {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+.suggestion {
+  display: block;
+  width: 100%;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.suggestions li + li .suggestion { border-top: 1px solid var(--color-border); }
 .list-loading { margin-top: var(--space); color: var(--color-text-muted); }
 .list-section { margin-top: calc(var(--space) * 1.25); }
 .list-title { margin: 0 0 0.4rem; font-size: var(--text-large); }

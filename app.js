@@ -524,6 +524,7 @@ function renderShopping() {
   const loading = !listState.loaded;
   $('list-loading').hidden = !loading; // RF-11, D-13
   $('list-content').hidden = loading;
+  renderSuggestions(); // cada recarga recalcula las sugerencias de lo escrito (RF-22, CL-16, CL-18)
   if (loading) return;
 
   const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(listState.items);
@@ -571,6 +572,123 @@ function buildSavedRow(item) {
   remove.setAttribute('aria-label', `Borrar «${item.nombre}»`);
   row.append(...articleNameParts(item), recover, remove);
   return row;
+}
+
+// Sugerencias de Guardados para lo escrito en el campo rápido (RF-21, RF-22); como texto (RNF-6)
+function renderSuggestions() {
+  const found = suggestions(listState.items, $('quick-add-input').value);
+  $('quick-suggestions').replaceChildren(...found.map((item) => {
+    const li = el('li');
+    li.append(button('suggestion', item.nombre, () => pickSuggestion(item)));
+    return li;
+  }));
+  $('quick-suggestions').hidden = found.length === 0;
+}
+
+// Tocar una sugerencia la recupera (RF-23); el campo solo se vacía si se recuperó y nadie
+// lo cambió mientras esperaba (CL-16, CL-18)
+async function pickSuggestion(item) {
+  const input = $('quick-add-input');
+  const sent = input.value;
+  const ok = await recoverArticle(item);
+  if (!sessionActive) return;
+  if (ok && input.value === sent) input.value = '';
+  renderSuggestions();
+  input.focus();
+}
+
+// Alta con anadir_articulo (RF-13, RF-19, RF-20, RF-39, CL-4); true si quedó añadido o recuperado.
+// fromForm: los mensajes van dentro del formulario de artículo (llega en T9)
+async function addArticle({ nombre, cantidad, unidad }, fromForm = false) {
+  const report = (text) => (fromForm ? showArticleFormError(text) : showError(text));
+  let result;
+  try {
+    result = await client.rpc('anadir_articulo', { p_nombre: nombre, p_cantidad: cantidad, p_unidad: unidad });
+  } catch (error) {
+    result = { error };
+  }
+  if (!sessionActive) return false;
+  if (result.error) {
+    report(articleErrorMessage('save', result.error, navigator.onLine)); // RF-36, RF-37
+    return false;
+  }
+  const outcome = addOutcome(result.data);
+  if (outcome.kind === 'exists') { // RF-19, CL-4, RF-45
+    report(articleExistsMessage(outcome.name, outcome.list));
+    loadList();
+    return false;
+  }
+  if (outcome.kind === 'error') {
+    report(ARTICLE_UNEXPECTED_MESSAGE); // RF-36
+    return false;
+  }
+  loadList(); // añadido o recuperado: sin mensaje (RF-20)
+  return true;
+}
+
+// Intro o [+] en el campo rápido (RF-13, RF-16, CL-16, CL-17)
+async function submitQuickAdd(event) {
+  event.preventDefault();
+  if (listState.quickPending) return; // CL-17: otro Intro o [+] mientras espera no hace nada
+  const input = $('quick-add-input');
+  const name = cleanIngredientName(input.value);
+  if (!name) return; // RF-16: sin mensaje
+  const sent = input.value; // CL-16: lo escrito mientras espera no se borra
+  listState.quickPending = true; // el campo sigue editable (CL-17)
+  try {
+    const ok = await addArticle({ nombre: name, cantidad: null, unidad: null }, false);
+    if (!sessionActive) return;
+    if (ok && input.value === sent) input.value = '';
+    renderSuggestions();
+    input.focus();
+  } finally {
+    listState.quickPending = false;
+  }
+}
+
+// Sustituye un artículo por el que devuelve el servidor y repinta (RF-37, D-9)
+function replaceItem(row) {
+  listState.items = listState.items.map((item) => (item.id === row.id ? row : item));
+  renderShopping();
+}
+
+// Pasa un artículo de Guardados a Por comprar (RF-23, RF-26); true si quedó recuperado (CL-18)
+async function recoverArticle(item) {
+  const { data: rows, error } = await client.from('articulos')
+    .update({ lista: 'por_comprar', tachado: false })
+    .eq('id', item.id).eq('lista', 'guardados')
+    .select('id, nombre, cantidad, unidad, lista, tachado');
+  if (!sessionActive) return false;
+  if (error) {
+    showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37
+    return false;
+  }
+  if (rows.length === 0) return missingOrMoved(item.id, null); // CL-2 → false, CL-12 → true
+  replaceItem(rows[0]);
+  return true;
+}
+
+// El artículo no estaba como se esperaba: ¿lo han borrado (CL-2) o movido (CL-12, CL-14)?
+async function missingOrMoved(id, movedMessage) {
+  const { data, error } = await client.from('articulos').select('id').eq('id', id);
+  if (!sessionActive) return false;
+  if (error) {
+    showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37: sin red no es CL-2
+    return false;
+  }
+  if (data.length === 0) {
+    articleGone();
+    return false;
+  }
+  if (movedMessage) showError(movedMessage); // CL-14
+  loadList();
+  return true;
+}
+
+// Otra persona ya lo ha borrado (CL-2); cerrar el formulario de artículo llega en T9
+function articleGone() {
+  showError(ARTICLE_GONE_MESSAGE);
+  loadList();
 }
 
 // Despliega o pliega Guardados (RF-12)
@@ -1369,7 +1487,8 @@ function bindEvents() {
   $('add-button').addEventListener('click', () => openForm());
   document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => showAppScreen(b.dataset.screen)));
   $('saved-toggle').addEventListener('click', toggleSaved);
-  $('quick-add').addEventListener('submit', (event) => event.preventDefault()); // el alta llega en T8
+  $('quick-add').addEventListener('submit', submitQuickAdd);
+  $('quick-add-input').addEventListener('input', renderSuggestions); // RF-21, RF-22
   $('error-notice-close').addEventListener('click', () => hideError());
 
   formState.dish1 = buildFormDish($('form-dish-1'));
