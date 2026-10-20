@@ -245,6 +245,87 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 /* ===== Compra (007) ===== */
 .shopping { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
+.quick-add { display: flex; gap: 0.5rem; }
+.quick-add input { flex: 1 1 auto; min-width: 0; }
+.quick-add-button { min-width: 2.75rem; font-size: var(--text-large); line-height: 1; }
+.list-loading { margin-top: var(--space); color: var(--color-text-muted); }
+.list-section { margin-top: calc(var(--space) * 1.25); }
+.list-title { margin: 0 0 0.4rem; font-size: var(--text-large); }
+.list-empty { margin: 0.4rem 0; color: var(--color-text-muted); }
+.saved-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.saved-arrow { display: inline-block; transition: transform 0.15s; }
+.saved-toggle[aria-expanded="true"] .saved-arrow { transform: rotate(90deg); }
+.finish-row { display: flex; justify-content: flex-end; }
+.finish-row .btn { margin-top: 0.5rem; }
+
+/* Fila de artículo (RF-8, RF-9): el nombre salta de línea y la cantidad se queda a la derecha */
+.article-list { list-style: none; margin: 0; padding: 0; }
+.article-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.article-row.saved-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.article-name {
+  min-height: 40px;
+  padding: 0.55rem 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.article-quantity { padding: 0.55rem 0; color: var(--color-text-muted); white-space: nowrap; }
+/* Zonas de toque de 40 px (RNF-7) */
+.article-check, .article-action {
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.article-check::before {
+  content: "";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 2px solid var(--color-text-muted);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+.article-check[aria-pressed="true"]::before {
+  content: "✓";
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  font-weight: bold;
+}
+.article-action { color: var(--color-text-muted); font-size: var(--text-large); }
+/* Tachado (RF-24) */
+.article-row.struck .article-name,
+.article-row.struck .article-quantity { text-decoration: line-through; color: var(--color-text-muted); }
 
 /* Móvil: barra fija abajo; el contenido y los botones flotantes quedan por encima (007 RF-1, RF-5) */
 @media (max-width: 767.98px) {

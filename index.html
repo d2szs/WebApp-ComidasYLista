@@ -120,8 +120,39 @@
 
     <main id="calendar" class="calendar"></main>
 
-    <!-- Pantalla Compra (007): la lista llega en T6 -->
-    <main id="shopping" class="shopping"></main>
+    <!-- Pantalla Compra (007 RF-6): campo rápido, Por comprar y Guardados -->
+    <main id="shopping" class="shopping">
+      <form id="quick-add" class="quick-add" novalidate>
+        <input type="text" id="quick-add-input" maxlength="200" placeholder="Añadir artículo..." aria-label="Añadir artículo" autocomplete="off" enterkeyhint="done">
+        <button type="submit" id="quick-add-button" class="btn btn-primary quick-add-button" aria-label="Añadir">+</button>
+      </form>
+
+      <div id="list-loading" class="list-loading" hidden>Cargando…</div>
+
+      <div id="list-content">
+        <section class="list-section" aria-labelledby="pending-title">
+          <h2 id="pending-title" class="list-title">Por comprar (0)</h2>
+          <ul id="pending-list" class="article-list"></ul>
+          <p id="pending-empty" class="list-empty" hidden>No hay nada por comprar.</p>
+          <div class="finish-row">
+            <button type="button" id="finish-button" class="btn" hidden>Terminar compra</button>
+          </div>
+        </section>
+
+        <section class="list-section">
+          <h2 class="list-title">
+            <button type="button" id="saved-toggle" class="saved-toggle" aria-expanded="false" aria-controls="saved-body">
+              <span class="saved-arrow" aria-hidden="true">▸</span>
+              <span id="saved-title">Guardados (0)</span>
+            </button>
+          </h2>
+          <div id="saved-body" hidden>
+            <ul id="saved-list" class="article-list"></ul>
+            <p id="saved-empty" class="list-empty" hidden>Aquí aparecerán los artículos comprados.</p>
+          </div>
+        </section>
+      </div>
+    </main>
 
     <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>
     <button type="button" id="add-article-button" class="btn btn-primary btn-floating">+ Añadir artículo</button>

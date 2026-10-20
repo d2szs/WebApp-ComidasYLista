@@ -45,6 +45,13 @@ let onNewPassword = false;  // en la pantalla de nueva contraseña
 let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
 let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' (007 RF-1)
 
+// Lista de la compra (007): artículos como llegan de la base de datos; loaded = primera carga
+// hecha (RF-11). requestId sigue subiendo al cerrar sesión, para descartar respuestas viejas (CL-10)
+function initialListState(requestId = 0) {
+  return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, finishing: false };
+}
+let listState = initialListState();
+
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
 let formsReady = false;     // canal suscrito (CL-3)
@@ -102,6 +109,10 @@ function showAppScreen(name) {
     if (active) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
+  if (name === 'list') {
+    listState.savedOpen = false; // RF-6: Guardados plegado al abrir Compra
+    renderShopping();
+  }
 }
 
 // ===== Avisos y errores =====
@@ -263,12 +274,15 @@ function applySession(session) {
     render();
     subscribeChanges();
     loadData();
+    loadList(); // 007 RF-44: la lista se carga aunque se vea Comidas
   } else if (!session) {
     sessionActive = false;
     onNewPassword = false;
     closeDialogs(); // CL-13: antes de quitar el canal, para anunciar el formulario cerrado
     unsubscribeChanges();
     state.meals.clear();
+    listState = initialListState(listState.requestId + 1); // 007 RF-11: "Cargando…" al volver a entrar
+    renderShopping();
     hideError();
     closeMonthPanel(); // 006 CL-6
     showScreen('login');
@@ -474,6 +488,92 @@ async function loadData() {
   hideError('load');
   state.meals = new Map(result.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
   render();
+}
+
+// ===== Lista de la compra (007) =====
+
+// Carga todos los artículos; solo vale la respuesta de la última petición (RF-11, RF-36, CL-10)
+async function loadList() {
+  if (!sessionActive) return;
+  const requestId = ++listState.requestId;
+  if (!listState.loaded) renderShopping(); // RF-11: "Cargando…" solo hasta la primera carga
+
+  let result;
+  try {
+    result = await client.from('articulos').select('id, nombre, cantidad, unidad, lista, tachado');
+  } catch (error) {
+    result = { error };
+  }
+  if (requestId !== listState.requestId || !sessionActive) return;
+
+  if (result.error) {
+    showError(articleErrorMessage('load', result.error, navigator.onLine), 'listLoad'); // D-8
+    return;
+  }
+  hideError('listLoad');
+  listState.items = result.data;
+  listState.loaded = true;
+  renderShopping();
+}
+
+// Pinta la pantalla Compra con lo que hay en listState (RF-6 a RF-12); todo con textContent (RNF-6)
+function renderShopping() {
+  const loading = !listState.loaded;
+  $('list-loading').hidden = !loading; // RF-11, D-13
+  $('list-content').hidden = loading;
+  if (loading) return;
+
+  const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(listState.items);
+
+  $('pending-title').textContent = `Por comprar (${pendingCount})`;
+  $('pending-list').replaceChildren(...pending.map(buildPendingRow));
+  $('pending-empty').hidden = pending.length > 0; // RF-10
+  $('finish-button').hidden = struckCount === 0; // RF-41
+
+  $('saved-title').textContent = `Guardados (${savedCount})`;
+  $('saved-toggle').setAttribute('aria-expanded', String(listState.savedOpen)); // RF-12
+  $('saved-body').hidden = !listState.savedOpen;
+  $('saved-list').replaceChildren(...(listState.savedOpen ? saved.map(buildSavedRow) : []));
+  $('saved-empty').hidden = saved.length > 0; // RF-10
+}
+
+// Nombre y cantidad de una fila (RF-8); el nombre abrirá el formulario (T9)
+function articleNameParts(item) {
+  const name = el('button', 'article-name', item.nombre);
+  name.type = 'button';
+  const quantity = el('span', 'article-quantity', formatQuantity(item.cantidad, item.unidad));
+  return [name, quantity];
+}
+
+// Fila de Por comprar: [casilla] [nombre] [cantidad] (RF-8, RF-24, D-11)
+function buildPendingRow(item) {
+  const row = el('li', 'article-row');
+  row.classList.toggle('struck', item.tachado);
+  const check = el('button', 'article-check');
+  check.type = 'button';
+  check.setAttribute('aria-pressed', String(item.tachado));
+  check.setAttribute('aria-label', `Tachar «${item.nombre}»`);
+  row.append(check, ...articleNameParts(item));
+  return row;
+}
+
+// Fila de Guardados: [nombre] [cantidad] [↺] [✕] (RF-8, RF-26, RF-31)
+function buildSavedRow(item) {
+  const row = el('li', 'article-row saved-row');
+  const recover = el('button', 'article-action', '↺');
+  recover.type = 'button';
+  recover.setAttribute('aria-label', `Pasar «${item.nombre}» a Por comprar`);
+  const remove = el('button', 'article-action', '✕');
+  remove.type = 'button';
+  remove.setAttribute('aria-label', `Borrar «${item.nombre}»`);
+  row.append(...articleNameParts(item), recover, remove);
+  return row;
+}
+
+// Despliega o pliega Guardados (RF-12)
+function toggleSaved() {
+  listState.savedOpen = !listState.savedOpen;
+  renderShopping();
 }
 
 // Agrupa varias recargas seguidas en una sola
@@ -1257,6 +1357,8 @@ function bindEvents() {
   });
   $('add-button').addEventListener('click', () => openForm());
   document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => showAppScreen(b.dataset.screen)));
+  $('saved-toggle').addEventListener('click', toggleSaved);
+  $('quick-add').addEventListener('submit', (event) => event.preventDefault()); // el alta llega en T8
   $('error-notice-close').addEventListener('click', () => hideError());
 
   formState.dish1 = buildFormDish($('form-dish-1'));
