@@ -193,7 +193,7 @@
     </form>
   </dialog>
 
-  <!-- Formulario de artículo (007 RF-14, RF-27); "Borrar" llega en T11 -->
+  <!-- Formulario de artículo (007 RF-14, RF-27); "Borrar" solo en "Editar artículo" (RF-43) -->
   <dialog id="article-dialog" class="dialog">
     <form id="article-form" novalidate>
       <h2 id="article-form-title">Añadir artículo</h2>
@@ -222,6 +222,7 @@
       <p id="article-form-error" class="error-message" role="alert" hidden></p>
 
       <div class="dialog-buttons">
+        <button type="button" id="article-delete" class="btn btn-danger" hidden>Borrar</button>
         <button type="button" id="article-cancel" class="btn">Cancelar</button>
         <button type="submit" id="article-save" class="btn btn-primary">Guardar</button>
       </div>

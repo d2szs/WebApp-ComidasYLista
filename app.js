@@ -53,7 +53,7 @@ function initialListState(requestId = 0) {
 }
 let listState = initialListState();
 // Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
-const articleForm = { id: null, saving: false, opened: 0 };
+const articleForm = { id: null, item: null, saving: false, opened: 0 };
 
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
@@ -569,9 +569,11 @@ function buildSavedRow(item) {
   const recover = el('button', 'article-action', '↺');
   recover.type = 'button';
   recover.setAttribute('aria-label', `Pasar «${item.nombre}» a Por comprar`);
+  recover.addEventListener('click', () => recoverArticle(item)); // RF-26
   const remove = el('button', 'article-action', '✕');
   remove.type = 'button';
   remove.setAttribute('aria-label', `Borrar «${item.nombre}»`);
+  remove.addEventListener('click', () => deleteArticle(item, false)); // RF-31
   row.append(...articleNameParts(item), recover, remove);
   return row;
 }
@@ -731,6 +733,30 @@ async function missingOrMoved(id, movedMessage) {
   return true;
 }
 
+// Borra un artículo tras confirmarlo, con ✕ o con "Borrar" del formulario (RF-31, RF-43).
+// Sin filtrar por lista: si la otra persona lo acaba de recuperar, se borra igual (CL-15)
+async function deleteArticle(item, fromForm) {
+  if (!(await askConfirm(articleDeleteText(item.nombre), 'Borrar'))) return; // al cancelar, el formulario sigue abierto
+  if (!sessionActive) return; // CL-8
+  const { data: rows, error } = await client.from('articulos').delete().eq('id', item.id).select('id');
+  if (!sessionActive) return;
+  if (error) {
+    // RF-36, RF-37: la lista se queda como estaba (sin recargar, para no tapar el aviso)
+    const text = articleErrorMessage('delete', error, navigator.onLine);
+    return fromForm ? showArticleFormError(text) : showError(text);
+  }
+  if (rows.length === 0) return articleGone(); // CL-2: ya lo habían borrado
+  if (fromForm) closeArticleForm();
+  listState.items = listState.items.filter((other) => other.id !== item.id);
+  renderShopping(); // también recalcula las sugerencias (RF-31)
+}
+
+// "Borrar" del formulario "Editar artículo" (RF-43); no mientras se guarda (RF-32)
+function deleteFromArticleForm() {
+  if (articleForm.saving || !articleForm.item) return;
+  deleteArticle(articleForm.item, true);
+}
+
 // Otra persona ya lo ha borrado (CL-2): se cierra el formulario de artículo si estaba abierto
 function articleGone() {
   closeArticleForm();
@@ -753,8 +779,10 @@ function clearArticleMarks() {
 // Sin item, "Añadir artículo"; con item, "Editar artículo" con sus datos (RF-14, RF-27)
 function openArticleForm(item = null) {
   articleForm.id = item ? item.id : null;
+  articleForm.item = item;
   articleForm.opened++;
   $('article-form-title').textContent = item ? 'Editar artículo' : 'Añadir artículo';
+  $('article-delete').hidden = !item; // RF-43: "Añadir artículo" no tiene "Borrar"
   $('article-name').value = item ? item.nombre : '';
   $('article-quantity').value = item && item.cantidad !== null ? String(item.cantidad) : '';
   $('article-unit').value = (item && item.unidad) || '';
@@ -1628,6 +1656,7 @@ function bindEvents() {
   $('add-article-button').addEventListener('click', () => openArticleForm());
   $('finish-button').addEventListener('click', finishShopping);
   $('article-cancel').addEventListener('click', closeArticleForm);
+  $('article-delete').addEventListener('click', deleteFromArticleForm);
   $('article-form').addEventListener('submit', saveArticle);
   $('quick-add').addEventListener('submit', submitQuickAdd);
   $('quick-add-input').addEventListener('input', renderSuggestions); // RF-21, RF-22
