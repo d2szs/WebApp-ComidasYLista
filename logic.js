@@ -770,6 +770,13 @@ function shortWeekDate(date) {
   return WEEKDAY_ABBR[date.getDay()] + ' ' + date.getDate();
 }
 
+// ¿Hay que abreviar la semana? Si el nombre completo más ancho, con un espacio y el número de
+// dos cifras más ancho, no cabe en la columna (RF-15, D-11). Los anchos, en px, los mide app.js
+function needsShortWeekDates(nameWidths, numberWidths, spaceWidth, available) {
+  if (nameWidths.length === 0) return false;
+  return Math.max(...nameWidths) + spaceWidth + Math.max(...numberWidths) > available;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -794,6 +801,6 @@ if (typeof module !== 'undefined') {
     findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
     ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE,
-    userInitial, isSidebarCollapsed, shortWeekDate,
+    userInitial, isSidebarCollapsed, shortWeekDate, needsShortWeekDates,
   };
 }
