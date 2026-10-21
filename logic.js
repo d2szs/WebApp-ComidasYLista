@@ -762,6 +762,14 @@ function isSidebarCollapsed(stored) {
   return stored === 'collapsed';
 }
 
+// Día abreviado de la semana en el pc estrecho: "Mié. 21". Lista fija y no Intl, que da
+// "mié" sin punto y cambia según el navegador (RF-15, D-11). De domingo a sábado, como getDay()
+const WEEKDAY_ABBR = ['Dom.', 'Lun.', 'Mar.', 'Mié.', 'Jue.', 'Vie.', 'Sáb.'];
+
+function shortWeekDate(date) {
+  return WEEKDAY_ABBR[date.getDay()] + ' ' + date.getDate();
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -786,6 +794,6 @@ if (typeof module !== 'undefined') {
     findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
     ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE,
-    userInitial, isSidebarCollapsed,
+    userInitial, isSidebarCollapsed, shortWeekDate,
   };
 }
