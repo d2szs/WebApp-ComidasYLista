@@ -533,14 +533,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .week { display: grid; gap: 0.6rem; }
 .week-day { background: var(--color-surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.6rem; }
 .week-day.today { outline: 2px solid var(--color-primary); }
-/* El número baja a otra línea si no cabe; el nombre solo se parte si ni él cabe (008 RF-15, D-11) */
+/* Con letra muy grande, el número baja; el nombre solo se parte si ni él cabe (008 CL-10, D-11) */
 .week-date { display: block; width: 100%; margin-bottom: 0.4rem; padding: 0; border: none; background: none; text-align: left; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
-/* Pc estrecho: el día abreviado ("Mié. 21") para que quepa en una línea (008 RF-15, D-11) */
+/* Si algún nombre completo no cabe, los siete abreviados ("Mié. 21"): lo decide app.js (008 RF-15, D-11) */
 .week-date-short { display: none; }
-@media (min-width: 768px) and (max-width: 1023.98px) {
-  .week-date-long { display: none; }
-  .week-date-short { display: inline; }
-}
+.week.short-dates .week-date-long { display: none; }
+.week.short-dates .week-date-short { display: inline; }
+/* Sonda para medir el texto tal como se ve; "pre" para que el espacio solo también mida */
+.week-date-probe { position: absolute; display: inline-block; visibility: hidden; white-space: pre; }
+.week-date-probe::first-letter { text-transform: uppercase; }
 .week-meal {
   display: block;
   width: 100%;

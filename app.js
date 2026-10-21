@@ -1221,8 +1221,10 @@ function render() {
   updateHeader();
   const calendar = $('calendar');
   if (state.view === 'month') calendar.replaceChildren(buildMonthView());
-  else if (state.view === 'week') calendar.replaceChildren(buildWeekView());
-  else calendar.replaceChildren(buildDayView());
+  else if (state.view === 'week') {
+    calendar.replaceChildren(buildWeekView());
+    updateWeekDates(); // antes de que se vea (008 RF-15)
+  } else calendar.replaceChildren(buildDayView());
 }
 
 function updateHeader() {
@@ -1288,6 +1290,38 @@ function buildWeekView() {
   }
   return week;
 }
+
+// Abrevia los siete días si algún nombre completo, con el número de dos cifras más ancho, no
+// cabe en su columna (008 RF-15, D-11). Aquí solo se mide; la cuenta la hace logic.js
+function updateWeekDates() {
+  const week = document.querySelector('.week');
+  if (!week || week.offsetParent === null) return; // en Compra o sin sesión, no hay nada que medir
+  const first = week.querySelector('.week-date');
+  const probe = el('span', 'week-date-probe');
+  first.append(probe);
+  const measure = (text) => {
+    probe.textContent = text;
+    return probe.getBoundingClientRect().width;
+  };
+  const days = weekDays(state.refDate, getToday());
+  const nameWidths = days.map(({ date }) => measure(formatDate(date, { weekday: 'long' })));
+  const numberWidths = [];
+  for (let day = 10; day <= 31; day++) numberWidths.push(measure(String(day)));
+  const spaceWidth = measure(' ');
+  probe.remove();
+  const available = first.getBoundingClientRect().width;
+  week.classList.toggle('short-dates', needsShortWeekDates(nameWidths, numberWidths, spaceWidth, available));
+}
+
+// Vuelve a medir cuando cambia el ancho del calendario (ventana, ☰, letra); fuera del aviso y
+// solo si cambió el ancho, porque abreviar cambia el alto (como 005 D-2)
+let calendarWidth = null;
+const calendarObserver = new ResizeObserver(([entry]) => {
+  const width = entry.contentRect.width;
+  if (width === calendarWidth) return;
+  calendarWidth = width;
+  requestAnimationFrame(updateWeekDates);
+});
 
 // Vista diaria: un bloque por tipo de comida
 function buildDayView() {
@@ -1715,6 +1749,7 @@ function bindEvents() {
   matchMedia('(min-width: 768px)').addEventListener('change', closeUserMenu);
   $('sidebar-toggle').addEventListener('click', toggleSidebar);
   readSidebar();
+  calendarObserver.observe($('calendar')); // 008 RF-15
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));
   $('prev-button').addEventListener('click', () => shiftPeriod(-1));
