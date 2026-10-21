@@ -19,6 +19,7 @@ const state = {
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
 let panelPressedOutside = false; // la pulsación empezó fuera del panel (006 D-1)
+let menuPressedOutside = false;  // lo mismo en el menú del usuario (008 RF-7)
 
 const formState = {
   id: null,             // id de la entrada en edición (null = nueva)
@@ -271,6 +272,7 @@ async function closeLocalSession() {
 function applySession(session) {
   if (session && !sessionActive) {
     sessionActive = true;
+    showUser(session.user.email); // 008 CL-4: la cuenta con que acaba de entrar
     resetView(); // RF-54: semana de hoy al pasar del login al calendario
     showAppScreen('meals'); // 007 RF-4: al entrar, siempre Comidas
     showScreen('app');
@@ -288,6 +290,7 @@ function applySession(session) {
     renderShopping();
     hideError();
     closeMonthPanel(); // 006 CL-6
+    closeUserMenu(); // 008 CL-3: abierto en una sección oculta, dejaría la página inerte
     showScreen('login');
   }
 }
@@ -1145,6 +1148,36 @@ function closeMonthPanel() {
   if ($('month-panel').open) $('month-panel').close();
 }
 
+// ===== Menú del usuario (008) =====
+// Inicial en el círculo y email en el menú, siempre como texto (RF-4, RNF-4)
+function showUser(email) {
+  $('user-initial').textContent = userInitial(email);
+  $('user-menu-email').textContent = email;
+}
+
+// Modal como el panel de meses: lo de detrás no se puede pulsar (RF-7, D-1); el foco va al
+// email por su autofocus, no a "Cerrar sesión" (D-5)
+function openUserMenu() {
+  $('user-menu').showModal();
+  $('user-button').setAttribute('aria-expanded', 'true');
+}
+
+function closeUserMenu() {
+  if ($('user-menu').open) $('user-menu').close();
+}
+
+// Una pulsación que empieza y acaba fuera del menú (también sobre el círculo) solo lo cierra (RF-7)
+function onUserMenuClick(event) {
+  if (menuPressedOutside && isOutsideDialog($('user-menu'), event)) closeUserMenu();
+  menuPressedOutside = false;
+}
+
+// "Cerrar sesión" del menú: sin confirmación, como el botón de antes (RF-8)
+function logOutFromMenu() {
+  closeUserMenu();
+  logOut();
+}
+
 function placeMonthPanel() {
   const panel = $('month-panel');
   panel.style.top = document.querySelector('.header').getBoundingClientRect().bottom + 'px';
@@ -1635,7 +1668,13 @@ function bindEvents() {
   $('form-recovery').addEventListener('submit', submitRecovery);
   $('form-new-password').addEventListener('submit', submitNewPassword);
   $('new-password-cancel').addEventListener('click', cancelNewPassword);
-  $('logout-button').addEventListener('click', logOut);
+  $('user-button').addEventListener('click', openUserMenu);
+  $('user-menu').addEventListener('pointerdown', (event) => { menuPressedOutside = isOutsideDialog($('user-menu'), event); });
+  $('user-menu').addEventListener('click', onUserMenuClick);
+  $('user-menu').addEventListener('close', () => $('user-button').setAttribute('aria-expanded', 'false'));
+  $('user-menu-logout').addEventListener('click', logOutFromMenu);
+  // Al cruzar los 768 px cambia el diseño (CSS) y el menú se cierra (CL-8)
+  matchMedia('(min-width: 768px)').addEventListener('change', closeUserMenu);
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));
   $('prev-button').addEventListener('click', () => shiftPeriod(-1));

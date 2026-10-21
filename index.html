@@ -77,11 +77,22 @@
 
   <!-- Aplicación -->
   <section id="screen-app" class="screen" data-screen="meals" hidden>
+    <!-- Barra superior (008 RF-1 a RF-4): nombre de la pantalla en el móvil, "KcKc" en el pc -->
+    <div class="top-bar">
+      <span class="app-logo">KcKc</span>
+      <h1 id="app-title" class="app-title">Comidas</h1>
+      <button type="button" id="user-button" class="user-button" aria-label="Menú del usuario" aria-haspopup="dialog" aria-expanded="false">
+        <span id="user-initial" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <!-- Menú del usuario (008 RF-5 a RF-8) -->
+    <dialog id="user-menu" class="user-menu" aria-label="Menú del usuario">
+      <p id="user-menu-email" class="user-menu-email" tabindex="-1" autofocus></p>
+      <button type="button" id="user-menu-logout" class="user-menu-item">Cerrar sesión</button>
+    </dialog>
+
     <header class="header">
-      <div class="header-row">
-        <h1 id="app-title" class="app-title">Comidas</h1>
-        <button type="button" id="logout-button" class="btn btn-text">Cerrar sesión</button>
-      </div>
       <div class="view-selector" role="group" aria-label="Vista">
         <button type="button" class="view-button" data-view="month">Mes</button>
         <button type="button" class="view-button" data-view="week">Semana</button>

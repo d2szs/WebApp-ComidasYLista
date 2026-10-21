@@ -28,6 +28,7 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   --max-width: 1100px;
   --screen-bar-height: 3.5rem;
+  --top-bar-height: 2.75rem;
 
   --ingredient-gap: 0.3rem;
   --ingredient-row-gap: 0.8rem;
@@ -130,18 +131,118 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .alert-icon { flex: none; }
 #new-password-account { overflow-wrap: anywhere; }
 
-/* ===== Cabecera ===== */
+/* ===== Barra superior (008 RF-1 a RF-4): fija arriba, el contenido empieza debajo ===== */
+#screen-app { padding-top: var(--top-bar-height); }
+.top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--top-bar-height);
+  padding: 0 var(--space);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+.app-title { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-logo { font-size: var(--text-large); font-weight: 700; }
+/* Círculo con la inicial: 2rem de círculo en una zona de toque de 2.5rem */
+.user-button {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+#user-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--color-primary-text);
+  color: var(--color-primary);
+  font-weight: 700;
+  line-height: 1;
+}
+.user-button:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
+
+/* Menú del usuario (008 RF-5, RF-6): bajo el círculo, sin oscurecer la pantalla */
+.user-menu {
+  position: fixed;
+  inset: auto;
+  top: var(--top-bar-height);
+  right: var(--space);
+  margin: 0;
+  max-width: none;
+  width: min(18rem, 100% - 2 * var(--space));
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+.user-menu::backdrop { background: transparent; }
+/* El foco va al email al abrir (D-5), sin recuadro */
+.user-menu-email:focus { outline: none; }
+.user-menu-email {
+  margin: 0;
+  padding: 0.75rem var(--space);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-small);
+  overflow-wrap: anywhere;
+}
+.user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.75rem var(--space);
+  border: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.user-menu-item:hover, .user-menu-item:focus-visible { background: var(--color-bg); }
+
+/* Móvil: nombre de la pantalla; pc: "KcKc", y el nombre solo para el lector de pantalla (D-7) */
+@media (max-width: 767.98px) {
+  .app-logo { display: none; }
+}
+@media (min-width: 768px) {
+  .app-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+/* ===== Cabecera: selector y navegación, pegados bajo la barra superior (RNF-1, D-4) ===== */
 .header {
   position: sticky;
-  top: 0;
+  top: var(--top-bar-height);
   z-index: 5;
-  padding: 0.75rem var(--space);
+  padding: 0.5rem var(--space) 0.75rem;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 .header > * { max-width: var(--max-width); margin-left: auto; margin-right: auto; }
-.header-row { display: flex; align-items: center; justify-content: space-between; }
-.app-title { margin: 0; }
+.header > .view-selector { margin-top: 0; }
+/* En Compra la cabecera no tiene nada que ocupe sitio */
+#screen-app[data-screen="list"] .header { padding: 0; border-bottom: none; }
 
 /* Barra "Comidas | Compra" (007 RF-1, D-7): en el pc, debajo de la fila del título y centrada */
 .screen-bar { display: flex; justify-content: center; gap: 0.25rem; margin-top: 0.6rem; }
