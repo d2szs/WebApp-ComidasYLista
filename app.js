@@ -72,6 +72,7 @@ let peerTimer = null;       // revisión de la caducidad de los peers (RNF-4)
 let authLink = readAuthLink(location.hash, location.search);
 
 const PENDING_KEY = 'pending-recovery';
+const SIDEBAR_KEY = 'sidebar'; // 'collapsed' o 'expanded' (008 RF-11)
 
 const $ = (id) => document.getElementById(id);
 
@@ -1178,6 +1179,37 @@ function logOutFromMenu() {
   logOut();
 }
 
+// ===== Barra lateral (008) =====
+// Se lee una vez al arrancar, no al entrar: sobrevive al cierre de sesión (RF-11, D-8).
+// Sin localStorage, expandida (CL-5)
+function readSidebar() {
+  let stored;
+  try {
+    stored = localStorage.getItem(SIDEBAR_KEY);
+  } catch {
+    stored = null;
+  }
+  setSidebar(isSidebarCollapsed(stored));
+}
+
+// El CSS solo lo usa en el pc ancho; en el pc estrecho la barra va contraída igual (D-10)
+function setSidebar(collapsed) {
+  if (collapsed) $('screen-app').dataset.sidebar = 'collapsed';
+  else delete $('screen-app').dataset.sidebar;
+  $('sidebar-toggle').setAttribute('aria-expanded', String(!collapsed));
+}
+
+// ☰ (RF-9); sin escuchar 'storage': la otra pestaña no cambia hasta recargar (CL-7)
+function toggleSidebar() {
+  const collapsed = !('sidebar' in $('screen-app').dataset);
+  setSidebar(collapsed);
+  try {
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? 'collapsed' : 'expanded');
+  } catch {
+    // Sin localStorage, ☰ funciona mientras dure la página (CL-5)
+  }
+}
+
 function placeMonthPanel() {
   const panel = $('month-panel');
   panel.style.top = document.querySelector('.header').getBoundingClientRect().bottom + 'px';
@@ -1675,6 +1707,8 @@ function bindEvents() {
   $('user-menu-logout').addEventListener('click', logOutFromMenu);
   // Al cruzar los 768 px cambia el diseño (CSS) y el menú se cierra (CL-8)
   matchMedia('(min-width: 768px)').addEventListener('change', closeUserMenu);
+  $('sidebar-toggle').addEventListener('click', toggleSidebar);
+  readSidebar();
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));
   $('prev-button').addEventListener('click', () => shiftPeriod(-1));

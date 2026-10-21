@@ -179,6 +179,23 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   line-height: 1;
 }
 .user-button:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
+/* ☰: oculto salvo en el pc ancho (RF-3, D-10) */
+.sidebar-toggle {
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font-size: var(--text-large);
+  cursor: pointer;
+}
+.sidebar-toggle:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
 
 /* Menú del usuario (008 RF-5, RF-6): bajo el círculo, sin oscurecer la pantalla */
 .user-menu {
@@ -604,7 +621,7 @@ textarea.ingredient-name {
 }
 
 /* Pc: barra lateral bajo la barra superior, y el contenido a su lado (007 RF-1, 008 RF-10,
-   007 D-17). Contraída, solo iconos: el nombre, oculto a la vista pero no al lector de pantalla */
+   007 D-17) */
 @media (min-width: 768px) {
   #screen-app { padding-left: var(--sidebar-width); }
   .header > .screen-bar {
@@ -616,17 +633,72 @@ textarea.ingredient-name {
     padding: 0.75rem 0.5rem;
     border-right: 1px solid var(--color-border);
   }
-  .screen-button { gap: 0.75rem; padding: 0.6rem 0.75rem; text-align: left; }
+  .screen-button { position: relative; gap: 0.75rem; padding: 0.6rem 0.75rem; text-align: left; }
+}
+/* Contraída: con ☰ en el pc ancho (RF-9) y siempre en el pc estrecho, sin mirar data-sidebar,
+   que se queda como esté (RF-14, D-10). Las mismas reglas en los dos bloques. El nombre,
+   oculto a la vista pero no al lector de pantalla, ya tiene el aspecto de la etiqueta de RF-13 */
+@media (min-width: 1024px) {
+  .sidebar-toggle { display: flex; }
   #screen-app[data-sidebar="collapsed"] { padding-left: var(--sidebar-width-collapsed); }
   #screen-app[data-sidebar="collapsed"] .screen-bar { width: var(--sidebar-width-collapsed); }
   #screen-app[data-sidebar="collapsed"] .screen-button { justify-content: center; padding-inline: 0; }
   #screen-app[data-sidebar="collapsed"] .screen-label {
     position: absolute;
+    top: 50%;
+    left: calc(100% + 0.5rem);
+    z-index: 1;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
+    transform: translateY(-50%);
+    border-radius: var(--radius);
+    background: var(--color-text);
+    color: var(--color-surface);
     white-space: nowrap;
+    --label-padding: 0.3rem 0.6rem;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  #screen-app { padding-left: var(--sidebar-width-collapsed); }
+  #screen-app .screen-bar { width: var(--sidebar-width-collapsed); }
+  #screen-app .screen-button { justify-content: center; padding-inline: 0; }
+  #screen-app .screen-label {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 0.5rem);
+    z-index: 1;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    transform: translateY(-50%);
+    border-radius: var(--radius);
+    background: var(--color-text);
+    color: var(--color-surface);
+    white-space: nowrap;
+    --label-padding: 0.3rem 0.6rem;
+  }
+}
+/* Etiqueta al pasar el ratón o con el foco, al momento: quita el recorte (RF-13, D-2). Con la
+   barra expandida el nombre no está recortado ni tiene --label-padding, y nada cambia */
+@media (min-width: 768px) and (hover: hover) {
+  #screen-app .screen-button:hover .screen-label {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    padding: var(--label-padding, 0);
+  }
+}
+@media (min-width: 768px) {
+  #screen-app .screen-button:focus-visible .screen-label {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    padding: var(--label-padding, 0);
   }
 }
 /* Pc estrecho: con la barra lateral, la semana tiene 576 px; columnas más juntas y el día más

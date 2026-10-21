@@ -79,6 +79,10 @@
   <section id="screen-app" class="screen" data-screen="meals" hidden>
     <!-- Barra superior (008 RF-1 a RF-4): nombre de la pantalla en el móvil, "KcKc" en el pc -->
     <div class="top-bar">
+      <!-- ☰ solo en el pc ancho (008 RF-9, D-10) -->
+      <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Contraer o expandir la barra lateral" aria-controls="screen-bar" aria-expanded="true">
+        <span aria-hidden="true">☰</span>
+      </button>
       <span class="app-logo">KcKc</span>
       <h1 id="app-title" class="app-title">Comidas</h1>
       <button type="button" id="user-button" class="user-button" aria-label="Menú del usuario" aria-haspopup="dialog" aria-expanded="false">
