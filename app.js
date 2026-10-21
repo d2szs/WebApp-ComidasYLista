@@ -1264,7 +1264,13 @@ function buildWeekView() {
   const week = el('div', 'week');
   for (const { date, isToday } of weekDays(state.refDate, getToday())) {
     const card = el('section', 'week-day' + (isToday ? ' today' : ''));
-    card.append(button('week-date', formatDate(date, { weekday: 'long', day: 'numeric' }), () => openDay(date)));
+    // Dos fechas: el CSS muestra la abreviada en el pc estrecho; el lector de pantalla lee
+    // siempre la completa (008 RF-15, RNF-5, D-11)
+    const fullName = formatDate(date, { weekday: 'long', day: 'numeric' });
+    const dateButton = button('week-date', undefined, () => openDay(date));
+    dateButton.setAttribute('aria-label', fullName);
+    dateButton.append(el('span', 'week-date-long', fullName), el('span', 'week-date-short', shortWeekDate(date)));
+    card.append(dateButton);
 
     for (const type of MEAL_TYPES) {
       const meal = mealAt(date, type.id);
