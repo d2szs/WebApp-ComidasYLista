@@ -748,6 +748,20 @@ function articleSaveErrorMessage(error, items, name, excludeId, online) {
   return other ? articleExistsMessage(other.nombre, other.lista) : ARTICLE_UNEXPECTED_MESSAGE;
 }
 
+// ===== Barra superior y barra lateral (008-barra-menu) =====
+
+// Inicial del círculo del usuario: el primer carácter del email, en mayúscula (RF-4, D-6)
+function userInitial(email) {
+  if (typeof email !== 'string' || email === '') return '';
+  return Array.from(email)[0].toLocaleUpperCase('es');
+}
+
+// Estado recordado de la barra lateral: contraída solo si se guardó así; sin nada guardado o
+// con el almacenamiento bloqueado (null), expandida (RF-12, CL-5)
+function isSidebarCollapsed(stored) {
+  return stored === 'collapsed';
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS,
@@ -772,5 +786,6 @@ if (typeof module !== 'undefined') {
     findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
     ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE,
+    userInitial, isSidebarCollapsed,
   };
 }
