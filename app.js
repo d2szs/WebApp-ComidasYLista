@@ -1127,17 +1127,17 @@ function pickMonth(month) {
   if (next.reload) loadData();
 }
 
-// Una pulsación fuera del panel cae en el fondo del modal, que también es el <dialog> (D-1)
-function isOutsidePanel(event) {
-  const panel = $('month-panel');
-  if (event.target !== panel) return false;
-  const r = panel.getBoundingClientRect();
+// Una pulsación fuera de un diálogo modal (panel de meses o menú del usuario) cae en su fondo,
+// que también es el <dialog> (006 D-1, 008 D-3)
+function isOutsideDialog(dialog, event) {
+  if (event.target !== dialog) return false;
+  const r = dialog.getBoundingClientRect();
   return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
 }
 
 // Solo cierra si la pulsación empezó y acabó fuera: pulsar dentro y soltar fuera no cierra (RF-9)
 function onMonthPanelClick(event) {
-  if (panelPressedOutside && isOutsidePanel(event)) $('month-panel').close();
+  if (panelPressedOutside && isOutsideDialog($('month-panel'), event)) $('month-panel').close();
   panelPressedOutside = false;
 }
 
@@ -1644,7 +1644,7 @@ function bindEvents() {
   $('period-button').addEventListener('click', openMonthPanel);
   $('panel-prev').addEventListener('click', () => shiftPanelYear(-1));
   $('panel-next').addEventListener('click', () => shiftPanelYear(1));
-  $('month-panel').addEventListener('pointerdown', (event) => { panelPressedOutside = isOutsidePanel(event); });
+  $('month-panel').addEventListener('pointerdown', (event) => { panelPressedOutside = isOutsideDialog($('month-panel'), event); });
   $('month-panel').addEventListener('click', onMonthPanelClick);
   $('month-panel').addEventListener('close', () => $('period-button').setAttribute('aria-expanded', 'false'));
   window.addEventListener('resize', () => {
