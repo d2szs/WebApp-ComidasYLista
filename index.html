@@ -107,10 +107,16 @@
           <span class="period-arrow" aria-hidden="true">▾</span>
         </button>
       </div>
-      <!-- Barra de pantallas (007 RF-1): arriba en el pc, fija abajo en el móvil -->
-      <nav class="screen-bar" aria-label="Pantalla">
-        <button type="button" class="screen-button active" data-screen="meals" aria-current="page">Comidas</button>
-        <button type="button" class="screen-button" data-screen="list">Compra</button>
+      <!-- Barra de pantallas (007 RF-1): fija abajo en el móvil, lateral en el pc; iconos en línea (007 D-16) -->
+      <nav id="screen-bar" class="screen-bar" aria-label="Pantalla">
+        <button type="button" class="screen-button active" data-screen="meals" aria-current="page">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3v6a2 2 0 0 0 4 0V3M8 3v18M18 21V3c-2.2 1.4-3.5 4-3.5 8.5H18"/></svg>
+          <span class="screen-label">Comidas</span>
+        </button>
+        <button type="button" class="screen-button" data-screen="list">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 3h3l2.6 12.2a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L21 7H6"/><circle cx="9.5" cy="20" r="1.5"/><circle cx="17.5" cy="20" r="1.5"/></svg>
+          <span class="screen-label">Compra</span>
+        </button>
       </nav>
     </header>
 
