@@ -73,6 +73,7 @@ let authLink = readAuthLink(location.hash, location.search);
 
 const PENDING_KEY = 'pending-recovery';
 const SIDEBAR_KEY = 'sidebar'; // 'collapsed' o 'expanded' (008 RF-11)
+const SCREEN_KEY = 'screen'; // 'meals' o 'list', en la pestaña y en el navegador (007 D-19)
 
 const $ = (id) => document.getElementById(id);
 
@@ -117,6 +118,32 @@ function showAppScreen(name) {
   if (name === 'list') {
     listState.savedOpen = false; // RF-6: Guardados plegado al abrir Compra
     renderShopping();
+  }
+  rememberScreen(name); // 007 RF-46: la "pantalla abierta" (barra, carga o entrada)
+}
+
+// Recuerda la pantalla en esta pestaña y como la última del navegador (007 D-19).
+// Sin almacenamiento, la barra funciona igual mientras dure la página (CL-19)
+function rememberScreen(name) {
+  try {
+    sessionStorage.setItem(SCREEN_KEY, name);
+  } catch {
+    // Sin sessionStorage, la pestaña no recuerda su pantalla
+  }
+  try {
+    localStorage.setItem(SCREEN_KEY, name);
+  } catch {
+    // Sin localStorage, el navegador no recuerda la última pantalla
+  }
+}
+
+// Pantalla recordada, o null si no hay o el almacenamiento está bloqueado (CL-19).
+// window[storageName] va dentro del try: leer la propiedad ya puede lanzar SecurityError
+function readStoredScreen(storageName) {
+  try {
+    return window[storageName].getItem(SCREEN_KEY);
+  } catch {
+    return null;
   }
 }
 
@@ -193,7 +220,7 @@ async function connect() {
     applySession(null);
     showRecovery(email, LINK_EXPIRED_MESSAGE);
   } else if (route.screen === 'app') {
-    applySession(session);
+    applySession(session, { pageLoad: true }); // 007 RF-46: abre la pantalla recordada
     checkSessionAlive(); // RF-15 al abrir la app
   } else {
     applySession(null);
@@ -270,12 +297,18 @@ async function closeLocalSession() {
   finishSigningOut();
 }
 
-function applySession(session) {
+// pageLoad: arranque de la página con la sesión guardada; si no, se entra desde el login (007 D-20)
+function applySession(session, { pageLoad = false } = {}) {
   if (session && !sessionActive) {
     sessionActive = true;
     showUser(session.user.email); // 008 CL-4: la cuenta con que acaba de entrar
-    resetView(); // RF-54: semana de hoy al pasar del login al calendario
-    showAppScreen('meals'); // 007 RF-4: al entrar, siempre Comidas
+    resetView(); // RF-54: semana de hoy al entrar, también si se abre Compra (007 RF-46)
+    // 007 RF-4, RF-46: desde el login, Comidas; al cargar, la recordada. Antes de enseñar la app
+    showAppScreen(openingScreen({
+      fromLogin: !pageLoad,
+      tabScreen: readStoredScreen('sessionStorage'),
+      browserScreen: readStoredScreen('localStorage'),
+    }));
     showScreen('app');
     render();
     subscribeChanges();
