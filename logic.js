@@ -748,6 +748,15 @@ function articleSaveErrorMessage(error, items, name, excludeId, online) {
   return other ? articleExistsMessage(other.nombre, other.lista) : ARTICLE_UNEXPECTED_MESSAGE;
 }
 
+// Pantalla al cargar la página o al entrar: desde el login, siempre Comidas (RF-4); si no, la
+// recordada en la pestaña o, sin ella (null), la del navegador (RF-46, CL-20, CL-21). Compra
+// solo si lo recordado es 'list': sin nada, bloqueado o con otro valor, Comidas (CL-19, D-21)
+function openingScreen({ fromLogin, tabScreen, browserScreen }) {
+  if (fromLogin) return 'meals';
+  const stored = tabScreen ?? browserScreen;
+  return stored === 'list' ? 'list' : 'meals';
+}
+
 // ===== Barra superior y barra lateral (008-barra-menu) =====
 
 // Inicial del círculo del usuario: el primer carácter del email, en mayúscula (RF-4, D-6)
@@ -800,7 +809,7 @@ if (typeof module !== 'undefined') {
     shoppingLists, suggestions,
     findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
-    ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE,
+    ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE, openingScreen,
     userInitial, isSidebarCollapsed, shortWeekDate, needsShortWeekDates,
   };
 }
