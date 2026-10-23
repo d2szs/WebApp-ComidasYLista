@@ -11,8 +11,13 @@ const MEAL_TYPES = [
   { id: 'cena', name: 'Cena' },
 ];
 // Etiquetas de todas las unidades; cada formulario acepta las de su lista (D-23)
-const UNITS = { und: 'und.', kg: 'kg.', gr: 'gr.', l: 'l.', ml: 'ml.' };
-const INGREDIENT_UNITS = ['und', 'kg', 'gr'];
+const UNITS = {
+  und: 'und.', kg: 'kg.', gr: 'gr.', l: 'l.', ml: 'ml.', cda: 'cda.', cdta: 'cdta.',
+  pizca: 'pizca', vaso: 'vaso', vasito: 'vasito', taza: 'taza', diente: 'diente',
+};
+// Plural de las unidades que son palabras; las abreviaturas no cambian (D-15)
+const UNIT_PLURALS = { pizca: 'pizcas', vaso: 'vasos', vasito: 'vasitos', taza: 'tazas', diente: 'dientes' };
+const INGREDIENT_UNITS = ['und', 'kg', 'gr', 'l', 'ml', 'cda', 'cdta', 'pizca', 'vaso', 'vasito', 'taza', 'diente'];
 const ARTICLE_UNITS = ['und', 'kg', 'gr', 'l', 'ml'];
 
 // ===== Fechas (sin toISOString: trabaja en hora local) =====
@@ -166,15 +171,18 @@ function dishTitle(type, index) {
   return index === 0 ? 'Primer plato' : 'Segundo plato';
 }
 
-// "0,5 kg." o '' sin cantidad; una unidad desconocida se muestra tal cual (007-lista-compra RF-8, D-10)
+// "0,5 kg.", "2 dientes" o '' sin cantidad; una unidad desconocida se muestra tal cual
+// (007-lista-compra RF-8, D-10; plural, D-15)
 function formatQuantity(cantidad, unidad) {
   if (cantidad === null || cantidad === undefined) return '';
-  return `${Number(cantidad).toLocaleString('es-ES')} ${UNITS[unidad] || unidad}`;
+  const plural = Number(cantidad) !== 1 && UNIT_PLURALS[unidad];
+  return `${Number(cantidad).toLocaleString('es-ES')} ${plural || UNITS[unidad] || unidad}`;
 }
 
-// "Harina: 0,5 kg."; una unidad desconocida se muestra tal cual
+// "Harina: 0,5 kg."; sin cantidad, solo el nombre ("Sal"); una unidad desconocida se muestra tal cual
 function formatIngredient(ingredient) {
-  return `${ingredient.nombre}: ${formatQuantity(ingredient.cantidad, ingredient.unidad)}`;
+  const amount = formatQuantity(ingredient.cantidad, ingredient.unidad);
+  return amount ? `${ingredient.nombre}: ${amount}` : ingredient.nombre;
 }
 
 // Devuelve el enlace normalizado solo si es http/https válido; si no, null
@@ -256,7 +264,7 @@ function checkAmount(quantity, badInput, unit, units) {
 
 // invalid: lista de campos que fallan, { dish, field, row? } o { field: 'date' }; app.js los marca (D-6)
 
-const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
+const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre y, si lleva cantidad, cantidad mayor que 0 y unidad.';
 const REFERENCE_ERROR = 'La referencia debe ser un enlace que empiece por http:// o https://';
 
 // Valida un plato en bruto: { dish } con las claves de la base de datos, o { error, invalid }
@@ -275,13 +283,11 @@ function validateDish(rawDish, index, nameMessage) {
   rawDish.rows.forEach((row, i) => {
     if (isIngredientRowEmpty(row)) return;
     const name = cleanIngredientName(row.name);
-    const quantity = parseQuantity(row.quantity, row.badInput);
-    const quantityOk = quantity !== null;
-    const unitOk = INGREDIENT_UNITS.includes(row.unit);
+    const amount = checkAmount(row.quantity, row.badInput, row.unit, INGREDIENT_UNITS);
     if (!name) fail(INGREDIENT_ERROR, 'name', i);
-    if (!quantityOk) fail(INGREDIENT_ERROR, 'quantity', i);
-    if (!unitOk) fail(INGREDIENT_ERROR, 'unit', i);
-    if (name && quantityOk && unitOk) ingredients.push({ nombre: name, cantidad: quantity, unidad: row.unit });
+    amount.invalid.forEach((field) => fail(INGREDIENT_ERROR, field, i));
+    // Sin cantidad ni unidad: { nombre, cantidad: null, unidad: null } (D-16)
+    if (name && !amount.invalid.length) ingredients.push({ nombre: name, cantidad: amount.cantidad, unidad: amount.unidad });
   });
 
   const reference = rawDish.reference.trim();
@@ -796,7 +802,7 @@ function needsShortWeekDates(nameWidths, numberWidths, spaceWidth, available) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    MEAL_TYPES, UNITS, INGREDIENT_UNITS, ARTICLE_UNITS,
+    MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
     initialPanelYear, panelArrows, monthPanel, chooseMonth,
