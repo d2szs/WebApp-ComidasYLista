@@ -243,6 +243,17 @@ function parseQuantity(raw, badInput) {
   return !badInput && raw !== '' && Number.isFinite(quantity) && quantity > 0 ? quantity : null;
 }
 
+// Cantidad y unidad, las dos o ninguna: { cantidad, unidad, invalid } con los campos que
+// fallan ('quantity', 'unit'). La comparten ingrediente y artículo (D-17)
+function checkAmount(quantity, badInput, unit, units) {
+  if (quantity === '' && !badInput && !unit) return { cantidad: null, unidad: null, invalid: [] };
+  const cantidad = parseQuantity(quantity, badInput);
+  const invalid = [];
+  if (cantidad === null) invalid.push('quantity');
+  if (!units.includes(unit)) invalid.push('unit');
+  return { cantidad, unidad: unit, invalid };
+}
+
 // invalid: lista de campos que fallan, { dish, field, row? } o { field: 'date' }; app.js los marca (D-6)
 
 const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre, cantidad mayor que 0 y unidad.';
@@ -631,19 +642,13 @@ function validateArticleForm({ name, quantity, badInput, unit }) {
   const nombre = cleanIngredientName(name);
   if (!nombre) invalid.push('name');
 
-  const noQuantity = quantity === '' && !badInput;
-  const noUnit = !unit;
-  let cantidad = null;
-  if (!noQuantity || !noUnit) {
-    cantidad = parseQuantity(quantity, badInput);
-    if (cantidad === null) invalid.push('quantity');
-    if (!ARTICLE_UNITS.includes(unit)) invalid.push('unit');
-  }
+  const amount = checkAmount(quantity, badInput, unit, ARTICLE_UNITS);
+  invalid.push(...amount.invalid);
 
   if (invalid.length) {
     return { error: invalid[0] === 'name' ? ARTICLE_NAME_ERROR : ARTICLE_QUANTITY_ERROR, invalid };
   }
-  return { data: { nombre, cantidad, unidad: cantidad === null ? null : unit } };
+  return { data: { nombre, cantidad: amount.cantidad, unidad: amount.unidad } };
 }
 
 // Clave de "Nombre equivalente": sin espacios sobrantes, en minúsculas y sin acentos salvo la ñ.
@@ -797,7 +802,7 @@ if (typeof module !== 'undefined') {
     initialPanelYear, panelArrows, monthPanel, chooseMonth,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
-    flattenLineBreaks, cleanIngredientName, parseQuantity, formatQuantity,
+    flattenLineBreaks, cleanIngredientName, parseQuantity, checkAmount, formatQuantity,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
