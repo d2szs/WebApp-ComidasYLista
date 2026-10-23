@@ -10,7 +10,10 @@ const MEAL_TYPES = [
   { id: 'comida', name: 'Comida' },
   { id: 'cena', name: 'Cena' },
 ];
-const UNITS = { und: 'und.', kg: 'kg.', gr: 'gr.' };
+// Etiquetas de todas las unidades; cada formulario acepta las de su lista (D-23)
+const UNITS = { und: 'und.', kg: 'kg.', gr: 'gr.', l: 'l.', ml: 'ml.' };
+const INGREDIENT_UNITS = ['und', 'kg', 'gr'];
+const ARTICLE_UNITS = ['und', 'kg', 'gr', 'l', 'ml'];
 
 // ===== Fechas (sin toISOString: trabaja en hora local) =====
 
@@ -263,7 +266,7 @@ function validateDish(rawDish, index, nameMessage) {
     const name = cleanIngredientName(row.name);
     const quantity = parseQuantity(row.quantity, row.badInput);
     const quantityOk = quantity !== null;
-    const unitOk = Boolean(UNITS[row.unit]);
+    const unitOk = INGREDIENT_UNITS.includes(row.unit);
     if (!name) fail(INGREDIENT_ERROR, 'name', i);
     if (!quantityOk) fail(INGREDIENT_ERROR, 'quantity', i);
     if (!unitOk) fail(INGREDIENT_ERROR, 'unit', i);
@@ -634,7 +637,7 @@ function validateArticleForm({ name, quantity, badInput, unit }) {
   if (!noQuantity || !noUnit) {
     cantidad = parseQuantity(quantity, badInput);
     if (cantidad === null) invalid.push('quantity');
-    if (!UNITS[unit]) invalid.push('unit');
+    if (!ARTICLE_UNITS.includes(unit)) invalid.push('unit');
   }
 
   if (invalid.length) {
@@ -788,7 +791,7 @@ function needsShortWeekDates(nameWidths, numberWidths, spaceWidth, available) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    MEAL_TYPES, UNITS,
+    MEAL_TYPES, UNITS, INGREDIENT_UNITS, ARTICLE_UNITS,
     toISODate, fromISODate, addDays, weekStart, isSameDay, formatDate, longDate,
     visibleRange, movePeriod, periodTitle, monthGrid, weekDays, initialFormDate,
     initialPanelYear, panelArrows, monthPanel, chooseMonth,
