@@ -720,9 +720,10 @@ textarea.ingredient-name {
   .navigation .period-button { font-size: var(--text-large); }
   /* Pc: la fila de ingrediente en una línea. El nombre ocupa también una segunda fila
      de la rejilla, que solo crece si el nombre ocupa varias líneas: así cantidad, unidad
-     y ✕ miden lo mismo que el nombre de una línea y se quedan arriba si crece */
+     y ✕ miden lo mismo que el nombre de una línea y se quedan arriba si crece.
+     La unidad, a 5.75rem: lo justo para "vasito" y "cdta." enteras (000-base D-18) */
   .ingredient {
-    grid-template-columns: 1fr 4.5rem 4.5rem auto;
+    grid-template-columns: 1fr 4.5rem 5.75rem auto;
     grid-template-rows: auto 1fr;
     gap: 0 var(--ingredient-gap);
     margin-bottom: var(--ingredient-gap);
