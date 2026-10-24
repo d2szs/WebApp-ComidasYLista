@@ -41,6 +41,7 @@ let channel = null;
 let sessionActive = false;
 let reloadTimer = null;
 let listReloadTimer = null; // 007: agrupa recargas seguidas de la lista
+let reviewReloadTimer = null; // 009: agrupa recargas de la revisión por cambios de comidas (D-8)
 let ready = false;          // connect() ya eligió la pantalla de arranque (D-2)
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
 let onNewPassword = false;  // en la pantalla de nueva contraseña
@@ -568,6 +569,7 @@ async function loadList() {
   listState.items = result.data;
   listState.loaded = true;
   renderShopping();
+  if (reviewState.open) recalcLines(); // 009 RF-25 (D-8); mientras se añade no cambia nada (D-11)
   return null;
 }
 
@@ -907,6 +909,10 @@ async function loadReviewMeals({ showLoading }) {
     error = caught;
   }
   if (!reviewState.open || !sessionActive || !isCurrentLoad(load, reviewState)) return; // RF-32
+  if (reviewState.saving) { // RF-17: llegó durante el guardado; se repite al terminar
+    reviewState.reloadPending = true;
+    return;
+  }
   reviewState.loading = false;
   if (error) { // RF-21; RF-22: sustituye al de añadir
     reviewState.loadError = ingredientsErrorMessage('load', error, navigator.onLine);
@@ -1067,7 +1073,12 @@ async function submitReview(event) {
   }
   reviewState.saveError = saveError;
   reviewState.saving = false; // RF-17: todo activo, mismas marcas y opciones
-  recalcLines(); // cambios de la lista llegados durante el guardado (RF-17, RF-23)
+  if (reviewState.reloadPending) { // RF-17: los cambios de comidas que esperaban, con RF-23
+    reviewState.reloadPending = false;
+    loadReviewMeals({ showLoading: false });
+  } else {
+    recalcLines(); // cambios de la lista llegados durante el guardado (RF-17, RF-23)
+  }
 }
 
 // Cierra sin cambiar la lista; deja atrasada cualquier carga en marcha (RF-4, RF-22, CL-5)
@@ -1168,12 +1179,30 @@ function scheduleListReload() {
   listReloadTimer = setTimeout(loadList, 300);
 }
 
+// Recarga las comidas de la revisión abierta sin "Cargando…"; mientras se añade, espera
+// (009 RF-17, RF-24, RF-31, D-8)
+function scheduleReviewReload() {
+  if (!reviewState.open) return;
+  clearTimeout(reviewReloadTimer);
+  reviewReloadTimer = setTimeout(() => {
+    if (!reviewState.open) return;
+    if (reviewState.saving) reviewState.reloadPending = true;
+    else loadReviewMeals({ showLoading: false });
+  }, 300);
+}
+
+// Un cambio de comidas recarga el calendario y, si está abierta, la revisión (009 RF-24)
+function onMealsChange() {
+  scheduleReload();
+  scheduleReviewReload();
+}
+
 // ===== Sincronización en tiempo real =====
 function subscribeChanges() {
   unsubscribeChanges();
   subscribeForms();
   channel = client.channel('meal-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, scheduleReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, onMealsChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, scheduleListReload) // 007 RF-33 (D-4)
     .subscribe((channelStatus) => {
       const action = syncStatusAction(channelStatus, state.noticeKind);
@@ -1181,6 +1210,7 @@ function subscribeChanges() {
         hideError('sync');
         scheduleReload();
         scheduleListReload(); // 007 RF-35
+        scheduleReviewReload(); // 009 RF-24, RF-25
       } else if (action === 'show') {
         showError('Se ha perdido la sincronización en tiempo real. Reintentando…', 'sync');
       }
