@@ -858,13 +858,73 @@ function openReview() {
     $(PERIOD_FIELDS[side].date).value = reviewState[side].date;
     $(PERIOD_FIELDS[side].type).value = reviewState[side].type;
   }
-  renderReview();
   $('ingredients-dialog').showModal();
+  loadReviewMeals({ showLoading: true });
 }
 
-// Pinta la revisión según reviewView (RF-12)
+// Lee los cuatro campos y recarga el periodo (RF-3, RF-22)
+function onPeriodFieldChange() {
+  for (const side of ['from', 'to']) {
+    reviewState[side] = { date: $(PERIOD_FIELDS[side].date).value, type: $(PERIOD_FIELDS[side].type).value };
+  }
+  reviewState.saveError = null;
+  loadReviewMeals({ showLoading: true });
+}
+
+const REVIEW_PAGE_SIZE = 1000; // D-3: filas por petición; vale con cualquier "Max rows"
+
+// Comidas del periodo, por páginas; solo vale la última carga pedida (RF-3, RF-19, RF-30 a RF-32, D-3)
+async function loadReviewMeals({ showLoading }) {
+  const load = { id: ++reviewState.requestId }; // RF-32: deja atrasada cualquier carga en marcha
+  const { from, to } = reviewState;
+  if (periodError(from, to)) { // RF-19, RF-30: sin pedir nada
+    reviewState.loading = false;
+    renderReview();
+    return;
+  }
+  if (showLoading) { // RF-31
+    reviewState.loading = true;
+    reviewState.loadError = null;
+    renderReview();
+  }
+
+  const rows = [];
+  let error = null;
+  try {
+    for (;;) {
+      const result = await client.from('comidas').select('fecha, tipo, platos', { count: 'exact' })
+        .gte('fecha', from.date).lte('fecha', to.date).order('fecha').order('id')
+        .range(rows.length, rows.length + REVIEW_PAGE_SIZE - 1);
+      if (result.error) { error = result.error; break; }
+      rows.push(...result.data);
+      // D-3: para también con una página vacía (un borrado entre páginas no deja el bucle sin fin)
+      if (result.data.length === 0 || rows.length >= (result.count ?? 0)) break;
+      if (!isCurrentLoad(load, reviewState)) return;
+    }
+  } catch (caught) {
+    error = caught;
+  }
+  if (!reviewState.open || !sessionActive || !isCurrentLoad(load, reviewState)) return; // RF-32
+  if (error) return; // el mensaje de error con "Reintentar" llega en T8 (RF-21)
+  reviewState.loading = false;
+  reviewState.meals = rows;
+  recalcLines();
+}
+
+// Recalcula las líneas con las comidas y los artículos que se ven en Compra (RF-20, RF-23, RF-34, D-11)
+function recalcLines() {
+  const { from, to, meals } = reviewState;
+  const newLines = periodLines(meals, from, to, listState.items);
+  Object.assign(reviewState, recalcReview(reviewState, newLines));
+  renderReview();
+}
+
+// Pinta la revisión según reviewView: "Cargando…", el mensaje y "Añadir (n)" (RF-12, RF-19, RF-20, RF-30, RF-31)
 function renderReview() {
   const view = reviewView(reviewState);
+  $('ingredients-loading').hidden = view.mode !== 'loading';
+  $('ingredients-message').textContent = view.message || '';
+  $('ingredients-message').hidden = !view.message;
   $('ingredients-add').textContent = addButtonText(view.count);
   $('ingredients-add').disabled = view.addDisabled;
 }
@@ -1866,6 +1926,10 @@ function bindEvents() {
   $('ingredients-button').addEventListener('click', openReview);
   $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
   $('ingredients-form').addEventListener('submit', (event) => event.preventDefault());
+  for (const side of ['from', 'to']) {
+    $(PERIOD_FIELDS[side].date).addEventListener('change', onPeriodFieldChange); // RF-3
+    $(PERIOD_FIELDS[side].type).addEventListener('change', onPeriodFieldChange);
+  }
   $('ingredients-dialog').addEventListener('keydown', onReviewKeydown);
   $('ingredients-dialog').addEventListener('cancel', onReviewCancel);
   $('ingredients-dialog').addEventListener('close', () => {
