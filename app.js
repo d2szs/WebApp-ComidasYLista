@@ -905,8 +905,14 @@ async function loadReviewMeals({ showLoading }) {
     error = caught;
   }
   if (!reviewState.open || !sessionActive || !isCurrentLoad(load, reviewState)) return; // RF-32
-  if (error) return; // el mensaje de error con "Reintentar" llega en T8 (RF-21)
   reviewState.loading = false;
+  if (error) { // RF-21; RF-22: sustituye al de añadir
+    reviewState.loadError = ingredientsErrorMessage('load', error, navigator.onLine);
+    reviewState.saveError = null;
+    renderReview();
+    return;
+  }
+  reviewState.loadError = null; // RF-21: una carga correcta quita el error
   reviewState.meals = rows;
   recalcLines();
 }
@@ -920,12 +926,13 @@ function recalcLines() {
 }
 
 // Pinta la revisión según reviewView: líneas, "Cargando…", el mensaje y "Añadir (n)"
-// (RF-8 a RF-12, RF-19, RF-20, RF-27, RF-30, RF-31, RNF-5)
+// (RF-8 a RF-12, RF-19 a RF-21, RF-27, RF-30, RF-31, RNF-5)
 function renderReview() {
   const view = reviewView(reviewState);
   $('ingredients-loading').hidden = view.mode !== 'loading';
   $('ingredients-message').textContent = view.message || '';
   $('ingredients-message').hidden = !view.message;
+  $('ingredients-retry').hidden = view.mode !== 'error'; // RF-21
   renderReviewLines(view);
   $('ingredients-add').textContent = addButtonText(view.count);
   $('ingredients-add').disabled = view.addDisabled;
@@ -2010,6 +2017,7 @@ function bindEvents() {
   $('article-form').addEventListener('submit', saveArticle);
   $('ingredients-button').addEventListener('click', openReview);
   $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
+  $('ingredients-retry').addEventListener('click', () => loadReviewMeals({ showLoading: true })); // RF-21
   $('ingredients-lines').addEventListener('change', onReviewLineChange); // RF-9
   $('ingredients-form').addEventListener('submit', (event) => event.preventDefault());
   for (const side of ['from', 'to']) {
