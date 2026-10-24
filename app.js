@@ -544,9 +544,10 @@ async function loadData() {
 
 // ===== Lista de la compra (007) =====
 
-// Carga todos los artículos; solo vale la respuesta de la última petición (RF-11, RF-36, CL-10)
+// Carga todos los artículos; solo vale la respuesta de la última petición (RF-11, RF-36, CL-10).
+// Devuelve el error de la carga, o null si ha ido bien o la ha dejado atrasada otra (009 D-2)
 async function loadList() {
-  if (!sessionActive) return;
+  if (!sessionActive) return null;
   const requestId = ++listState.requestId;
   if (!listState.loaded) renderShopping(); // RF-11: "Cargando…" solo hasta la primera carga
 
@@ -556,17 +557,18 @@ async function loadList() {
   } catch (error) {
     result = { error };
   }
-  if (requestId !== listState.requestId || !sessionActive) return;
+  if (requestId !== listState.requestId || !sessionActive) return null;
 
   if (result.error) {
     showError(articleErrorMessage('load', result.error, navigator.onLine), 'listLoad'); // D-8
-    return;
+    return result.error;
   }
   hideError('listLoad');
   hideError('offline'); // RF-38 (D-8)
   listState.items = result.data;
   listState.loaded = true;
   renderShopping();
+  return null;
 }
 
 // Pinta la pantalla Compra con lo que hay en listState (RF-6 a RF-12); todo con textContent (RNF-6)
@@ -936,6 +938,11 @@ function renderReview() {
   renderReviewLines(view);
   $('ingredients-add').textContent = addButtonText(view.count);
   $('ingredients-add').disabled = view.addDisabled;
+  for (const side of ['from', 'to']) { // RF-17: mientras se añade
+    $(PERIOD_FIELDS[side].date).disabled = view.controlsDisabled;
+    $(PERIOD_FIELDS[side].type).disabled = view.controlsDisabled;
+  }
+  $('ingredients-cancel').disabled = view.controlsDisabled;
 }
 
 // Vuelve a pintar las líneas conservando el desplazamiento y el foco de la casilla u opción
@@ -1019,6 +1026,48 @@ function onReviewLineChange(event) {
   if (input.type === 'checkbox') reviewState.choices.set(input.dataset.key, input.checked ? 'on' : 'off');
   else if (input.checked) reviewState.choices.set(input.dataset.key, input.value);
   renderReview();
+}
+
+// "Añadir (n)": aplica lo elegido al pulsar entero o nada; si la otra persona ha cambiado la
+// lista, la recarga y vuelve a decidir, hasta ADD_RETRIES veces (RF-13 a RF-17, RF-22, RF-26, D-2, RNF-3)
+async function submitReview(event) {
+  event.preventDefault();
+  if (reviewState.saving || reviewView(reviewState).addDisabled) return; // RF-17: un solo envío
+  reviewState.saveError = null; // RF-22: el mensaje se quita al pulsar
+  reviewState.saving = true;
+  renderReview();
+  const { lines, choices } = reviewState; // lo elegido al pulsar
+  let saveError = ingredientsErrorMessage('add', {}, true); // D-2: tras ADD_RETRIES 'cambiado'
+  for (let attempt = 1; attempt <= ADD_RETRIES; attempt++) {
+    const changes = addChanges(lines, choices, listState.items);
+    let result;
+    try {
+      result = await client.rpc('anadir_ingredientes', { p_cambios: changes });
+    } catch (error) {
+      result = { error };
+    }
+    if (!sessionActive) return;
+    const outcome = result.data?.resultado;
+    if (result.error || (outcome !== 'hecho' && outcome !== 'cambiado')) { // RF-22: sigue abierta
+      saveError = ingredientsErrorMessage('add', result.error || {}, navigator.onLine);
+      break;
+    }
+    if (outcome === 'hecho') { // RF-13
+      reviewState.saving = false;
+      closeReview();
+      loadList();
+      return;
+    }
+    const listError = await loadList(); // 'cambiado': la otra persona ha cambiado la lista
+    if (!sessionActive) return;
+    if (listError) { // D-2: la causa real, sin más intentos
+      saveError = ingredientsErrorMessage('add', listError, navigator.onLine);
+      break;
+    }
+  }
+  reviewState.saveError = saveError;
+  reviewState.saving = false; // RF-17: todo activo, mismas marcas y opciones
+  recalcLines(); // cambios de la lista llegados durante el guardado (RF-17, RF-23)
 }
 
 // Cierra sin cambiar la lista; deja atrasada cualquier carga en marcha (RF-4, RF-22, CL-5)
@@ -2019,12 +2068,13 @@ function bindEvents() {
   $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
   $('ingredients-retry').addEventListener('click', () => loadReviewMeals({ showLoading: true })); // RF-21
   $('ingredients-lines').addEventListener('change', onReviewLineChange); // RF-9
-  $('ingredients-form').addEventListener('submit', (event) => event.preventDefault());
+  $('ingredients-form').addEventListener('submit', submitReview); // RF-13
   for (const side of ['from', 'to']) {
     $(PERIOD_FIELDS[side].date).addEventListener('change', onPeriodFieldChange); // RF-3
     $(PERIOD_FIELDS[side].type).addEventListener('change', onPeriodFieldChange);
   }
-  $('ingredients-dialog').addEventListener('keydown', onReviewKeydown);
+  // En el documento: mientras se añade, el foco queda fuera del diálogo (sus controles, desactivados)
+  document.addEventListener('keydown', onReviewKeydown);
   $('ingredients-dialog').addEventListener('cancel', onReviewCancel);
   $('ingredients-dialog').addEventListener('close', () => {
     // D-13: respaldo; un close atrasado de un cierre anterior no cierra la revisión reabierta
