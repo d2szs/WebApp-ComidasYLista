@@ -889,6 +889,59 @@ function combineAmounts(amounts) {
   };
 }
 
+// ===== 009-ingredientes-automaticos: líneas de la revisión y opciones =====
+
+// Línea de la revisión por cada grupo de ingredientes de compra con nombre equivalente:
+// { key, nombre, cantidad, unidad, detail, status, article, tooLong }. Nombre del artículo
+// equivalente o del primer ingrediente (momento, plato, ingrediente); nuevas y en Guardados
+// en orden alfabético y después las ya en la lista (RF-5, RF-6, RF-7, RF-29, CL-3, CL-4)
+function periodLines(meals, from, to, items) {
+  const groups = new Map();
+  for (const meal of mealsInPeriod(meals, from, to)) {
+    for (const dish of meal.platos ?? []) {
+      for (const ingredient of dish.ingredientes ?? []) {
+        if (!isPurchaseIngredient(ingredient)) continue;
+        const key = articleKey(ingredient.nombre);
+        if (!groups.has(key)) groups.set(key, { name: cleanIngredientName(ingredient.nombre), amounts: [] });
+        groups.get(key).amounts.push(ingredient);
+      }
+    }
+  }
+  const lines = [...groups].map(([key, group]) => {
+    const article = findEquivalent(items, group.name);
+    const nombre = article ? article.nombre : group.name;
+    const status = !article ? 'new' : article.lista === 'guardados' ? 'saved' : 'listed';
+    return { key, nombre, ...combineAmounts(group.amounts), status, article, tooLong: nombre.length > MAX_ARTICLE_NAME };
+  });
+  const listed = (line) => line.status === 'listed';
+  return [
+    ...lines.filter((line) => !listed(line)).sort(compareArticles),
+    ...lines.filter(listed).sort(compareArticles),
+  ];
+}
+
+// Textos de una línea ya en la lista: "Ya en la lista: 2 und.", "Dejar 2 und.", "Sumar: 8 und."
+// (null si no se puede sumar) y "Cambiar a 6 und." (null si la línea no tiene cantidad);
+// null si la línea no está en la lista (RF-10, RF-11, RF-28)
+function lineOptions(line) {
+  if (line.status !== 'listed') return null;
+  const article = line.article;
+  const hasArticleAmount = article.cantidad !== null && article.cantidad !== undefined && UNIT_KINDS[article.unidad];
+  const hasLineAmount = line.cantidad !== null;
+  const current = hasArticleAmount ? formatQuantity(article.cantidad, article.unidad) : '';
+  let sum = null;
+  if (hasArticleAmount && hasLineAmount) {
+    const total = combineAmounts([article, line]);
+    if (!total.detail) sum = `Sumar: ${formatQuantity(total.cantidad, total.unidad)}`;
+  }
+  return {
+    listed: current ? `Ya en la lista: ${current}` : 'Ya en la lista',
+    keep: current ? `Dejar ${current}` : 'Dejar',
+    sum,
+    change: hasLineAmount ? `Cambiar a ${formatQuantity(line.cantidad, line.unidad)}` : null,
+  };
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -916,5 +969,6 @@ if (typeof module !== 'undefined') {
     userInitial, isSidebarCollapsed, shortWeekDate, needsShortWeekDates,
     PERIOD_ORDER_MESSAGE, PERIOD_DATES_MESSAGE, UNIT_KINDS, defaultPeriod, compareMoments,
     periodError, isCurrentLoad, mealsInPeriod, isPurchaseIngredient, roundQuantity, combineAmounts,
+    periodLines, lineOptions,
   };
 }
