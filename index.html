@@ -148,6 +148,8 @@
         <button type="submit" id="quick-add-button" class="btn btn-primary quick-add-button" aria-label="Añadir">+</button>
       </form>
       <ul id="quick-suggestions" class="suggestions" aria-label="Sugerencias de Guardados" hidden></ul>
+      <!-- 009 RF-1, RF-33: desactivado hasta la primera carga correcta de la lista -->
+      <button type="button" id="ingredients-button" class="btn ingredients-button" disabled>Añadir ingredientes de comidas</button>
 
       <div id="list-loading" class="list-loading" hidden>Cargando…</div>
 
@@ -248,6 +250,41 @@
         <button type="button" id="article-delete" class="btn btn-danger" hidden>Borrar</button>
         <button type="button" id="article-cancel" class="btn">Cancelar</button>
         <button type="submit" id="article-save" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Revisión de ingredientes de comidas (009 RF-2, D-5): cabecera y botones fijos -->
+  <dialog id="ingredients-dialog" class="dialog ingredients-dialog">
+    <form id="ingredients-form" class="ingredients-form" novalidate>
+      <h2>Ingredientes de comidas</h2>
+      <div class="period-row">
+        <span class="period-label">Desde</span>
+        <input type="date" id="ingredients-from-date" aria-label="Desde, día">
+        <select id="ingredients-from-type" aria-label="Desde, tipo de comida">
+          <option value="desayuno">Desayuno</option>
+          <option value="comida">Comida</option>
+          <option value="cena">Cena</option>
+        </select>
+      </div>
+      <div class="period-row">
+        <span class="period-label">Hasta</span>
+        <input type="date" id="ingredients-to-date" aria-label="Hasta, día">
+        <select id="ingredients-to-type" aria-label="Hasta, tipo de comida">
+          <option value="desayuno">Desayuno</option>
+          <option value="comida">Comida</option>
+          <option value="cena">Cena</option>
+        </select>
+      </div>
+
+      <ul id="ingredients-lines" class="ingredients-lines"></ul>
+      <div id="ingredients-loading" class="list-loading" hidden>Cargando…</div>
+      <p id="ingredients-message" class="ingredients-message" role="status" hidden></p>
+      <button type="button" id="ingredients-retry" class="btn" hidden>Reintentar</button>
+
+      <div class="dialog-buttons">
+        <button type="button" id="ingredients-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="ingredients-add" class="btn btn-primary" disabled>Añadir (0)</button>
       </div>
     </form>
   </dialog>

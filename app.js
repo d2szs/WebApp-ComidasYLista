@@ -53,6 +53,15 @@ function initialListState(requestId = 0) {
   return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, finishing: false };
 }
 let listState = initialListState();
+// Revisión de ingredientes de comidas (009, plan § Algoritmo); requestId nunca vuelve a
+// empezar mientras la app está abierta (D-12)
+function initialReviewState(requestId = 0) {
+  return {
+    open: false, from: null, to: null, meals: [], lines: [], choices: new Map(), loading: false,
+    loadError: null, noIngredients: false, saveError: null, saving: false, reloadPending: false, requestId,
+  };
+}
+let reviewState = initialReviewState();
 // Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
 const articleForm = { id: null, item: null, saving: false, opened: 0 };
 
@@ -334,6 +343,7 @@ function closeDialogs() {
   const confirmDialog = $('confirm-dialog');
   if (confirmDialog.open) confirmDialog.close();
   closeArticleForm(); // 007 CL-8
+  if (reviewState.open) closeReview(); // 009 CL-5
   const mealDialog = $('meal-dialog');
   if (!mealDialog.open) return;
   formState.open = false;
@@ -565,6 +575,7 @@ function renderShopping() {
   $('list-loading').hidden = !loading; // RF-11, D-13
   $('list-content').hidden = loading;
   renderSuggestions(); // cada recarga recalcula las sugerencias de lo escrito (RF-22, CL-16, CL-18)
+  $('ingredients-button').disabled = loading; // 009 RF-33: hasta la primera carga correcta
   if (loading) return;
 
   const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(listState.items);
@@ -830,6 +841,50 @@ function openArticleForm(item = null) {
 
 function closeArticleForm() {
   if ($('article-dialog').open) $('article-dialog').close();
+}
+
+// ===== Revisión de ingredientes de comidas (009) =====
+const PERIOD_FIELDS = {
+  from: { date: 'ingredients-from-date', type: 'ingredients-from-type' },
+  to: { date: 'ingredients-to-date', type: 'ingredients-to-type' },
+};
+
+// Abre la revisión con el periodo por defecto de hoy; modal, la barra queda inerte (RF-2, CL-7)
+function openReview() {
+  if (!listState.loaded) return; // RF-33
+  const { from, to } = defaultPeriod(getToday());
+  reviewState = { ...initialReviewState(reviewState.requestId), open: true, from, to }; // D-12
+  for (const side of ['from', 'to']) {
+    $(PERIOD_FIELDS[side].date).value = reviewState[side].date;
+    $(PERIOD_FIELDS[side].type).value = reviewState[side].type;
+  }
+  renderReview();
+  $('ingredients-dialog').showModal();
+}
+
+// Pinta la revisión según reviewView (RF-12)
+function renderReview() {
+  const view = reviewView(reviewState);
+  $('ingredients-add').textContent = addButtonText(view.count);
+  $('ingredients-add').disabled = view.addDisabled;
+}
+
+// Cierra sin cambiar la lista; deja atrasada cualquier carga en marcha (RF-4, RF-22, CL-5)
+function closeReview() {
+  reviewState.open = false;
+  reviewState.saveError = null;
+  reviewState.requestId++;
+  if ($('ingredients-dialog').open) $('ingredients-dialog').close();
+}
+
+// Esc (D-13): mientras se añade no cierra; si no, siempre por closeReview
+function onReviewKeydown(event) {
+  if (event.key === 'Escape' && reviewState.saving) event.preventDefault();
+}
+
+function onReviewCancel(event) {
+  event.preventDefault();
+  if (!reviewState.saving) closeReview();
 }
 
 // Valores en bruto del formulario, para validateArticleForm (CL-7: badInput)
@@ -1798,13 +1853,25 @@ function bindEvents() {
     if ($('month-panel').open) placeMonthPanel();
   });
   $('add-button').addEventListener('click', () => openForm());
-  document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => showAppScreen(b.dataset.screen)));
+  document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => {
+    if (reviewState.open) return; // 009 CL-7: además de la barra inerte por el modal
+    showAppScreen(b.dataset.screen);
+  }));
   $('saved-toggle').addEventListener('click', toggleSaved);
   $('add-article-button').addEventListener('click', () => openArticleForm());
   $('finish-button').addEventListener('click', finishShopping);
   $('article-cancel').addEventListener('click', closeArticleForm);
   $('article-delete').addEventListener('click', deleteFromArticleForm);
   $('article-form').addEventListener('submit', saveArticle);
+  $('ingredients-button').addEventListener('click', openReview);
+  $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
+  $('ingredients-form').addEventListener('submit', (event) => event.preventDefault());
+  $('ingredients-dialog').addEventListener('keydown', onReviewKeydown);
+  $('ingredients-dialog').addEventListener('cancel', onReviewCancel);
+  $('ingredients-dialog').addEventListener('close', () => {
+    // D-13: respaldo; un close atrasado de un cierre anterior no cierra la revisión reabierta
+    if (reviewState.open && !$('ingredients-dialog').open) closeReview();
+  });
   $('quick-add').addEventListener('submit', submitQuickAdd);
   $('quick-add-input').addEventListener('input', renderSuggestions); // RF-21, RF-22
   $('error-notice-close').addEventListener('click', () => hideError());

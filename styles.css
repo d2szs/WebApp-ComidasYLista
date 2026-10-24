@@ -405,6 +405,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 .suggestions li + li .suggestion { border-top: 1px solid var(--color-border); }
 .list-loading { margin-top: var(--space); color: var(--color-text-muted); }
+.ingredients-button { width: 100%; margin-top: 0.5rem; } /* 009 RF-1 */
 .list-section { margin-top: calc(var(--space) * 1.25); }
 .list-title { margin: 0 0 0.4rem; font-size: var(--text-large); }
 .list-empty { margin: 0.4rem 0; color: var(--color-text-muted); }
@@ -592,6 +593,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .dialog-small { width: min(380px, calc(100% - 1rem)); }
 .article-amount { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; } /* 007 RF-14 */
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--space); }
+/* Revisión de ingredientes (009 D-5): en columna, las líneas se desplazan por dentro */
+.ingredients-dialog { max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); }
+.ingredients-dialog[open] { display: flex; flex-direction: column; }
+.ingredients-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+/* "Desde"/"Hasta" encima del día y el tipo: en una sola fila no caben a 360 px */
+.period-row { display: grid; grid-template-columns: minmax(0, 12rem) auto; justify-content: start; gap: 0.25rem 0.5rem; margin-bottom: 0.5rem; }
+.period-label { grid-column: 1 / -1; font-size: var(--text-small); color: var(--color-text-muted); }
+.period-row input { padding-left: 0.5rem; padding-right: 0.4rem; }
+.period-row select { width: auto; }
+.ingredients-lines { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0.5rem 0 0; padding: 0; list-style: none; }
+.ingredients-message { margin: var(--space) 0 0; }
+#ingredients-retry { align-self: flex-start; margin-top: 0.5rem; }
 
 .dish { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
 .dish-title { padding: 0 0.3rem; font-weight: 600; }
