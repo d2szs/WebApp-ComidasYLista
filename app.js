@@ -919,14 +919,99 @@ function recalcLines() {
   renderReview();
 }
 
-// Pinta la revisión según reviewView: "Cargando…", el mensaje y "Añadir (n)" (RF-12, RF-19, RF-20, RF-30, RF-31)
+// Pinta la revisión según reviewView: líneas, "Cargando…", el mensaje y "Añadir (n)"
+// (RF-8 a RF-12, RF-19, RF-20, RF-27, RF-30, RF-31, RNF-5)
 function renderReview() {
   const view = reviewView(reviewState);
   $('ingredients-loading').hidden = view.mode !== 'loading';
   $('ingredients-message').textContent = view.message || '';
   $('ingredients-message').hidden = !view.message;
+  renderReviewLines(view);
   $('ingredients-add').textContent = addButtonText(view.count);
   $('ingredients-add').disabled = view.addDisabled;
+}
+
+// Vuelve a pintar las líneas conservando el desplazamiento y el foco de la casilla u opción
+function renderReviewLines(view) {
+  const list = $('ingredients-lines');
+  const active = list.contains(document.activeElement) ? document.activeElement : null;
+  const focus = active && { key: active.dataset.key, value: active.value };
+  const scroll = list.scrollTop;
+  list.replaceChildren(...view.lines.map((line, index) => reviewLineElement(line, index, view.controlsDisabled)));
+  list.hidden = view.lines.length === 0;
+  list.scrollTop = scroll;
+  if (!focus) return;
+  const again = [...list.querySelectorAll('input')]
+    .find((input) => input.dataset.key === focus.key && input.value === focus.value);
+  if (again) again.focus({ preventScroll: true });
+}
+
+// Una línea: casilla (nueva o en Guardados), nombre, cantidad, detalle o estado y, si ya está
+// en la lista, sus opciones; todo el texto con textContent (RF-8, RF-10, RF-11, RF-28, CL-4, RNF-5)
+function reviewLineElement(line, index, disabled) {
+  const choice = reviewState.choices.get(line.key);
+  const row = document.createElement('li');
+  row.className = 'review-line';
+  if (!line.tooLong && line.status !== 'listed') {
+    const label = document.createElement('label');
+    label.className = 'review-check';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.value = 'on';
+    box.dataset.key = line.key;
+    box.checked = choice === 'on';
+    box.disabled = disabled;
+    box.setAttribute('aria-label', line.nombre);
+    label.append(box);
+    row.append(label);
+  }
+  row.append(reviewText('review-name', line.nombre));
+  row.append(reviewText('review-quantity', formatQuantity(line.cantidad, line.unidad)));
+  if (line.detail) row.append(reviewText('review-meta', line.detail));
+  if (line.tooLong) {
+    row.append(reviewText('review-meta', LINE_TOO_LONG_MESSAGE));
+    return row;
+  }
+  if (line.status === 'saved') row.append(reviewText('review-meta', SAVED_LINE_TEXT));
+  const options = lineOptions(line);
+  if (!options) return row;
+  row.append(reviewText('review-meta', options.listed));
+  const group = document.createElement('div');
+  group.className = 'review-options';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', line.nombre);
+  for (const value of ['keep', 'sum', 'change']) {
+    if (!options[value]) continue; // RF-11, RF-28
+    const label = document.createElement('label');
+    label.className = 'review-option';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = `choice-${index}`;
+    radio.value = value;
+    radio.dataset.key = line.key;
+    radio.checked = choice === value;
+    radio.disabled = disabled;
+    label.append(radio, reviewText('', options[value]));
+    group.append(label);
+  }
+  row.append(group);
+  return row;
+}
+
+function reviewText(className, text) {
+  const span = document.createElement('span');
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
+}
+
+// Casilla u opción tocada: cambia lo elegido y vuelve a pintar (RF-9, RF-12)
+function onReviewLineChange(event) {
+  const input = event.target;
+  if (!input.dataset.key) return;
+  if (input.type === 'checkbox') reviewState.choices.set(input.dataset.key, input.checked ? 'on' : 'off');
+  else if (input.checked) reviewState.choices.set(input.dataset.key, input.value);
+  renderReview();
 }
 
 // Cierra sin cambiar la lista; deja atrasada cualquier carga en marcha (RF-4, RF-22, CL-5)
@@ -1925,6 +2010,7 @@ function bindEvents() {
   $('article-form').addEventListener('submit', saveArticle);
   $('ingredients-button').addEventListener('click', openReview);
   $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
+  $('ingredients-lines').addEventListener('change', onReviewLineChange); // RF-9
   $('ingredients-form').addEventListener('submit', (event) => event.preventDefault());
   for (const side of ['from', 'to']) {
     $(PERIOD_FIELDS[side].date).addEventListener('change', onPeriodFieldChange); // RF-3
