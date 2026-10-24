@@ -942,6 +942,143 @@ function lineOptions(line) {
   };
 }
 
+// ===== 009-ingredientes-automaticos: elecciones, lo que se ve y cambios a enviar =====
+
+const NO_INGREDIENTS_MESSAGE = 'No hay ingredientes que comprar en las comidas de este periodo.';
+const LINE_TOO_LONG_MESSAGE = 'Nombre demasiado largo para la lista (más de 200 caracteres).';
+const SAVED_LINE_TEXT = 'En Guardados';
+const ADD_RETRIES = 3; // intentos de "Añadir (n)" si la otra persona cambia la lista (D-2)
+
+// Elección de una línea al abrir: marcada si es nueva o en Guardados (salvo nombre demasiado
+// largo) y "Dejar" si ya está en la lista (RF-8, RF-10, CL-4)
+function openingChoice(line) {
+  if (line.status === 'listed') return 'keep';
+  return line.tooLong ? 'off' : 'on';
+}
+
+// Elecciones de las líneas nuevas a partir de las anteriores, por key (RF-23, D-9, D-11)
+function mergeChoices(previous, previousLines, lines) {
+  const choices = new Map();
+  for (const line of lines) {
+    const before = previousLines.find((l) => l.key === line.key);
+    const choice = before ? previous.get(line.key) : undefined;
+    let next = openingChoice(line);
+    if (before && choice && before.status === line.status) {
+      // Mismo estado: se conserva, salvo Sumar o Cambiar a que ya no se ofrecen (RF-11, RF-28)
+      const options = lineOptions(line);
+      const gone = (choice === 'sum' && !options.sum) || (choice === 'change' && !options.change);
+      next = gone ? 'keep' : choice;
+    } else if (before && choice && before.status === 'listed') {
+      // De "Ya en la lista" a Guardados o nueva: Sumar o Cambiar a → marcada; Dejar → desmarcada
+      next = choice === 'keep' ? 'off' : 'on';
+    }
+    choices.set(line.key, next);
+  }
+  return choices;
+}
+
+// ¿Enseña la revisión líneas? No con periodo no válido, error de carga, "Cargando…" ni
+// periodo sin ingredientes (RF-19, RF-20, RF-21, RF-30, RF-31, D-11)
+function linesInView(review) {
+  return !periodError(review.from, review.to) && !review.loadError && !review.loading && !review.noIngredients;
+}
+
+// Líneas, elecciones y noIngredients tras recalcular: nada cambia mientras se añade ni sin
+// líneas a la vista; un periodo sin ingredientes no pierde lo elegido (RF-17, RF-20, RF-23, D-11)
+function recalcReview(review, newLines) {
+  const { lines, choices, noIngredients } = review;
+  if (review.saving || periodError(review.from, review.to) || review.loadError || review.loading) {
+    return { lines, choices, noIngredients };
+  }
+  if (newLines.length === 0) return { lines, choices, noIngredients: true };
+  return { lines: newLines, choices: mergeChoices(choices, lines, newLines), noIngredients: false };
+}
+
+// "Añadir (n)": marcadas (sin nombre demasiado largo) más las de Sumar o Cambiar a (RF-9, RF-12, CL-4)
+function addCount(lines, choices) {
+  return lines.filter((line) => countsForAdd(line, choices.get(line.key))).length;
+}
+
+function countsForAdd(line, choice) {
+  return (choice === 'on' && !line.tooLong) || choice === 'sum' || choice === 'change';
+}
+
+function addButtonText(count) {
+  return `Añadir (${count})`;
+}
+
+// Lo que se ve: mode 'period', 'error', 'loading', 'empty' o 'lines', su mensaje, las líneas,
+// el número de "Añadir (n)" y qué está desactivado (RF-12, RF-17, RF-19 a RF-22, RF-30, RF-31)
+function reviewView(review) {
+  const saving = Boolean(review.saving);
+  const blocked = (mode, message) => ({
+    mode, message, lines: [], count: 0, addDisabled: true, controlsDisabled: saving,
+  });
+  const period = periodError(review.from, review.to);
+  if (period) return blocked('period', period);
+  if (review.loadError) return blocked('error', review.loadError);
+  if (review.loading) return blocked('loading', null);
+  if (review.noIngredients) return blocked('empty', NO_INGREDIENTS_MESSAGE);
+  const count = addCount(review.lines, review.choices);
+  return {
+    mode: 'lines',
+    message: review.saveError || null,
+    lines: review.lines,
+    count,
+    addDisabled: count === 0 || saving,
+    controlsDisabled: saving,
+  };
+}
+
+// Cambios para anadir_ingredientes, decididos con los artículos actuales (D-2, CL-6):
+// nuevo → anadir; en Guardados → recuperar con la cantidad de la línea o la guardada;
+// en Por comprar → solo Sumar o Cambiar a que se sigan ofreciendo (RF-13 a RF-16, RF-26, CL-4)
+function addChanges(lines, choices, items) {
+  const changes = [];
+  for (const line of lines) {
+    const choice = choices.get(line.key);
+    if (!countsForAdd(line, choice)) continue;
+    const article = findEquivalent(items, line.nombre);
+    if (!article) {
+      changes.push({ accion: 'anadir', nombre: line.nombre, cantidad: line.cantidad, unidad: line.unidad });
+      continue;
+    }
+    const change = (cantidad, unidad) => ({
+      accion: 'cambiar',
+      id: article.id,
+      antes: { lista: article.lista, cantidad: article.cantidad, unidad: article.unidad },
+      cantidad,
+      unidad,
+    });
+    if (article.lista === 'guardados') {
+      const own = line.cantidad !== null;
+      changes.push(change(own ? line.cantidad : article.cantidad, own ? line.unidad : article.unidad));
+      continue;
+    }
+    if (choice === 'on') continue; // ya en Por comprar: como "Dejar"
+    const options = lineOptions({ ...line, status: 'listed', article });
+    if (choice === 'sum' && options.sum) {
+      const total = combineAmounts([article, line]);
+      changes.push(change(total.cantidad, total.unidad));
+    } else if (choice === 'change' && options.change) {
+      changes.push(change(line.cantidad, line.unidad));
+    }
+  }
+  return changes;
+}
+
+// Error de la revisión: action 'load' (comidas del periodo) o 'add' (Añadir), con la causa;
+// un 23505 no habla de comidas (RF-21, RF-22)
+function ingredientsErrorMessage(action, error, online) {
+  const prefix = action === 'load'
+    ? 'No se han podido cargar las comidas del periodo. '
+    : 'No se han podido añadir los ingredientes. ';
+  const cause = error?.code === '23505' && !isNetworkError(error, online)
+    ? 'Ha ocurrido un error inesperado. Inténtalo de nuevo.'
+    : translateError(error, online);
+  return prefix + cause;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -970,5 +1107,8 @@ if (typeof module !== 'undefined') {
     PERIOD_ORDER_MESSAGE, PERIOD_DATES_MESSAGE, UNIT_KINDS, defaultPeriod, compareMoments,
     periodError, isCurrentLoad, mealsInPeriod, isPurchaseIngredient, roundQuantity, combineAmounts,
     periodLines, lineOptions,
+    NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
+    mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
+    ingredientsErrorMessage,
   };
 }
