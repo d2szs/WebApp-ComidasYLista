@@ -800,6 +800,95 @@ function needsShortWeekDates(nameWidths, numberWidths, spaceWidth, available) {
   return Math.max(...nameWidths) + spaceWidth + Math.max(...numberWidths) > available;
 }
 
+// ===== 009-ingredientes-automaticos: momentos, periodo y suma de cantidades =====
+
+const PERIOD_ORDER_MESSAGE = 'El final del periodo no puede ser anterior al principio.';
+const PERIOD_DATES_MESSAGE = 'Elige el día de principio y el de fin del periodo.';
+// Tipo de cada unidad de compra: solo se suman las del mismo tipo (RF-5, RF-11)
+const UNIT_KINDS = { und: 'count', kg: 'weight', gr: 'weight', l: 'volume', ml: 'volume' };
+
+// De la comida del sábado (hoy si es sábado; si no, el próximo) a la cena del viernes (RF-2)
+function defaultPeriod(today) {
+  const saturday = addDays(today, (6 - today.getDay() + 7) % 7);
+  return {
+    from: { date: toISODate(saturday), type: 'comida' },
+    to: { date: toISODate(addDays(saturday, 6)), type: 'cena' },
+  };
+}
+
+// Orden de dos momentos { date, type }: la fecha como números (un año de 5 cifras no se
+// ordena por texto) y, el mismo día, el orden de MEAL_TYPES
+function compareMoments(a, b) {
+  const da = a.date.split('-').map(Number);
+  const db = b.date.split('-').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (da[i] !== db[i]) return da[i] - db[i];
+  }
+  const order = (type) => MEAL_TYPES.findIndex((t) => t.id === type);
+  return order(a.type) - order(b.type);
+}
+
+// Mensaje del periodo o null si es válido: primero las fechas vacías (RF-30), luego el orden (RF-19)
+function periodError(from, to) {
+  if (!from.date || !to.date) return PERIOD_DATES_MESSAGE;
+  return compareMoments(to, from) < 0 ? PERIOD_ORDER_MESSAGE : null;
+}
+
+// ¿Es la última carga pedida? Si no, sus comidas se ignoran (RF-32, D-12)
+function isCurrentLoad(load, review) {
+  return load.id === review.requestId;
+}
+
+// Comidas con su momento entre "Desde" y "Hasta" (los dos incluidos), por orden de momento (RF-3)
+function mealsInPeriod(meals, from, to) {
+  const momentOf = (meal) => ({ date: meal.fecha, type: meal.tipo });
+  return meals
+    .filter((meal) => compareMoments(from, momentOf(meal)) <= 0 && compareMoments(momentOf(meal), to) <= 0)
+    .sort((a, b) => compareMoments(momentOf(a), momentOf(b)));
+}
+
+// Ingrediente de compra: con cantidad y en una unidad de artículo (RF-29)
+function isPurchaseIngredient(ingredient) {
+  return ingredient.cantidad !== null && ingredient.cantidad !== undefined
+    && ARTICLE_UNITS.includes(ingredient.unidad);
+}
+
+// Redondeo a 3 decimales con el exponente en texto, sin restos de coma flotante (D-4)
+function roundQuantity(value) {
+  return Number(Math.round(Number(value + 'e3')) + 'e-3');
+}
+
+// Cantidad en la unidad base del tipo (gr., ml., und.); kg. y l. con el exponente en texto (D-4)
+function baseQuantity(cantidad, unidad) {
+  return unidad === 'kg' || unidad === 'l' ? Number(Number(cantidad) + 'e3') : Number(cantidad);
+}
+
+// Total de un tipo en su unidad: kg. (o l.) si todo venía así o llega a 1000; si no, gr. (o ml.)
+function kindTotal(kind, list) {
+  const total = list.reduce((sum, a) => sum + baseQuantity(a.cantidad, a.unidad), 0);
+  if (kind === 'count') return { cantidad: roundQuantity(total), unidad: 'und' };
+  const [big, small] = kind === 'weight' ? ['kg', 'gr'] : ['l', 'ml'];
+  if (list.every((a) => a.unidad === big) || total >= 1000) {
+    return { cantidad: roundQuantity(Number(total + 'e-3')), unidad: big };
+  }
+  return { cantidad: roundQuantity(total), unidad: small };
+}
+
+// Suma de cantidades de compra: un tipo → { cantidad, unidad }; varios → detail
+// "2 und. + 160 gr." en el orden und., peso, volumen (RF-5, RF-11, RF-15)
+function combineAmounts(amounts) {
+  const totals = ['count', 'weight', 'volume']
+    .map((kind) => [kind, amounts.filter((a) => UNIT_KINDS[a.unidad] === kind)])
+    .filter(([, list]) => list.length > 0)
+    .map(([kind, list]) => kindTotal(kind, list));
+  if (totals.length === 1) return { ...totals[0], detail: null };
+  return {
+    cantidad: null,
+    unidad: null,
+    detail: totals.map((t) => formatQuantity(t.cantidad, t.unidad)).join(' + '),
+  };
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -825,5 +914,7 @@ if (typeof module !== 'undefined') {
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
     ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE, openingScreen,
     userInitial, isSidebarCollapsed, shortWeekDate, needsShortWeekDates,
+    PERIOD_ORDER_MESSAGE, PERIOD_DATES_MESSAGE, UNIT_KINDS, defaultPeriod, compareMoments,
+    periodError, isCurrentLoad, mealsInPeriod, isPurchaseIngredient, roundQuantity, combineAmounts,
   };
 }
