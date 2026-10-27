@@ -1102,6 +1102,15 @@ function isSavedCurrent(savedId, publishedId) {
   return savedId != null && publishedId != null && savedId === publishedId;
 }
 
+// ¿Es una navegación a la página de la app? La carpeta de scope o su index.html, del mismo
+// origen y con cualquier ?… o #… (enlace de recuperación); nada más (RF-9, RF-15, CL-8)
+function isAppPage(url, scope) {
+  const page = new URL(url);
+  const base = new URL(scope);
+  return page.origin === base.origin &&
+    (page.pathname === base.pathname || page.pathname === base.pathname + 'index.html');
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1133,6 +1142,6 @@ if (typeof module !== 'undefined') {
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage,
-    etagVersion, commonVersion, isSavedCurrent,
+    etagVersion, commonVersion, isSavedCurrent, isAppPage,
   };
 }
