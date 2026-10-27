@@ -1079,6 +1079,29 @@ function ingredientsErrorMessage(action, error, online) {
   return prefix + cause;
 }
 
+// ===== Versiones de los archivos (010-instalacion-webapp) =====
+
+// Versión de un archivo: prefijo del ETag de Pages ("<hora del despliegue>-<tamaño>",
+// en hex, con W/ si va comprimido); null sin ETag o con otra forma (D-3, RF-10)
+function etagVersion(etag) {
+  const match = /^(?:W\/)?"([0-9a-f]+)-[0-9a-f]+"$/i.exec(etag || '');
+  return match ? match[1] : null;
+}
+
+// ¿Son todos los archivos de la misma versión? Ninguno con versión (servidor local) también
+// cuenta como entera, sin id; cualquier mezcla, no (RF-10, CL-2)
+function commonVersion(etags) {
+  const ids = etags.map(etagVersion);
+  if (ids.every((id) => id === null)) return { whole: true, id: null };
+  const whole = ids.every((id) => id === ids[0]);
+  return whole ? { whole, id: ids[0] } : { whole: false, id: null };
+}
+
+// La versión guardada es la publicada solo si las dos tienen id y coinciden (RF-9)
+function isSavedCurrent(savedId, publishedId) {
+  return savedId != null && publishedId != null && savedId === publishedId;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1110,5 +1133,6 @@ if (typeof module !== 'undefined') {
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage,
+    etagVersion, commonVersion, isSavedCurrent,
   };
 }
