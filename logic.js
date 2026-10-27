@@ -1085,6 +1085,15 @@ function ingredientsErrorMessage(action, error, online) {
 // app.js y sw.js (D-5)
 const CONNECTION_TIMEOUT = 8000;
 
+// ===== Archivos de una versión (010-instalacion-webapp) =====
+
+// Archivos que forman una versión de la app, relativos a su carpeta; './' es la página.
+// Sin sw.js: lo gestiona el navegador (RF-10, RF-11, RNF-1)
+const APP_FILES = [
+  './', './styles.css', './supabase.js', './logic.js', './app.js', './manifest.json',
+  './favicon.png', './icon-192.png', './icon-512.png', './icon-maskable.png',
+];
+
 // ===== Versiones de los archivos (010-instalacion-webapp) =====
 
 // Versión de un archivo: prefijo del ETag de Pages ("<hora del despliegue>-<tamaño>",
@@ -1148,6 +1157,6 @@ if (typeof module !== 'undefined') {
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage,
-    etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT,
+    etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
   };
 }
