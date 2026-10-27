@@ -4,9 +4,6 @@
 const SUPABASE_URL = 'https://beyarsihdhzpxzvsxeep.supabase.co';
 const SUPABASE_PUBLIC_KEY = 'sb_publishable_BLEWWv74RigJ6Jo977E59A_2vs3nYk2';
 
-// ===== Constantes =====
-const CONNECTION_TIMEOUT = 8000;
-
 // ===== Estado =====
 const state = {
   view: 'week',         // 'month' | 'week' | 'day'

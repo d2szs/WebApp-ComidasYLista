@@ -1079,6 +1079,12 @@ function ingredientsErrorMessage(action, error, online) {
   return prefix + cause;
 }
 
+// ===== Plazo de conexión (010-instalacion-webapp) =====
+
+// Espera máxima a Supabase (000-base RF-2) y a la versión publicada (CL-1): la comparten
+// app.js y sw.js (D-5)
+const CONNECTION_TIMEOUT = 8000;
+
 // ===== Versiones de los archivos (010-instalacion-webapp) =====
 
 // Versión de un archivo: prefijo del ETag de Pages ("<hora del despliegue>-<tamaño>",
@@ -1142,6 +1148,6 @@ if (typeof module !== 'undefined') {
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage,
-    etagVersion, commonVersion, isSavedCurrent, isAppPage,
+    etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT,
   };
 }
