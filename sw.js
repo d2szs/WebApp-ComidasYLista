@@ -102,8 +102,17 @@ function toResponse(file) {
   return new Response(file.body, { status: 200, headers: file.headers });
 }
 
+// Guardados de uno en uno: dos cargas a la vez se borrarían mutuamente su copia en curso (RF-11)
+let saving = Promise.resolve();
+
+function saveSet(set, id) {
+  const run = saving.then(() => saveWhole(set, id));
+  saving = run.catch(() => {});
+  return run;
+}
+
 // Guarda la versión entera, la marca la última y sustituye a las anteriores (RF-11)
-async function saveSet(set, id) {
+async function saveWhole(set, id) {
   const name = CACHE_PREFIX + (id ?? 'local-' + Date.now());
   const cache = await caches.open(name);
   for (const file of set) await cache.put(file.url, toResponse(file));
