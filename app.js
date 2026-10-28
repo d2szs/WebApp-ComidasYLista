@@ -2152,3 +2152,10 @@ function bindEvents() {
 
 bindEvents();
 connect();
+
+// Service worker (010 RF-9 a RF-13): al terminar de cargar y sin aviso si falla (D-8, RF-12)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
+  });
+}
