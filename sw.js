@@ -22,7 +22,9 @@ async function installSet() {
     const set = await downloadSet(FILES, 'reload');
     if (!set) continue;
     const check = commonVersion(set.map(file => file.etag));
-    if (check.whole) return saveSet(set, check.id);
+    if (!check.whole) continue;
+    if (await saveSet(set, check.id)) return;
+    break; // guardado fallido (D-11): sin versión entera no se activa
   }
   throw new Error('No se ha podido guardar una versión entera de la app');
 }
@@ -61,7 +63,7 @@ async function openApp() {
   const set = [index, ...rest];
   const check = commonVersion(set.map(file => file.etag));
   if (!check.whole) return saved ? savedPage(saved) : toResponse(index); // CL-2
-  await saveSet(set, check.id);
+  if (!(await saveSet(set, check.id))) return saved ? savedPage(saved) : toResponse(index); // D-11
   return toResponse(index);
 }
 
@@ -111,15 +113,22 @@ function saveSet(set, id) {
   return run;
 }
 
-// Guarda la versión entera, la marca la última y sustituye a las anteriores (RF-11)
+// Guarda la versión entera, la marca la última y sustituye a las anteriores (RF-11).
+// Si falla antes de la marca, borra lo guardado a medias y deja la anterior: false (D-11)
 async function saveWhole(set, id) {
   const name = CACHE_PREFIX + (id ?? 'local-' + Date.now());
-  const cache = await caches.open(name);
-  for (const file of set) await cache.put(file.url, toResponse(file));
-  await cache.put(MARK, new Response(id ?? ''));
+  try {
+    const cache = await caches.open(name);
+    for (const file of set) await cache.put(file.url, toResponse(file));
+    await cache.put(MARK, new Response(id ?? ''));
+  } catch {
+    await caches.delete(name).catch(() => {});
+    return false;
+  }
   for (const other of await appCaches()) {
     if (other !== name) await caches.delete(other);
   }
+  return true;
 }
 
 // La versión guardada completa (con marca): { id, cache } o null
