@@ -453,10 +453,11 @@ function saveErrorMessage(error, type, online) {
 }
 
 // Qué hacer con el aviso según el estado del canal de tiempo real:
-// 'show' (mostrar el aviso), 'recover' (quitarlo y recargar) o 'none'
-function syncStatusAction(channelStatus, noticeKind) {
+// 'show' (mostrar el aviso), 'recover' (quitarlo y recargar) o 'none'; en modo copia, nunca
+// 'show' (011-sin-conexion RF-21)
+function syncStatusAction(channelStatus, noticeKind, copyMode = false) {
   if (channelStatus === 'SUBSCRIBED') return noticeKind === 'sync' ? 'recover' : 'none';
-  if (channelStatus === 'CHANNEL_ERROR' || channelStatus === 'TIMED_OUT') return 'show';
+  if (channelStatus === 'CHANNEL_ERROR' || channelStatus === 'TIMED_OUT') return copyMode ? 'none' : 'show';
   return 'none';
 }
 
@@ -1029,7 +1030,7 @@ function reviewView(review) {
     message: review.saveError || null,
     lines: review.lines,
     count,
-    addDisabled: count === 0 || saving,
+    addDisabled: count === 0 || saving || Boolean(review.offline), // sin red (009 CL-8)
     controlsDisabled: saving,
   };
 }
@@ -1217,6 +1218,23 @@ function opensInCopy({ status, hasSession, hasCopy, link, pending }) {
   return status === null && Boolean(hasSession) && Boolean(hasCopy) && link === 'none' && !pending;
 }
 
+// ===== Reintento en modo copia (011-sin-conexion) =====
+
+// Resultado de un reintento; meals y list son { error, timedOut } de cada carga (online:
+// navigator.onLine). Sin respuesta de alguna, 'noResponse'; sesión cerrada, 'sessionGone';
+// si no, el error de carga de hoy: el de las comidas o, si solo falla la lista, el suyo
+// (RF-12, RF-13, CL-4, CL-7)
+function retryOutcome(meals, list, online) {
+  const noAnswer = (load) => load.timedOut || (Boolean(load.error) && isNetworkError(load.error, online));
+  if (noAnswer(meals) || noAnswer(list)) return { kind: 'noResponse' };
+  if (isSessionGone(meals.error) || isSessionGone(list.error)) return { kind: 'sessionGone' };
+  if (meals.error) {
+    return { kind: 'error', message: 'No se han podido cargar las comidas. ' + translateError(meals.error, online), notice: 'load' };
+  }
+  if (list.error) return { kind: 'error', message: articleErrorMessage('load', list.error, online), notice: 'listLoad' };
+  return { kind: 'ok' };
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1251,5 +1269,6 @@ if (typeof module !== 'undefined') {
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
+    retryOutcome,
   };
 }
