@@ -204,14 +204,20 @@ async function connect() {
   };
   // Solo se pregunta al servidor si hay librería y claves
   if (check.libraryLoaded && check.keysDefined) check.status = await checkServer();
-  const problem = configMessage(check);
+  check.online = navigator.onLine; // 000-base D-19: leído después de preguntar al servidor
+  if (check.libraryLoaded && check.keysDefined) {
+    // 011 RF-4, D-4: la sesión se lee de localStorage, sin esperar a supabase-js
+    const email = readStoredSessionEmail();
+    const opens = opensInCopy({
+      status: check.status, hasSession: email !== null, hasCopy: hasSavedCopy(),
+      link: authLink.kind, pending: readPending(),
+    });
+    if (opens) return openInCopyMode(email);
+  }
+  const problem = configMessage(check); // 011 RF-14
   if (problem) return showConfig(problem);
 
-  if (!client) {
-    client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
-    // setTimeout evita bloquear el cliente; los eventos no deciden la pantalla de arranque (D-2)
-    client.auth.onAuthStateChange((event, session) => setTimeout(() => onAuthEvent(event, session), 0));
-  }
+  createClientOnce();
   // initialize() devuelve el resultado de leer el enlace de la dirección
   const { error } = await client.auth.initialize();
   const { data } = await client.auth.getSession();
@@ -236,6 +242,31 @@ async function connect() {
   } else {
     applySession(null);
   }
+}
+
+function createClientOnce() {
+  if (client) return;
+  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY);
+  // setTimeout evita bloquear el cliente; los eventos no deciden la pantalla de arranque (D-2)
+  client.auth.onAuthStateChange((event, session) => setTimeout(() => onAuthEvent(event, session), 0));
+}
+
+// Email de la sesión que guardó supabase-js, o null (011 D-4); sin localStorage, sin sesión
+function readStoredSessionEmail() {
+  try {
+    return storedSessionEmail(localStorage.getItem(authStorageKey(SUPABASE_URL)));
+  } catch {
+    return null;
+  }
+}
+
+// Abre sin red con la sesión y la copia guardadas (011 RF-4, D-4). El cliente se crea para
+// Realtime, la salida y "Cerrar sesión", sin esperar a initialize(), que sin red no acaba
+function openInCopyMode(email) {
+  createClientOnce();
+  ready = true;
+  enterCopyMode();
+  applySession({ user: { email } }, { pageLoad: true }); // 007 RF-46; sus cargas pintan la copia
 }
 
 // Pregunta al servidor si la sesión sigue existiendo; un error de red no la cierra (D-7, RF-15)
@@ -328,6 +359,12 @@ function applySession(session, { pageLoad = false } = {}) {
     scheduleCopySave(); // 011 RF-1
   } else if (!session) {
     sessionActive = false;
+    if (state.copyMode) {
+      // 011 CL-3: sale del modo copia; la copia guardada se queda en el dispositivo
+      state.copyMode = false;
+      copyState.copy = null;
+      setOffline(false);
+    }
     clearTimeout(copyState.saveTimer);
     copyState.saveId++; // 011: descarta un guardado en curso de la sesión anterior
     onNewPassword = false;
