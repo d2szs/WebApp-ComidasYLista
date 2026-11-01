@@ -1126,6 +1126,51 @@ function isAppPage(url, scope) {
     (page.pathname === base.pathname || page.pathname === base.pathname + 'index.html');
 }
 
+// ===== 011-sin-conexion: copia guardada para ver sin red =====
+
+// Clave de localStorage y versión del formato de la copia (D-1)
+const COPY_KEY = 'offline-copy';
+const COPY_FORMAT = 1;
+
+// Intervalo guardado: del lunes de 4 semanas antes de la de hoy al domingo de 2 semanas
+// después, 7 semanas enteras (RF-1)
+function copyRange(today) {
+  const monday = weekStart(today);
+  return { from: addDays(monday, -28), to: addDays(monday, 20) };
+}
+
+// Copia lista para guardar: fechas en 'aaaa-mm-dd' y savedAt en milisegundos (RF-2)
+function buildCopy({ savedAt, from, to, meals, articles }) {
+  return { format: COPY_FORMAT, savedAt, from: toISODate(from), to: toISODate(to), meals, articles };
+}
+
+// Texto guardado → copia, o null si falta o no se sabe leer: cuenta como sin copia (CL-2)
+function parseCopy(text) {
+  if (!text) return null;
+  let copy;
+  try {
+    copy = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const valid = copy !== null && typeof copy === 'object' && copy.format === COPY_FORMAT &&
+    Number.isFinite(copy.savedAt) && isDate(copy.from) && isDate(copy.to) &&
+    Array.isArray(copy.meals) && Array.isArray(copy.articles);
+  return valid ? copy : null;
+}
+
+// ¿Queda el día ('aaaa-mm-dd') fuera del intervalo de la copia? (RF-15)
+function isOutsideCopy(isoDate, copy) {
+  return isoDate < copy.from || isoDate > copy.to;
+}
+
+// ¿Algún día del periodo visible (fechas from…to) queda fuera de la copia? El intervalo no
+// tiene huecos, así que basta mirar los extremos (RF-15)
+function hasCopyGap(from, to, copy) {
+  return isOutsideCopy(toISODate(from), copy) || isOutsideCopy(toISODate(to), copy);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1158,5 +1203,6 @@ if (typeof module !== 'undefined') {
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
+    COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
   };
 }
