@@ -15,6 +15,7 @@
   --color-today: #e8f3ef;
   --color-no-copy-bg: var(--color-border);      /* 011 RF-15: días fuera de la copia */
   --color-no-copy-text: var(--color-text-muted);
+  --opacity-disabled: 0.6;                      /* controles desactivados (011 RF-10) */
 
   --color-desayuno: #e0a100;
   --color-comida: #2f80c9;
@@ -78,7 +79,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   cursor: pointer;
 }
 .btn:hover { filter: brightness(0.97); }
-.btn:disabled { opacity: 0.6; cursor: default; }
+.btn:disabled { opacity: var(--opacity-disabled); cursor: default; }
 .btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
 .btn-danger { background: var(--color-error); border-color: var(--color-error); color: #fff; }
 .btn-text { border: none; background: none; padding: 0.35rem 0.5rem; color: var(--color-primary); cursor: pointer; }
@@ -95,6 +96,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 10;
 }
+/* Sin red (011 RF-10, D-7): sin sombra, para que se vea apagado sobre el calendario */
+.btn-floating:disabled { box-shadow: none; }
 
 /* ===== Pantallas ===== */
 .screen-centered {
@@ -561,6 +564,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 .week-meal-type { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
 .week-meal.empty .week-meal-name { color: var(--color-text-muted); }
+/* Filas vacías (abren el formulario), ↺ ✕ de Guardados y sugerencias, sin red (011 RF-10, D-7) */
+.week-meal:disabled, .article-action:disabled, .suggestion:disabled { opacity: var(--opacity-disabled); cursor: default; }
 
 /* Vista diaria */
 .block {

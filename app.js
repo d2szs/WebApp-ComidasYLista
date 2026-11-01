@@ -673,6 +673,21 @@ function loadListFromCopy() {
 function setOffline(value) {
   if (state.offline === value) return;
   state.offline = value;
+  applyWriteControls(); // RF-10, CL-6
+  renderShopping();
+  onReviewNetworkChange(); // 009 CL-8, CL-9
+}
+
+// Activa o desactiva lo que guarda, mueve o borra según state.offline (RF-10, D-7); tachar,
+// "Cerrar sesión", "Editar" y los campos de los formularios no cambian (RF-11, RF-19, CL-6)
+function applyWriteControls() {
+  for (const id of ['add-button', 'add-article-button', 'quick-add-input', 'quick-add-button', 'article-delete']) {
+    $(id).disabled = state.offline;
+  }
+  $('article-save').disabled = state.offline || articleForm.saving;
+  $('finish-button').disabled = state.offline || listState.finishing;
+  refreshMatch(); // "Guardar" del formulario de comida
+  if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
 }
 
 async function loadData() {
@@ -687,9 +702,12 @@ async function loadData() {
   if (requestId !== state.requestId || state.copyMode) return;
 
   $('loading-indicator').hidden = true;
-  if (result.error && isNetworkError(result.error, reachable(result)) && hasSavedCopy()) {
-    enterCopyMode(); // 000-base RF-49: sin el mensaje de carga
-    return;
+  if (result.error && isNetworkError(result.error, reachable(result))) {
+    if (hasSavedCopy()) {
+      enterCopyMode(); // 000-base RF-49: sin el mensaje de carga
+      return;
+    }
+    setOffline(true); // 011 RF-10: sin copia, controles desactivados y el mensaje de hoy
   }
   if (result.error) {
     showError('No se han podido cargar las comidas. ' + translateError(result.error, reachable(result)), 'load');
@@ -698,6 +716,7 @@ async function loadData() {
   hideError('load');
   hideError('offline'); // 007 D-8
   state.meals = new Map(result.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
+  setOffline(false); // 011 RF-10: Supabase responde, se activan sin recargar
   render();
 }
 
@@ -718,9 +737,12 @@ async function loadList() {
   // CL-10, CL-8; también si empezó antes del modo copia (D-24)
   if (requestId !== listState.requestId || !sessionActive || state.copyMode) return null;
 
-  if (result.error && isNetworkError(result.error, reachable(result)) && hasSavedCopy()) {
-    enterCopyMode(); // RF-36: sin el mensaje de carga
-    return null;
+  if (result.error && isNetworkError(result.error, reachable(result))) {
+    if (hasSavedCopy()) {
+      enterCopyMode(); // RF-36: sin el mensaje de carga
+      return null;
+    }
+    setOffline(true); // 011 RF-10: sin copia, controles desactivados y el mensaje de hoy
   }
   if (result.error) {
     showError(articleErrorMessage('load', result.error, reachable(result)), 'listLoad'); // D-8
@@ -730,6 +752,7 @@ async function loadList() {
   hideError('offline'); // RF-38 (D-8)
   listState.items = result.data;
   listState.loaded = true;
+  setOffline(false); // 011 RF-10
   renderShopping();
   if (reviewState.open) recalcLines(); // 009 RF-25 (D-8); mientras se añade no cambia nada (D-11)
   return null;
@@ -741,7 +764,8 @@ function renderShopping() {
   $('list-loading').hidden = !loading; // RF-11, D-13
   $('list-content').hidden = loading;
   renderSuggestions(); // cada recarga recalcula las sugerencias de lo escrito (RF-22, CL-16, CL-18)
-  $('ingredients-button').disabled = loading; // 009 RF-33: hasta la primera carga correcta
+  // 009 RF-33: hasta la primera carga correcta; v4.1: sin red, también en modo copia (D-14)
+  $('ingredients-button').disabled = loading || state.offline;
   if (loading) return;
 
   const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(listState.items);
@@ -750,7 +774,7 @@ function renderShopping() {
   $('pending-list').replaceChildren(...pending.map(buildPendingRow));
   $('pending-empty').hidden = pending.length > 0; // RF-10
   $('finish-button').hidden = struckCount === 0; // RF-41
-  $('finish-button').disabled = listState.finishing;
+  $('finish-button').disabled = listState.finishing || state.offline; // 011 RF-10
 
   $('saved-title').textContent = `Guardados (${savedCount})`;
   $('saved-toggle').setAttribute('aria-expanded', String(listState.savedOpen)); // RF-12
@@ -783,10 +807,12 @@ function buildSavedRow(item) {
   const recover = el('button', 'article-action', '↺');
   recover.type = 'button';
   recover.setAttribute('aria-label', `Pasar «${item.nombre}» a Por comprar`);
+  recover.disabled = state.offline; // 011 RF-10
   recover.addEventListener('click', () => recoverArticle(item)); // RF-26
   const remove = el('button', 'article-action', '✕');
   remove.type = 'button';
   remove.setAttribute('aria-label', `Borrar «${item.nombre}»`);
+  remove.disabled = state.offline; // 011 RF-10
   remove.addEventListener('click', () => deleteArticle(item, false)); // RF-31
   row.append(...articleNameParts(item), recover, remove);
   return row;
@@ -797,7 +823,9 @@ function renderSuggestions() {
   const found = suggestions(listState.items, $('quick-add-input').value);
   $('quick-suggestions').replaceChildren(...found.map((item) => {
     const li = el('li');
-    li.append(button('suggestion', item.nombre, () => pickSuggestion(item)));
+    const pick = button('suggestion', item.nombre, () => pickSuggestion(item));
+    pick.disabled = state.offline; // 011 RF-10: recuperar
+    li.append(pick);
     return li;
   }));
   $('quick-suggestions').hidden = found.length === 0;
@@ -806,6 +834,7 @@ function renderSuggestions() {
 // Tocar una sugerencia la recupera (RF-23); el campo solo se vacía si se recuperó y nadie
 // lo cambió mientras esperaba (CL-16, CL-18)
 async function pickSuggestion(item) {
+  if (state.offline) return; // 011 RF-10
   const input = $('quick-add-input');
   const sent = input.value;
   const ok = await recoverArticle(item);
@@ -847,7 +876,7 @@ async function addArticle({ nombre, cantidad, unidad }, fromForm = false) {
 // Intro o [+] en el campo rápido (RF-13, RF-16, CL-16, CL-17)
 async function submitQuickAdd(event) {
   event.preventDefault();
-  if (listState.quickPending) return; // CL-17: otro Intro o [+] mientras espera no hace nada
+  if (state.offline || listState.quickPending) return; // 011 RF-10; CL-17: otro Intro o [+] mientras espera no hace nada
   const input = $('quick-add-input');
   const name = cleanIngredientName(input.value);
   if (!name) return; // RF-16: sin mensaje
@@ -872,6 +901,7 @@ function replaceItem(row) {
 
 // Pasa un artículo de Guardados a Por comprar (RF-23, RF-26); true si quedó recuperado (CL-18)
 async function recoverArticle(item) {
+  if (state.offline) return false; // 011 RF-10
   const { data: rows, error } = await client.from('articulos')
     .update({ lista: 'por_comprar', tachado: false })
     .eq('id', item.id).eq('lista', 'guardados')
@@ -908,7 +938,7 @@ async function setStruck(item, value) {
 // "Terminar compra": pasa a Guardados los tachados de la base de datos, no los de la pantalla,
 // en una sola sentencia (RF-25, RF-42, CL-5, CL-11)
 async function finishShopping() {
-  if (listState.finishing) return;
+  if (state.offline || listState.finishing) return; // 011 RF-10
   const { struckCount } = shoppingLists(listState.items);
   if (!(await askConfirm(finishConfirmText(struckCount), 'Aceptar'))) return; // RF-42
   if (!sessionActive) return;
@@ -920,7 +950,7 @@ async function finishShopping() {
     .select('id');
   if (!sessionActive) return;
   listState.finishing = false;
-  $('finish-button').disabled = false;
+  $('finish-button').disabled = state.offline; // 011 D-7
   if (error) {
     // RF-36, RF-37: la lista se queda como estaba; recargar sin red taparía este aviso con el de carga
     showError(articleErrorMessage('finish', error, navigator.onLine));
@@ -950,6 +980,7 @@ async function missingOrMoved(id, movedMessage) {
 // Borra un artículo tras confirmarlo, con ✕ o con "Borrar" del formulario (RF-31, RF-43).
 // Sin filtrar por lista: si la otra persona lo acaba de recuperar, se borra igual (CL-15)
 async function deleteArticle(item, fromForm) {
+  if (state.offline) return; // 011 RF-10
   if (!(await askConfirm(articleDeleteText(item.nombre), 'Borrar'))) return; // al cancelar, el formulario sigue abierto
   if (!sessionActive) return; // CL-8
   const { data: rows, error } = await client.from('articulos').delete().eq('id', item.id).select('id');
@@ -967,7 +998,7 @@ async function deleteArticle(item, fromForm) {
 
 // "Borrar" del formulario "Editar artículo" (RF-43); no mientras se guarda (RF-32)
 function deleteFromArticleForm() {
-  if (articleForm.saving || !articleForm.item) return;
+  if (state.offline || articleForm.saving || !articleForm.item) return; // 011 RF-10
   deleteArticle(articleForm.item, true);
 }
 
@@ -1017,7 +1048,7 @@ const PERIOD_FIELDS = {
 
 // Abre la revisión con el periodo por defecto de hoy; modal, la barra queda inerte (RF-2, CL-7)
 function openReview() {
-  if (!listState.loaded) return; // RF-33
+  if (!listState.loaded || state.offline) return; // RF-33; v4.1: sin red (D-14)
   const { from, to } = defaultPeriod(getToday());
   reviewState = { ...initialReviewState(reviewState.requestId), open: true, from, to }; // D-12
   for (const side of ['from', 'to']) {
@@ -1098,7 +1129,7 @@ function recalcLines() {
 // Pinta la revisión según reviewView: líneas, "Cargando…", el mensaje y "Añadir (n)"
 // (RF-8 a RF-12, RF-19 a RF-21, RF-27, RF-30, RF-31, RNF-5)
 function renderReview() {
-  const view = reviewView(reviewState);
+  const view = reviewView({ ...reviewState, offline: state.offline }); // v4.1: CL-8 (D-14)
   $('ingredients-loading').hidden = view.mode !== 'loading';
   $('ingredients-message').textContent = view.message || '';
   $('ingredients-message').hidden = !view.message;
@@ -1200,7 +1231,8 @@ function onReviewLineChange(event) {
 // lista, la recarga y vuelve a decidir, hasta ADD_RETRIES veces (RF-13 a RF-17, RF-22, RF-26, D-2, RNF-3)
 async function submitReview(event) {
   event.preventDefault();
-  if (reviewState.saving || reviewView(reviewState).addDisabled) return; // RF-17: un solo envío
+  // RF-17: un solo envío; v4.1: sin red no hace nada (CL-8)
+  if (reviewState.saving || reviewView({ ...reviewState, offline: state.offline }).addDisabled) return;
   reviewState.saveError = null; // RF-22: el mensaje se quita al pulsar
   reviewState.saving = true;
   renderReview();
@@ -1269,7 +1301,7 @@ function readArticleForm() {
 
 async function saveArticle(event) {
   event.preventDefault();
-  if (articleForm.saving) return; // RF-32
+  if (state.offline || articleForm.saving) return; // RF-32; 011 RF-10 (también con Intro)
   clearArticleMarks();
   showArticleFormError('');
   const result = validateArticleForm(readArticleForm()); // RF-16, RF-17, RF-18, RF-29
@@ -1290,7 +1322,7 @@ async function saveArticle(event) {
     if (ok && articleForm.opened === opened) closeArticleForm(); // RF-15, RF-28
   } finally {
     articleForm.saving = false;
-    $('article-save').disabled = false;
+    $('article-save').disabled = state.offline; // 011 D-7
   }
 }
 
@@ -1351,6 +1383,14 @@ function scheduleReviewReload() {
     if (reviewState.saving) reviewState.reloadPending = true;
     else loadReviewMeals({ showLoading: false });
   }, 300);
+}
+
+// La red cambió con la revisión abierta: se repinta ("Añadir (n)") y, al volver, se recarga
+// sin "Cargando…"; lo elegido no cambia (009 CL-8, CL-9, D-14)
+function onReviewNetworkChange() {
+  if (!reviewState.open) return;
+  renderReview();
+  if (!state.offline) scheduleReviewReload();
 }
 
 // Un cambio de comidas recarga el calendario y, si está abierta, la revisión (009 RF-24)
@@ -1513,7 +1553,7 @@ function refreshMatch() {
   const shown = formState.open && text ? text : '';
   $('form-match-text').textContent = shown;
   $('form-match-notice').hidden = !shown;
-  $('form-save').disabled = saveDisabled;
+  $('form-save').disabled = saveDisabled || state.offline; // 011 RF-10, CL-6
 }
 
 // Cambio de fecha o tipo en el formulario (RF-6 en el otro formulario). Con el aviso de
@@ -1775,8 +1815,9 @@ function buildWeekView() {
       const meal = mealAt(date, type.id);
       const onClick = meal
         ? () => openDay(date, type.id)
-        : () => openForm({ date, type: type.id });
+        : () => { if (!state.offline) openForm({ date, type: type.id }); }; // 011 RF-10
       const row = button('week-meal type-' + type.id + (meal ? '' : ' empty'), undefined, onClick);
+      if (!meal) row.disabled = state.offline; // abre el formulario para crear (011 D-7)
       row.append(
         el('span', 'week-meal-type', type.name),
         el('span', 'week-meal-name', meal ? dishNames(meal) : '—'),
@@ -1835,7 +1876,9 @@ function buildBlock(date, type) {
     const empty = el('div', 'block-empty');
     const texts = el('div');
     texts.append(el('span', 'block-type', type.name), el('p', null, 'Nada registrado'));
-    empty.append(texts, button('btn', 'Añadir', () => openForm({ date, type: type.id })));
+    const add = button('btn', 'Añadir', () => { if (!state.offline) openForm({ date, type: type.id }); });
+    add.disabled = state.offline; // 011 RF-10, D-7
+    empty.append(texts, add);
     block.append(empty);
     return block;
   }
@@ -1857,10 +1900,9 @@ function buildDetail(meal) {
   meal.platos.forEach((dish, index) => detail.append(buildDishDetail(dish, dishTitle(meal.tipo, index))));
 
   const buttons = el('div', 'detail-buttons');
-  buttons.append(
-    button('btn', 'Editar', () => openForm({ meal })),
-    button('btn btn-danger', 'Borrar', () => deleteMeal(meal)),
-  );
+  const remove = button('btn btn-danger', 'Borrar', () => deleteMeal(meal));
+  remove.disabled = state.offline; // 011 RF-10, D-7; "Editar" sigue activo (RF-9)
+  buttons.append(button('btn', 'Editar', () => openForm({ meal })), remove);
   detail.append(buttons);
   return detail;
 }
@@ -2172,7 +2214,7 @@ function validateForm() {
 
 async function saveMeal(event) {
   event.preventDefault();
-  if (formState.savedElsewhere) return; // RF-4: también al enviar con Enter
+  if (formState.savedElsewhere || state.offline) return; // RF-4: también al enviar con Enter; 011 RF-10
   showFormError('');
   const { data: meal, error } = validateForm();
   if (error) return showFormError(error);
@@ -2218,6 +2260,7 @@ async function saveMeal(event) {
 
 // ===== Borrado =====
 async function deleteMeal(meal) {
+  if (state.offline) return; // 011 RF-10
   const text = deleteConfirmText(meal);
   if (!(await askConfirm(text, 'Borrar'))) return;
 
@@ -2261,13 +2304,13 @@ function bindEvents() {
   window.addEventListener('resize', () => {
     if ($('month-panel').open) placeMonthPanel();
   });
-  $('add-button').addEventListener('click', () => openForm());
+  $('add-button').addEventListener('click', () => { if (!state.offline) openForm(); }); // 011 RF-10
   document.querySelectorAll('.screen-button').forEach((b) => b.addEventListener('click', () => {
     if (reviewState.open) return; // 009 CL-7: además de la barra inerte por el modal
     showAppScreen(b.dataset.screen);
   }));
   $('saved-toggle').addEventListener('click', toggleSaved);
-  $('add-article-button').addEventListener('click', () => openArticleForm());
+  $('add-article-button').addEventListener('click', () => { if (!state.offline) openArticleForm(); }); // 011 RF-10
   $('finish-button').addEventListener('click', finishShopping);
   $('article-cancel').addEventListener('click', closeArticleForm);
   $('article-delete').addEventListener('click', deleteFromArticleForm);
