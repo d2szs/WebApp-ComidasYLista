@@ -327,7 +327,8 @@ function keysDefined(url, key) {
 }
 
 // Texto de la pantalla "No se puede conectar", o null si todo va bien.
-// check: { libraryLoaded, keysDefined, status }; status es null si el servidor no responde.
+// check: { libraryLoaded, keysDefined, status, online }; status es null si el servidor no
+// responde; online es navigator.onLine leído después (sin el campo, como con red).
 // Los textos citan los nombres actuales de app.js.
 function configMessage(check) {
   if (!check.libraryLoaded) {
@@ -335,6 +336,9 @@ function configMessage(check) {
   }
   if (!check.keysDefined) {
     return 'Faltan las claves de Supabase. Abre app.js y rellena SUPABASE_URL y SUPABASE_PUBLIC_KEY con los datos de tu proyecto.';
+  }
+  if (check.status === null && check.online === false) {
+    return 'No hay conexión a internet. La app entrará sola cuando vuelva.'; // 011 RF-14
   }
   if (check.status === null) {
     return 'Supabase no responde. Comprueba tu conexión a internet y que SUPABASE_URL en app.js es correcta.';
@@ -1171,6 +1175,48 @@ function hasCopyGap(from, to, copy) {
   return isOutsideCopy(toISODate(from), copy) || isOutsideCopy(toISODate(to), copy);
 }
 
+// Tablas fijas del aviso del modo copia: Intl no da "oct." ni "sept." igual en todos (D-8)
+const WEEKDAY_NAMES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTH_ABBR = ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sept.', 'oct.', 'nov.', 'dic.'];
+
+// Aviso del modo copia con la fecha y hora locales de la copia; el año, solo si no es el de
+// hoy (RF-5)
+function copyNoticeText(savedAt, today) {
+  const saved = new Date(savedAt);
+  const year = saved.getFullYear() === today.getFullYear() ? '' : ` de ${saved.getFullYear()}`;
+  const time = `${String(saved.getHours()).padStart(2, '0')}:${String(saved.getMinutes()).padStart(2, '0')}`;
+  return `Sin conexión. Mostrando lo guardado el ${WEEKDAY_NAMES[saved.getDay()]} ${saved.getDate()} ` +
+    `de ${MONTH_ABBR[saved.getMonth()]}${year} a las ${time}.`;
+}
+
+// Clave de localStorage con que supabase-js 2.117.2 guarda la sesión (D-4)
+function authStorageKey(url) {
+  return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
+}
+
+// Email de la sesión guardada por supabase-js, o null si no hay sesión que se pueda
+// renovar; no mira si el token ha caducado (RF-4, D-4)
+function storedSessionEmail(text) {
+  if (!text) return null;
+  let session;
+  try {
+    session = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!session || typeof session !== 'object') return null;
+  const email = session.user?.email;
+  const valid = typeof session.refresh_token === 'string' && session.refresh_token !== '' &&
+    typeof email === 'string' && email !== '';
+  return valid ? email : null;
+}
+
+// ¿Se abre en modo copia? Solo sin respuesta del servidor, con sesión y copia guardadas, sin
+// enlace de acceso en la dirección y sin cambio de contraseña a medias (RF-4, RF-14, D-4)
+function opensInCopy({ status, hasSession, hasCopy, link, pending }) {
+  return status === null && Boolean(hasSession) && Boolean(hasCopy) && link === 'none' && !pending;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1204,5 +1250,6 @@ if (typeof module !== 'undefined') {
     ingredientsErrorMessage,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
+    WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
   };
 }
