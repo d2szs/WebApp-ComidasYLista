@@ -12,7 +12,11 @@ const state = {
   openType: null,       // tipo desplegado en la vista diaria
   requestId: 0,         // para descartar respuestas antiguas
   noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'sync' | 'action'
+  copyMode: false,      // 011: mostrando la copia guardada (000-base D-19)
+  offline: false,       // 011: sin red, con o sin copia (009 D-14)
 };
+// 011: copia para ver sin red; saveId descarta guardados adelantados por otro (D-3)
+const copyState = { saveTimer: null, saveId: 0 };
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
 let panelPressedOutside = false; // la pulsación empezó fuera del panel (006 D-1)
@@ -321,8 +325,11 @@ function applySession(session, { pageLoad = false } = {}) {
     subscribeChanges();
     loadData();
     loadList(); // 007 RF-44: la lista se carga aunque se vea Comidas
+    scheduleCopySave(); // 011 RF-1
   } else if (!session) {
     sessionActive = false;
+    clearTimeout(copyState.saveTimer);
+    copyState.saveId++; // 011: descarta un guardado en curso de la sesión anterior
     onNewPassword = false;
     closeDialogs(); // CL-13: antes de quitar el canal, para anunciar el formulario cerrado
     unsubscribeChanges();
@@ -514,24 +521,97 @@ function currentRange() {
   return visibleRange(state.view, state.refDate);
 }
 
+// ===== Cargas con plazo de 8 s (011 D-5): solo lecturas; guardar y borrar, como antes =====
+// El reloj cubre también la espera de getSession() de supabase-js; sin respuesta a tiempo,
+// la petición se corta y cuenta como sin red (timedOut)
+async function timedQuery(builder) {
+  const controller = new AbortController();
+  let timer;
+  const clock = new Promise((resolve) => {
+    timer = setTimeout(() => { controller.abort(); resolve(null); }, CONNECTION_TIMEOUT);
+  });
+  let result;
+  try {
+    result = await Promise.race([builder.abortSignal(controller.signal), clock]);
+  } catch (error) {
+    result = { data: null, error };
+  }
+  clearTimeout(timer);
+  const timedOut = controller.signal.aborted;
+  if (timedOut) return { data: null, error: { name: 'TimeoutError', message: 'Network timeout' }, timedOut };
+  return { ...result, timedOut };
+}
+
+// "online" para isNetworkError y translateError: sin respuesta en plazo cuenta como sin red
+function reachable(result) {
+  return navigator.onLine && !result.timedOut;
+}
+
+// Consultas compartidas por las cargas y la copia (011 D-3)
+function mealsQuery(from, to) {
+  return client.from('comidas').select('*').gte('fecha', toISODate(from)).lte('fecha', toISODate(to));
+}
+
+function listQuery() {
+  return client.from('articulos').select('id, nombre, cantidad, unidad, lista, tachado');
+}
+
+// ===== Copia para ver sin red (011 RF-1, RF-2, RF-3, CL-1, RNF-1) =====
+// Agrupa disparadores seguidos (entrar, primer plano, red, tiempo real) en un guardado (D-3)
+function scheduleCopySave() {
+  clearTimeout(copyState.saveTimer);
+  copyState.saveTimer = setTimeout(saveCopy, 1000);
+}
+
+// Descarga las comidas del intervalo y la lista entera; solo con las dos bien, sustituye la copia
+async function saveCopy() {
+  if (!sessionActive || state.copyMode || state.offline) return;
+  let session = null;
+  try {
+    ({ data: { session } } = await client.auth.getSession());
+  } catch {
+    return;
+  }
+  if (!session) return; // D-3: sin sesión, la RLS daría una copia vacía
+  const id = ++copyState.saveId;
+  const { from, to } = copyRange(getToday());
+  const savedAt = Date.now(); // D-2: justo antes de las descargas
+  const [meals, list] = await Promise.all([timedQuery(mealsQuery(from, to)), timedQuery(listQuery())]);
+  if (id !== copyState.saveId || !sessionActive) return;
+  if (meals.error || list.error) return; // CL-1: se queda la anterior, sin aviso
+  writeCopy(buildCopy({ savedAt, from, to, meals: meals.data, articles: list.data }));
+}
+
+// Una sola escritura; no pisa una copia más nueva de otra pestaña (D-2). Si no cabe, nada (CL-1)
+function writeCopy(copy) {
+  try {
+    if ((readSavedCopy()?.savedAt ?? -Infinity) > copy.savedAt) return;
+    localStorage.setItem(COPY_KEY, JSON.stringify(copy));
+  } catch {
+    // Sin espacio o sin localStorage: la anterior sigue entera
+  }
+}
+
+function readSavedCopy() {
+  try {
+    return parseCopy(localStorage.getItem(COPY_KEY));
+  } catch {
+    return null;
+  }
+}
+
 async function loadData() {
   if (!sessionActive) return;
   const requestId = ++state.requestId;
   const { from, to } = currentRange();
   $('loading-indicator').hidden = false;
 
-  let result;
-  try {
-    result = await client.from('comidas').select('*')
-      .gte('fecha', toISODate(from)).lte('fecha', toISODate(to));
-  } catch (error) {
-    result = { error };
-  }
+  const result = await timedQuery(mealsQuery(from, to));
   if (requestId !== state.requestId) return; // llegó una petición más reciente
 
   $('loading-indicator').hidden = true;
   if (result.error) {
-    showError('No se han podido cargar las comidas. ' + translateError(result.error, navigator.onLine), 'load');
+    showError('No se han podido cargar las comidas. ' + translateError(result.error, reachable(result)), 'load');
     return;
   }
   hideError('load');
@@ -549,16 +629,11 @@ async function loadList() {
   const requestId = ++listState.requestId;
   if (!listState.loaded) renderShopping(); // RF-11: "Cargando…" solo hasta la primera carga
 
-  let result;
-  try {
-    result = await client.from('articulos').select('id, nombre, cantidad, unidad, lista, tachado');
-  } catch (error) {
-    result = { error };
-  }
+  const result = await timedQuery(listQuery());
   if (requestId !== listState.requestId || !sessionActive) return null;
 
   if (result.error) {
-    showError(articleErrorMessage('load', result.error, navigator.onLine), 'listLoad'); // D-8
+    showError(articleErrorMessage('load', result.error, reachable(result)), 'listLoad'); // D-8
     return result.error;
   }
   hideError('listLoad');
@@ -1192,6 +1267,13 @@ function scheduleReviewReload() {
 function onMealsChange() {
   scheduleReload();
   scheduleReviewReload();
+  scheduleCopySave(); // 011 RF-1
+}
+
+// Un cambio de la lista la recarga y renueva la copia (007 RF-33; 011 RF-1)
+function onArticlesChange() {
+  scheduleListReload();
+  scheduleCopySave();
 }
 
 // ===== Sincronización en tiempo real =====
@@ -1200,7 +1282,7 @@ function subscribeChanges() {
   subscribeForms();
   channel = client.channel('meal-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, onMealsChange)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, scheduleListReload) // 007 RF-33 (D-4)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, onArticlesChange) // 007 RF-33 (D-4)
     .subscribe((channelStatus) => {
       const action = syncStatusAction(channelStatus, state.noticeKind);
       if (action === 'recover') {
@@ -1208,6 +1290,7 @@ function subscribeChanges() {
         scheduleReload();
         scheduleListReload(); // 007 RF-35
         scheduleReviewReload(); // 009 RF-24, RF-25
+        scheduleCopySave(); // 011 RF-1
       } else if (action === 'show') {
         showError('Se ha perdido la sincronización en tiempo real. Reintentando…', 'sync');
       }
@@ -2133,12 +2216,14 @@ function bindEvents() {
     if (document.visibilityState !== 'visible') return;
     loadData();
     loadList(); // 007 RF-34
+    scheduleCopySave(); // 011 RF-1
     checkSessionAlive();
   });
   window.addEventListener('online', () => {
     if (sessionActive) {
       loadData();
       loadList(); // 007 RF-34
+      scheduleCopySave(); // 011 RF-1
     } else if (!$('screen-config').hidden) connect();
     announceForm({ hello: true }); // CL-3 (si el socket aún no ha vuelto, lo hace SUBSCRIBED)
     recheckSaved(); // D-12
