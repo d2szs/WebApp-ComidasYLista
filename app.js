@@ -14,9 +14,11 @@ const state = {
   noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'sync' | 'copy' | 'action'
   copyMode: false,      // 011: mostrando la copia guardada (000-base D-19)
   offline: false,       // 011: sin red, con o sin copia (009 D-14)
+  channelStatus: null,  // último estado del canal de tiempo real (000-base CL-15)
 };
-// 011: copia para ver sin red; saveId descarta guardados adelantados por otro (D-3)
-const copyState = { copy: null, saveTimer: null, saveId: 0 };
+// 011: copia para ver sin red; saveId descarta guardados adelantados por otro (D-3);
+// retryTimer y probing, el reintento de cada 30 s (RF-16, D-6)
+const copyState = { copy: null, saveTimer: null, saveId: 0, retryTimer: null, probing: false, rerun: false };
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
 let panelPressedOutside = false; // la pulsación empezó fuera del panel (006 D-1)
@@ -285,6 +287,8 @@ async function onAuthEvent(event) {
   if (!ready) return;
   const action = authEventScreen(event, { onNewPassword, signingOut });
   if (action === 'app') {
+    // 011 D-6: en modo copia solo el reintento sale (CL-7); el SIGNED_IN no recarga
+    if (state.copyMode) return retryConnection();
     const { data } = await client.auth.getSession();
     if (data.session) applySession(data.session);
   } else if (action === 'sessionClosed') {
@@ -365,6 +369,7 @@ function applySession(session, { pageLoad = false } = {}) {
       copyState.copy = null;
       setOffline(false);
     }
+    stopRetry(); // 011 RF-16: sin sesión no se reintenta
     clearTimeout(copyState.saveTimer);
     copyState.saveId++; // 011: descarta un guardado en curso de la sesión anterior
     onNewPassword = false;
@@ -652,6 +657,7 @@ function enterCopyMode() {
   loadMealsFromCopy();
   loadListFromCopy();
   setOffline(true);
+  startRetry(); // RF-16
 }
 
 // Todas las comidas del intervalo guardado; la navegación filtra al pintar (RF-8)
@@ -676,6 +682,128 @@ function setOffline(value) {
   applyWriteControls(); // RF-10, CL-6
   renderShopping();
   onReviewNetworkChange(); // 009 CL-8, CL-9
+  // D-6: el reintento corre también sin copia; en modo copia solo lo para la salida
+  if (value) startRetry();
+  else if (!state.copyMode) stopRetry();
+}
+
+// ===== Reintento y salida del modo copia (011 RF-12, RF-13, RF-16, CL-4, CL-7; D-6) =====
+// Cada 30 s, solo en primer plano
+function startRetry() {
+  stopRetry();
+  if (document.visibilityState === 'visible') copyState.retryTimer = setInterval(retryConnection, 30000);
+}
+
+function stopRetry() {
+  clearInterval(copyState.retryTimer);
+  copyState.retryTimer = null;
+}
+
+// getSession() con plazo: con Supabase sin responder, renovar el token puede tardar ~30 s (D-6)
+function sessionWithTimeout() {
+  let timer;
+  const clock = new Promise((resolve) => { timer = setTimeout(() => resolve(null), CONNECTION_TIMEOUT); });
+  return Promise.race([client.auth.getSession().catch(() => null), clock]).finally(() => clearTimeout(timer));
+}
+
+// Carga las comidas del periodo visible y la lista; en modo copia, solo con las dos bien sale
+// (RF-12); sin copia, cada una pinta lo suyo en cuanto Supabase responde (D-6)
+async function retryConnection() {
+  if (!sessionActive || !(state.copyMode || state.offline) || document.hidden) return;
+  if (copyState.probing) { // uno a la vez; el que llega mientras tanto se repite al acabar
+    copyState.rerun = true;
+    return;
+  }
+  copyState.probing = true;
+  copyState.rerun = false;
+  try {
+    const session = await sessionWithTimeout();
+    if (!session?.data?.session) return; // CL-4; si supabase-js la borró, su SIGNED_OUT da RF-13
+    if (!sessionActive) return;
+    const mealsId = ++state.requestId;
+    const listId = ++listState.requestId;
+    const { from, to } = currentRange();
+    const [meals, list] = await Promise.all([timedQuery(mealsQuery(from, to)), timedQuery(listQuery())]);
+    if (mealsId !== state.requestId || listId !== listState.requestId) { // navegó mientras tanto
+      copyState.rerun = true;
+      return;
+    }
+    if (!sessionActive || !(state.copyMode || state.offline)) return;
+    const outcome = retryOutcome(meals, list, navigator.onLine);
+    if (outcome.kind === 'noResponse') return; // CL-4, 007 RF-36: sin mensaje
+    if (outcome.kind === 'sessionGone') {
+      checkSessionAlive(); // RF-13
+      return;
+    }
+    if (!state.copyMode) {
+      applyRetryLoads(meals, list); // D-6: Supabase responde
+      return;
+    }
+    if (outcome.kind === 'error') {
+      showError(outcome.message, outcome.notice); // CL-7: sigue en modo copia
+      return;
+    }
+    leaveCopyMode(meals.data, list.data);
+  } finally {
+    copyState.probing = false;
+    if (copyState.rerun) {
+      copyState.rerun = false;
+      retryConnection();
+    }
+  }
+}
+
+// Sale del modo copia con las dos cargas correctas (RF-12)
+function leaveCopyMode(meals, items) {
+  state.copyMode = false; // 000-base D-19, 007 D-24: antes de pintar
+  stopRetry();
+  copyState.copy = null;
+  hideError('copy');
+  hideError('load');
+  hideError('listLoad');
+  $('loading-indicator').hidden = true;
+  state.meals = new Map(meals.map((c) => [mealKey(c.fecha, c.tipo), c]));
+  render();
+  listState.items = items;
+  listState.loaded = true;
+  renderShopping();
+  if (reviewState.open) recalcLines();
+  setOffline(false); // 009 D-14: solo tras la recarga correcta
+  resumeSyncNotice(); // 000-base CL-15
+  scheduleCopySave(); // RF-12: renueva la copia (RF-2)
+  checkSessionAlive(); // RF-13 con el token aún válido
+}
+
+// Sin copia (D-6): como el final de loadData y loadList, sin "Cargando…"
+function applyRetryLoads(meals, list) {
+  $('loading-indicator').hidden = true;
+  if (meals.error) {
+    showError('No se han podido cargar las comidas. ' + translateError(meals.error, reachable(meals)), 'load');
+  } else {
+    hideError('load');
+    hideError('offline');
+    state.meals = new Map(meals.data.map((c) => [mealKey(c.fecha, c.tipo), c]));
+  }
+  if (list.error) {
+    showError(articleErrorMessage('load', list.error, reachable(list)), 'listLoad');
+  } else {
+    hideError('listLoad');
+    hideError('offline');
+    listState.items = list.data;
+    listState.loaded = true;
+  }
+  setOffline(false); // Supabase respondió: reactiva los controles y para el reintento
+  render();
+  renderShopping();
+  if (!list.error && reviewState.open) recalcLines();
+  if (!meals.error && !list.error) scheduleCopySave(); // RF-1
+}
+
+// Al salir del modo copia, el aviso de tiempo real si el canal sigue caído (000-base CL-15)
+function resumeSyncNotice() {
+  if (syncStatusAction(state.channelStatus, state.noticeKind, false) === 'show') {
+    showError('Se ha perdido la sincronización en tiempo real. Reintentando…', 'sync');
+  }
 }
 
 // Activa o desactiva lo que guarda, mueve o borra según state.offline (RF-10, D-7); tachar,
@@ -1414,6 +1542,7 @@ function subscribeChanges() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, onMealsChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, onArticlesChange) // 007 RF-33 (D-4)
     .subscribe((channelStatus) => {
+      state.channelStatus = channelStatus; // 000-base CL-15
       const action = syncStatusAction(channelStatus, state.noticeKind, state.copyMode); // 011 RF-21
       if (action === 'recover') {
         hideError('sync');
@@ -1430,6 +1559,7 @@ function subscribeChanges() {
 function unsubscribeChanges() {
   if (channel) client.removeChannel(channel);
   channel = null;
+  state.channelStatus = null;
   unsubscribeForms();
 }
 
@@ -2354,14 +2484,24 @@ function bindEvents() {
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {
     onVisibilityChange(); // RNF-5, RNF-6 (004)
-    if (document.visibilityState !== 'visible') return;
-    loadData();
-    loadList(); // 007 RF-34
-    scheduleCopySave(); // 011 RF-1
+    if (document.visibilityState !== 'visible') {
+      stopRetry(); // 011 RF-16: en segundo plano no se reintenta
+      return;
+    }
+    if (sessionActive && (state.copyMode || state.offline)) {
+      retryConnection(); // 011 RF-16: en el momento, y otra vez cada 30 s
+      startRetry();
+    } else {
+      loadData();
+      loadList(); // 007 RF-34
+      scheduleCopySave(); // 011 RF-1
+    }
     checkSessionAlive();
   });
   window.addEventListener('online', () => {
-    if (sessionActive) {
+    if (sessionActive && (state.copyMode || state.offline)) {
+      retryConnection(); // 011 RF-12, D-6: solo el reintento sale del modo copia
+    } else if (sessionActive) {
       loadData();
       loadList(); // 007 RF-34
       scheduleCopySave(); // 011 RF-1
