@@ -11,12 +11,12 @@ const state = {
   meals: new Map(),     // 'aaaa-mm-dd|tipo' → fila
   openType: null,       // tipo desplegado en la vista diaria
   requestId: 0,         // para descartar respuestas antiguas
-  noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'sync' | 'action'
+  noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'sync' | 'copy' | 'action'
   copyMode: false,      // 011: mostrando la copia guardada (000-base D-19)
   offline: false,       // 011: sin red, con o sin copia (009 D-14)
 };
 // 011: copia para ver sin red; saveId descarta guardados adelantados por otro (D-3)
-const copyState = { saveTimer: null, saveId: 0 };
+const copyState = { copy: null, saveTimer: null, saveId: 0 };
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
 let panelPressedOutside = false; // la pulsación empezó fuera del panel (006 D-1)
@@ -600,16 +600,60 @@ function readSavedCopy() {
   }
 }
 
+function hasSavedCopy() {
+  return readSavedCopy() !== null;
+}
+
+// ===== Modo copia (011 RF-5, RF-7, RF-8, RF-17; 000-base D-19, 007 D-24) =====
+// Nunca se llama ya en modo copia. copyMode, antes de pintar, para que las cargas en curso
+// no pinten encima (000-base RF-48, 007 CL-10)
+function enterCopyMode() {
+  state.copyMode = true;
+  copyState.copy = readSavedCopy();
+  // RF-5; el ✕ u otro aviso lo quitan hasta la próxima entrada (RF-6, RF-20)
+  showError(copyNoticeText(copyState.copy.savedAt, getToday()), 'copy');
+  loadMealsFromCopy();
+  loadListFromCopy();
+  setOffline(true);
+}
+
+// Todas las comidas del intervalo guardado; la navegación filtra al pintar (RF-8)
+function loadMealsFromCopy() {
+  $('loading-indicator').hidden = true; // 000-base RF-52
+  state.meals = new Map(copyState.copy.meals.map((c) => [mealKey(c.fecha, c.tipo), c]));
+  render();
+}
+
+// Lista entera de la copia, con loaded en true: sin "Cargando…" (RF-7, 007 RF-11)
+function loadListFromCopy() {
+  listState.items = copyState.copy.articles;
+  listState.loaded = true;
+  renderShopping();
+  if (reviewState.open) recalcLines();
+}
+
+// Sin red, con o sin copia (009 D-14)
+function setOffline(value) {
+  if (state.offline === value) return;
+  state.offline = value;
+}
+
 async function loadData() {
   if (!sessionActive) return;
-  const requestId = ++state.requestId;
+  const requestId = ++state.requestId; // 000-base RF-48: también en modo copia
+  if (state.copyMode) return loadMealsFromCopy(); // RF-52: sin "Cargando…"
   const { from, to } = currentRange();
   $('loading-indicator').hidden = false;
 
   const result = await timedQuery(mealsQuery(from, to));
-  if (requestId !== state.requestId) return; // llegó una petición más reciente
+  // Llegó una petición más reciente, o empezó antes del modo copia (000-base RF-48)
+  if (requestId !== state.requestId || state.copyMode) return;
 
   $('loading-indicator').hidden = true;
+  if (result.error && isNetworkError(result.error, reachable(result)) && hasSavedCopy()) {
+    enterCopyMode(); // 000-base RF-49: sin el mensaje de carga
+    return;
+  }
   if (result.error) {
     showError('No se han podido cargar las comidas. ' + translateError(result.error, reachable(result)), 'load');
     return;
@@ -626,12 +670,21 @@ async function loadData() {
 // Devuelve el error de la carga, o null si ha ido bien o la ha dejado atrasada otra (009 D-2)
 async function loadList() {
   if (!sessionActive) return null;
-  const requestId = ++listState.requestId;
+  const requestId = ++listState.requestId; // CL-10: también en modo copia
+  if (state.copyMode) { // 011 D-24: la copia, sin pedir nada
+    loadListFromCopy();
+    return null;
+  }
   if (!listState.loaded) renderShopping(); // RF-11: "Cargando…" solo hasta la primera carga
 
   const result = await timedQuery(listQuery());
-  if (requestId !== listState.requestId || !sessionActive) return null;
+  // CL-10, CL-8; también si empezó antes del modo copia (D-24)
+  if (requestId !== listState.requestId || !sessionActive || state.copyMode) return null;
 
+  if (result.error && isNetworkError(result.error, reachable(result)) && hasSavedCopy()) {
+    enterCopyMode(); // RF-36: sin el mensaje de carga
+    return null;
+  }
   if (result.error) {
     showError(articleErrorMessage('load', result.error, reachable(result)), 'listLoad'); // D-8
     return result.error;
@@ -1284,7 +1337,7 @@ function subscribeChanges() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, onMealsChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, onArticlesChange) // 007 RF-33 (D-4)
     .subscribe((channelStatus) => {
-      const action = syncStatusAction(channelStatus, state.noticeKind);
+      const action = syncStatusAction(channelStatus, state.noticeKind, state.copyMode); // 011 RF-21
       if (action === 'recover') {
         hideError('sync');
         scheduleReload();
@@ -2229,7 +2282,12 @@ function bindEvents() {
     recheckSaved(); // D-12
   });
   window.addEventListener('offline', () => {
-    if (sessionActive) showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'offline'); // 007 D-8
+    setOffline(true); // 009 D-14
+    // 011 RF-17, RF-18 (000-base RF-50); ya en modo copia, nada
+    if (sessionActive && !state.copyMode) {
+      if (hasSavedCopy()) enterCopyMode();
+      else showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'offline'); // 007 D-8
+    }
     peers = []; // CL-3: sin conexión no hay aviso de RF-1
     refreshMatch();
   });
