@@ -1708,6 +1708,8 @@ function placeMonthPanel() {
 // ===== Render =====
 function render() {
   updateHeader();
+  const { from, to } = currentRange();
+  $('copy-gap').hidden = !(state.copyMode && hasCopyGap(from, to, copyState.copy)); // 011 RF-15
   const calendar = $('calendar');
   if (state.view === 'month') calendar.replaceChildren(buildMonthView());
   else if (state.view === 'week') {
@@ -1723,6 +1725,11 @@ function updateHeader() {
   $('period-title').textContent = periodTitle(state.view, state.refDate);
 }
 
+// ¿Día fuera de la copia, en modo copia? Se ve vacío y atenuado (011 RF-15)
+function isNoCopyDay(date) {
+  return state.copyMode && isOutsideCopy(toISODate(date), copyState.copy);
+}
+
 // Vista mensual: cuadrícula de días con puntos (móvil) o nombres (pantalla grande)
 function buildMonthView() {
   const grid = el('div', 'month');
@@ -1732,6 +1739,7 @@ function buildMonthView() {
     const cell = button('month-day', undefined, () => openDay(date));
     if (outside) cell.classList.add('outside');
     if (isToday) cell.classList.add('today');
+    if (isNoCopyDay(date)) cell.classList.add('no-copy');
     cell.setAttribute('aria-label', longDate(date));
     cell.append(el('div', 'month-number', String(date.getDate())));
 
@@ -1754,7 +1762,7 @@ function buildMonthView() {
 function buildWeekView() {
   const week = el('div', 'week');
   for (const { date, isToday } of weekDays(state.refDate, getToday())) {
-    const card = el('section', 'week-day' + (isToday ? ' today' : ''));
+    const card = el('section', 'week-day' + (isToday ? ' today' : '') + (isNoCopyDay(date) ? ' no-copy' : ''));
     // Dos fechas: el CSS muestra la abreviada en el pc estrecho; el lector de pantalla lee
     // siempre la completa (008 RF-15, RNF-5, D-11)
     const fullName = formatDate(date, { weekday: 'long', day: 'numeric' });
@@ -1820,7 +1828,7 @@ function buildDayView() {
 }
 
 function buildBlock(date, type) {
-  const block = el('section', 'block type-' + type.id);
+  const block = el('section', 'block type-' + type.id + (isNoCopyDay(date) ? ' no-copy' : ''));
   const meal = mealAt(date, type.id);
 
   if (!meal) {

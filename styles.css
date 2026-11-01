@@ -13,6 +13,8 @@
   --color-alert-bg: #fff4d6;
   --color-alert-text: #6b4a00;
   --color-today: #e8f3ef;
+  --color-no-copy-bg: var(--color-border);      /* 011 RF-15: días fuera de la copia */
+  --color-no-copy-text: var(--color-text-muted);
 
   --color-desayuno: #e0a100;
   --color-comida: #2f80c9;
@@ -291,6 +293,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 #screen-app[data-screen="list"] .navigation,
 #screen-app[data-screen="list"] #calendar,
 #screen-app[data-screen="list"] #loading-indicator,
+#screen-app[data-screen="list"] #copy-gap,
 #screen-app[data-screen="list"] #add-button,
 #screen-app[data-screen="meals"] #shopping,
 #screen-app[data-screen="meals"] #add-article-button { display: none; }
@@ -369,6 +372,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   border-radius: var(--radius);
 }
 .error-notice .btn-text { color: var(--color-error); }
+.copy-gap { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); font-weight: 600; color: var(--color-no-copy-text); }
 .loading-indicator { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); }
 
 /* ===== Calendario ===== */
@@ -579,6 +583,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .detail-recipe { margin: 0; white-space: pre-wrap; }
 .detail-dish a { color: var(--color-primary); word-break: break-all; }
 .detail-buttons { display: flex; gap: 0.5rem; }
+
+/* Días fuera de la copia, en modo copia: vacíos y en gris (011 RF-15) */
+.month-day.no-copy, .week-day.no-copy, .block.no-copy { background: var(--color-no-copy-bg); color: var(--color-no-copy-text); }
+.week-day.no-copy .week-meal, .block.no-copy { --color-type: var(--color-no-copy-text); }
 
 /* ===== Diálogos ===== */
 .dialog {
