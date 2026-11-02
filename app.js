@@ -507,6 +507,7 @@ async function submitLogin(event) {
   if (inputError) return showLoginError(inputError);
 
   showLoginError('');
+  signingOut = false; // 011 D-12: un cierre colgado no se traga el SIGNED_IN de este inicio
   $('login-button').disabled = true;
   $('login-button').textContent = 'Entrando…';
   const { error } = await client.auth.signInWithPassword({ email, password });
@@ -546,11 +547,31 @@ function showRecoveryError(text) {
 async function logOut() {
   // Solo en este dispositivo: la otra sesión abierta sigue funcionando. Sin el aviso de RF-15
   // aquí; las otras pestañas sí lo muestran
+  if (signingOut) return; // ya hay un cierre en marcha
+  const button = $('user-menu-logout');
+  button.disabled = true; // 011 RF-23: desactivado mientras espera
   signingOut = true;
-  const { error } = await client.auth.signOut({ scope: 'local' });
-  finishSigningOut();
-  if (error) showError('No se ha podido cerrar la sesión. ' + translateError(error, navigator.onLine));
-  else applySession(null);
+  // signingOut dura lo que el cierre de fondo: su SIGNED_OUT tardío no da el aviso de RF-15 (011 D-12)
+  const pending = client.auth.signOut({ scope: 'local' }).catch((error) => ({ error }));
+  pending.finally(finishSigningOut);
+  let timer;
+  const clock = new Promise((resolve) => { timer = setTimeout(() => resolve(null), CONNECTION_TIMEOUT); });
+  const result = await Promise.race([pending, clock]);
+  clearTimeout(timer);
+  button.disabled = false;
+  const outcome = logOutOutcome({ error: result?.error ?? null, timedOut: result === null });
+  // 011 RF-22: cualquier cierre fallido cierra en este dispositivo, sin mensaje
+  if (outcome === 'local') removeStoredSession();
+  applySession(null);
+}
+
+// Quita la sesión guardada en este dispositivo, como closeLocalSession (011 D-12)
+function removeStoredSession() {
+  try {
+    localStorage.removeItem(client.auth.storageKey);
+  } catch {
+    // Sin localStorage no queda sesión guardada que borrar
+  }
 }
 
 // ===== Carga de datos =====
@@ -710,6 +731,7 @@ function sessionWithTimeout() {
 // (RF-12); sin copia, cada una pinta lo suyo en cuanto Supabase responde (D-6)
 async function retryConnection() {
   if (!sessionActive || !(state.copyMode || state.offline) || document.hidden) return;
+  if (signingOut) return; // 011 RF-23: mientras espera el cierre, nada cambia (D-12)
   if (copyState.probing) { // uno a la vez; el que llega mientras tanto se repite al acabar
     copyState.rerun = true;
     return;
