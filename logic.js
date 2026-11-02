@@ -1292,6 +1292,31 @@ function removeQueuedStrike(changes, id) {
   return changes.filter((change) => change.id !== id);
 }
 
+// Lista que se ve: el tachado querido en los artículos de Por comprar con cambio en cola, y
+// sus ids en unsent; si el artículo falta o está en Guardados, ni se aplica ni se marca (RF-3, RF-7)
+function applyStrikeQueue(items, changes) {
+  const wanted = new Map(changes.map((change) => [change.id, change.value]));
+  const unsent = new Set();
+  const shown = items.map((item) => {
+    if (item.lista !== 'por_comprar' || !wanted.has(item.id)) return item;
+    unsent.add(item.id);
+    return { ...item, tachado: wanted.get(item.id) };
+  });
+  return { items: shown, unsent };
+}
+
+// Aviso del modo copia con "<n> cambios sin enviar." al final; sin cambios, igual (RF-4)
+function withUnsentCount(notice, n) {
+  if (n === 0) return notice;
+  return notice + (n === 1 ? ' 1 cambio sin enviar.' : ` ${n} cambios sin enviar.`);
+}
+
+// Aviso de los cambios no aplicados, con los nombres en el orden de la cola (RF-12)
+function conflictNoticeText(names) {
+  const start = names.length === 1 ? 'No se ha aplicado 1 cambio' : `No se han aplicado ${names.length} cambios`;
+  return `${start} porque el artículo cambió mientras estabas sin conexión: ${names.join(', ')}.`;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1328,6 +1353,6 @@ if (typeof module !== 'undefined') {
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
     retryOutcome, logOutOutcome,
     STRIKE_QUEUE_KEY, STRIKE_QUEUE_FORMAT, buildStrikeQueue, parseStrikeQueue,
-    toggleQueuedStrike, removeQueuedStrike,
+    toggleQueuedStrike, removeQueuedStrike, applyStrikeQueue, withUnsentCount, conflictNoticeText,
   };
 }
