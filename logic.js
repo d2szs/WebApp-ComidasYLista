@@ -1235,6 +1235,18 @@ function retryOutcome(meals, list, online) {
   return { kind: 'ok' };
 }
 
+// ===== Cierre de sesión sin red (011-sin-conexion) =====
+
+// Resultado de "Cerrar sesión" (online: navigator.onLine; timedOut: pasaron los 8 s). Sin
+// error y a tiempo, 'done'; plazo vencido, modo copia, sin red o error de red, 'local'
+// (cierre en este dispositivo); con red y Supabase respondiendo con error, 'error' (D-12)
+function logOutOutcome({ error, timedOut, online, copyMode, offline }) {
+  if (timedOut) return 'local';
+  if (!error) return 'done';
+  if (copyMode || offline || isNetworkError(error, online)) return 'local';
+  return 'error';
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1269,6 +1281,6 @@ if (typeof module !== 'undefined') {
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
-    retryOutcome,
+    retryOutcome, logOutOutcome,
   };
 }
