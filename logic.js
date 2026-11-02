@@ -1317,6 +1317,38 @@ function conflictNoticeText(names) {
   return `${start} porque el artículo cambió mientras estabas sin conexión: ${names.join(', ')}.`;
 }
 
+// Qué hacer con un cambio en cola al enviarlo, según la fila de la base de datos
+// ({ lista, tachado } o null): 'apply' si sigue como se vio (también con otro nombre o
+// cantidad, o devuelto a Por comprar); 'done' si ya tiene el valor querido; 'conflict' si
+// falta o está en Guardados (RF-10, RF-11, RF-13, CL-1, CL-4)
+function queuedStrikeOutcome(change, row) {
+  if (!row || row.lista !== 'por_comprar') return 'conflict';
+  return row.tachado === change.value ? 'done' : 'apply';
+}
+
+// ¿Sigue en la cola el mismo cambio (id, from y value)? Se mira antes de cada envío (D-9)
+function isStillQueued(changes, change) {
+  return changes.some((queued) => queued.id === change.id && queued.from === change.from &&
+    queued.value === change.value);
+}
+
+// Cola que queda tras un envío (stored: releída al acabar; settled: [{ change, result }]).
+// Un conflicto sale siempre; lo aplicado o ya hecho sale si sigue igual; si se tocó durante
+// el envío y volvió a su from, entra al final el cambio inverso; lo demás sigue (D-9, D-12)
+function settleStrikeQueue(stored, settled) {
+  let queue = stored;
+  const inverses = [];
+  for (const { change, result } of settled) {
+    const current = queue.find((queued) => queued.id === change.id);
+    if (result === 'conflict' || (current && current.value === change.value)) {
+      queue = queue.filter((queued) => queued.id !== change.id);
+    } else if (!current) {
+      inverses.push({ id: change.id, name: change.name, from: change.value, value: change.from });
+    }
+  }
+  return [...queue, ...inverses];
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1354,5 +1386,6 @@ if (typeof module !== 'undefined') {
     retryOutcome, logOutOutcome,
     STRIKE_QUEUE_KEY, STRIKE_QUEUE_FORMAT, buildStrikeQueue, parseStrikeQueue,
     toggleQueuedStrike, removeQueuedStrike, applyStrikeQueue, withUnsentCount, conflictNoticeText,
+    queuedStrikeOutcome, isStillQueued, settleStrikeQueue,
   };
 }
