@@ -1349,6 +1349,22 @@ function settleStrikeQueue(stored, settled) {
   return [...queue, ...inverses];
 }
 
+// Clasifica una respuesta del envío de la cola, también la de getUser (result: forma de
+// timedQuery; online: reachable(result)): null si salió bien; 'noResponse' sin respuesta en
+// plazo o error de red; 'sessionGone' con la sesión no válida; si no, 'error' (D-5, CL-6, CL-7)
+function strikeSendFailure(result, online) {
+  if (!result.error) return null;
+  if (result.timedOut || isNetworkError(result.error, online)) return 'noResponse';
+  if (isSessionGone(result.error) || result.status === 401) return 'sessionGone';
+  return 'error';
+}
+
+// ¿Arranca el reintento de la cola? (sent: resultado de sendStrikeQueue; pending: cambios
+// que quedan) Sí si queda cola, salvo cola vacía o sesión no válida (D-8, RF-16, RF-17)
+function needsQueueRetry(sent, pending) {
+  return pending > 0 && sent !== 'empty' && sent !== 'sessionGone';
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1386,6 +1402,6 @@ if (typeof module !== 'undefined') {
     retryOutcome, logOutOutcome,
     STRIKE_QUEUE_KEY, STRIKE_QUEUE_FORMAT, buildStrikeQueue, parseStrikeQueue,
     toggleQueuedStrike, removeQueuedStrike, applyStrikeQueue, withUnsentCount, conflictNoticeText,
-    queuedStrikeOutcome, isStillQueued, settleStrikeQueue,
+    queuedStrikeOutcome, isStillQueued, settleStrikeQueue, strikeSendFailure, needsQueueRetry,
   };
 }
