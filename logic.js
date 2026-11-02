@@ -1243,6 +1243,55 @@ function logOutOutcome({ error, timedOut }) {
   return timedOut || error ? 'local' : 'done';
 }
 
+// ===== 012-tachar-sin-red: cola de tachados sin red =====
+
+// Clave de localStorage y versión del formato de la cola (D-1). Un cambio en cola es
+// { id, name, from, value }: tachado al tocarlo la primera vez y tachado querido
+const STRIKE_QUEUE_KEY = 'strike-queue';
+const STRIKE_QUEUE_FORMAT = 1;
+
+// Cola lista para guardar (RF-7)
+function buildStrikeQueue(changes) {
+  return { format: STRIKE_QUEUE_FORMAT, changes };
+}
+
+// ¿Es un cambio en cola bien formado? (RF-7)
+function isQueuedStrike(change) {
+  return change !== null && typeof change === 'object' && typeof change.id === 'string' &&
+    typeof change.name === 'string' && typeof change.from === 'boolean' &&
+    typeof change.value === 'boolean' && change.from !== change.value;
+}
+
+// Texto guardado → lista de cambios; [] si falta o no se sabe leer. Sin repetidos por id:
+// se queda el primero (RF-7, CL-3)
+function parseStrikeQueue(text) {
+  if (!text) return [];
+  let queue;
+  try {
+    queue = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (queue === null || typeof queue !== 'object' || queue.format !== STRIKE_QUEUE_FORMAT ||
+    !Array.isArray(queue.changes) || !queue.changes.every(isQueuedStrike)) return [];
+  const seen = new Set();
+  return queue.changes.filter((change) => !seen.has(change.id) && seen.add(change.id));
+}
+
+// Toque en la casilla de un artículo: un solo cambio por artículo, en el puesto del primer
+// toque; si vuelve a como estaba, sale de la cola; si no tenía, entra al final (RF-1, RF-6, D-12)
+function toggleQueuedStrike(changes, item, value) {
+  const current = changes.find((change) => change.id === item.id);
+  if (!current) return [...changes, { id: item.id, name: item.nombre, from: item.tachado, value }];
+  if (value === current.from) return changes.filter((change) => change.id !== item.id);
+  return changes.map((change) => (change.id === item.id ? { ...change, value } : change));
+}
+
+// La cola sin el cambio de ese artículo (RF-19)
+function removeQueuedStrike(changes, id) {
+  return changes.filter((change) => change.id !== id);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1278,5 +1327,7 @@ if (typeof module !== 'undefined') {
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
     retryOutcome, logOutOutcome,
+    STRIKE_QUEUE_KEY, STRIKE_QUEUE_FORMAT, buildStrikeQueue, parseStrikeQueue,
+    toggleQueuedStrike, removeQueuedStrike,
   };
 }
