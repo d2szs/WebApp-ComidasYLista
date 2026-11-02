@@ -1237,14 +1237,10 @@ function retryOutcome(meals, list, online) {
 
 // ===== Cierre de sesión sin red (011-sin-conexion) =====
 
-// Resultado de "Cerrar sesión" (online: navigator.onLine; timedOut: pasaron los 8 s). Sin
-// error y a tiempo, 'done'; plazo vencido, modo copia, sin red o error de red, 'local'
-// (cierre en este dispositivo); con red y Supabase respondiendo con error, 'error' (D-12)
-function logOutOutcome({ error, timedOut, online, copyMode, offline }) {
-  if (timedOut) return 'local';
-  if (!error) return 'done';
-  if (copyMode || offline || isNetworkError(error, online)) return 'local';
-  return 'error';
+// Resultado de "Cerrar sesión" (timedOut: pasaron los 8 s). Sin error y a tiempo, 'done';
+// plazo vencido o cualquier error (de red o de Supabase), 'local': cierre en este dispositivo (D-12)
+function logOutOutcome({ error, timedOut }) {
+  return timedOut || error ? 'local' : 'done';
 }
 
 if (typeof module !== 'undefined') {
