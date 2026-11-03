@@ -68,8 +68,9 @@ function initialReviewState(requestId = 0) {
 let reviewState = initialReviewState();
 // Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
 const articleForm = { id: null, item: null, saving: false, opened: 0 };
-// 012: envío de la cola de tachados en curso en esta pestaña (D-4)
-const strikeQueueState = { sending: false };
+// 012: envío de la cola de tachados en curso en esta pestaña (D-4); errorShown: el error de
+// guardado del envío ya se mostró (RF-17: una sola vez)
+const strikeQueueState = { sending: false, errorShown: false };
 
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
@@ -763,8 +764,13 @@ async function retryConnection() {
     const session = await sessionWithTimeout();
     if (!session?.data?.session) return; // CL-4; si supabase-js la borró, su SIGNED_OUT da RF-13
     if (!sessionActive) return;
-    await sendStrikeQueue(); // 012 RF-9: antes de las cargas
-    if (!sessionActive) return;
+    const sent = await sendStrikeQueue(); // 012 RF-9: antes de las cargas
+    if (sent === 'noResponse') return; // 012 CL-6: sigue sin red; el reintento de la 011 sigue
+    if (sent === 'sessionGone') { // 012 RF-16: inicio de sesión, la cola espera
+      checkSessionAlive();
+      return;
+    }
+    if (!sessionActive) return; // 'error' (RF-17) y 'busy' no cortan: Supabase responde
     const mealsId = ++state.requestId;
     const listId = ++listState.requestId;
     const { from, to } = currentRange();
@@ -1206,13 +1212,14 @@ async function flushStrikeQueue() {
   const user = await userWithTimeout();
   let failure = strikeSendFailure(user, reachable(user));
   if (failure === 'noResponse' || failure === 'sessionGone') return failure; // RF-16: nada se envía
-  if (failure) return finishSend([], failure);
+  if (failure) return finishSend([], failure, user.error);
   const read = await timedQuery(client.from('articulos').select('id, lista, tachado')
     .in('id', queue.map((change) => change.id)));
   failure = strikeSendFailure(read, reachable(read));
-  if (failure) return finishSend([], failure);
+  if (failure) return finishSend([], failure, read.error);
   const rows = new Map(read.data.map((row) => [row.id, row]));
   const settled = [];
+  let error = null;
   for (const change of queue) {
     const outcome = queuedStrikeOutcome(change, rows.get(change.id) ?? null);
     if (outcome !== 'apply') { // RF-10, RF-11
@@ -1225,16 +1232,20 @@ async function flushStrikeQueue() {
     const res = await timedQuery(client.from('articulos').update({ tachado: change.value })
       .eq('id', change.id).eq('lista', 'por_comprar').eq('tachado', change.from).select('id')); // RNF-1, D-3
     failure = strikeSendFailure(res, reachable(res));
-    if (failure) break; // CL-6, RF-17: lo demás sigue en cola
+    if (failure) { // CL-6, RF-17: lo demás sigue en cola
+      error = res.error;
+      break;
+    }
     if (res.data.length === 0) continue; // cambió entre la lectura y el guardado: decide la siguiente vuelta
     settled.push({ change, result: 'applied' });
     if (!sessionActive) break;
   }
-  return finishSend(settled, failure);
+  return finishSend(settled, failure, error);
 }
 
 // Resuelve la cola releída con lo enviado (D-9), repinta y avisa de los conflictos (RF-12, RNF-5)
-function finishSend(settled, failure) {
+// y, una sola vez, del error de Supabase (RF-17)
+function finishSend(settled, failure, error) {
   try {
     writeStrikeQueue(settleStrikeQueue(readStrikeQueue(), settled));
   } catch {
@@ -1244,6 +1255,13 @@ function finishSend(settled, failure) {
   refreshCopyNotice();
   const names = settled.filter((s) => s.result === 'conflict').map((s) => s.change.name);
   if (names.length) showError(conflictNoticeText(names)); // otro aviso lo sustituye (CL-9)
+  if (failure === 'error' && !strikeQueueState.errorShown) {
+    showError(articleErrorMessage('save', error, true)); // RF-17: una vez, no en cada reintento
+    strikeQueueState.errorShown = true;
+  } else if (failure === null) {
+    strikeQueueState.errorShown = false;
+  }
+  if (readStrikeQueue().length === 0) strikeQueueState.errorShown = false;
   if (settled.length && !state.copyMode) scheduleListReload(); // fuera del modo copia, la lista al día
   return failure ?? 'ok';
 }
