@@ -115,10 +115,12 @@ function saveSet(set, id) {
 
 // Guarda la versión entera, la marca la última y sustituye a las anteriores (RF-11).
 // Si falla antes de la marca, borra lo guardado a medias y deja la anterior: false (D-11).
-// Si otra carga ya la guardó entera, no la vuelve a escribir: true (011 D-9)
+// Si la guardada entera ya es esta versión (aunque con otra hora del margen), no la
+// vuelve a escribir: true (011 D-9, CL-10)
 async function saveWhole(set, id) {
+  const saved = await savedVersion();
+  if (saved && isSavedCurrent(saved.id, id)) return true;
   const name = CACHE_PREFIX + (id ?? 'local-' + Date.now());
-  if (id != null && await isSavedWhole(name, id)) return true;
   const created = !(await caches.has(name)); // solo se borra una caché creada aquí (011 D-9)
   try {
     const cache = await caches.open(name);
@@ -132,13 +134,6 @@ async function saveWhole(set, id) {
     if (other !== name) await caches.delete(other);
   }
   return true;
-}
-
-// ¿Está ya guardada entera esta versión (caché con su nombre y su marca)? (011 D-9)
-async function isSavedWhole(name, id) {
-  if (!(await caches.has(name))) return false;
-  const mark = await (await caches.open(name)).match(MARK);
-  return Boolean(mark) && (await mark.text()) === id;
 }
 
 // La versión guardada completa (con marca): { id, cache } o null
