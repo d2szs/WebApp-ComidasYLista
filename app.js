@@ -695,6 +695,15 @@ function refreshCopyNotice() {
     withUnsentCount(copyNoticeText(copyState.copy.savedAt, getToday()), readStrikeQueue().length);
 }
 
+// Artículos de la copia guardada, si es la misma que la de esta pestaña (mismo savedAt): la otra
+// pestaña le pasó lo enviado (keepSentInCopy) (012 RF-8)
+function refreshCopyArticles() {
+  const saved = readSavedCopy();
+  if (!saved || !copyState.copy || saved.savedAt !== copyState.copy.savedAt) return;
+  copyState.copy = { ...copyState.copy, articles: saved.articles };
+  listState.items = saved.articles;
+}
+
 // Todas las comidas del intervalo guardado; la navegación filtra al pintar (RF-8)
 function loadMealsFromCopy() {
   $('loading-indicator').hidden = true; // 000-base RF-52
@@ -1288,6 +1297,7 @@ async function flushStrikeQueue() {
 // Resuelve la cola releída con lo enviado (D-9), repinta y avisa de los conflictos (RF-12, RNF-5)
 // y, una sola vez, del error de Supabase (RF-17)
 function finishSend(settled, failure, error) {
+  keepSentInCopy(settled); // antes que la cola: la otra pestaña lee la copia al recibir 'storage'
   try {
     writeStrikeQueue(settleStrikeQueue(readStrikeQueue(), settled));
   } catch {
@@ -1306,6 +1316,18 @@ function finishSend(settled, failure, error) {
   if (readStrikeQueue().length === 0) strikeQueueState.errorShown = false;
   if (settled.length && !state.copyMode) scheduleListReload(); // fuera del modo copia, la lista al día
   return failure ?? 'ok';
+}
+
+// En modo copia, lo que ya tiene Supabase ('applied' o 'done') pasa a la copia en memoria y a
+// la guardada (mismo savedAt), para que al salir de la cola no vuelva a pintarse con el valor
+// viejo; los conflictos no (los pone al día la carga al salir del modo copia) (012 RF-7, CL-6)
+function keepSentInCopy(settled) {
+  const sent = settled.filter((s) => s.result === 'applied' || s.result === 'done').map((s) => s.change);
+  if (!state.copyMode || !copyState.copy || sent.length === 0) return;
+  copyState.copy = { ...copyState.copy, articles: applyStrikeQueue(copyState.copy.articles, sent).items };
+  listState.items = applyStrikeQueue(listState.items, sent).items;
+  const saved = readSavedCopy();
+  if (saved) writeCopy({ ...saved, articles: applyStrikeQueue(saved.articles, sent).items });
 }
 
 // "Terminar compra": pasa a Guardados los tachados de la base de datos, no los de la pantalla,
@@ -2760,6 +2782,7 @@ function bindEvents() {
   // 012 RF-8, RF-14 (D-2, D-4): la cola la comparten las pestañas; la otra repinta al cambiar
   window.addEventListener('storage', (event) => {
     if (event.key !== STRIKE_QUEUE_KEY && event.key !== null) return;
+    if (state.copyMode) refreshCopyArticles(); // RF-8: lo enviado desde la otra pestaña ya está en la copia
     renderShopping();
     refreshCopyNotice();
     if (sessionActive && !state.copyMode && !state.offline) scheduleListReload();
