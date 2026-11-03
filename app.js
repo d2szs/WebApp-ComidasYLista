@@ -68,6 +68,8 @@ function initialReviewState(requestId = 0) {
 let reviewState = initialReviewState();
 // Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
 const articleForm = { id: null, item: null, saving: false, opened: 0 };
+// 012: envío de la cola de tachados en curso en esta pestaña (D-4)
+const strikeQueueState = { sending: false };
 
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
@@ -761,6 +763,8 @@ async function retryConnection() {
     const session = await sessionWithTimeout();
     if (!session?.data?.session) return; // CL-4; si supabase-js la borró, su SIGNED_OUT da RF-13
     if (!sessionActive) return;
+    await sendStrikeQueue(); // 012 RF-9: antes de las cargas
+    if (!sessionActive) return;
     const mealsId = ++state.requestId;
     const listId = ++listState.requestId;
     const { from, to } = currentRange();
@@ -1165,6 +1169,83 @@ function dropQueuedStrike(id) {
 // Tachar falló sin red con la app fuera del modo copia: como el evento offline (012 RF-18)
 function strikeWentOffline() {
   goOffline();
+}
+
+// ===== Envío de la cola (012 RF-9 a RF-14, RNF-1; D-3, D-4, D-5, D-7, D-9) =====
+// getUser() con plazo de 8 s, con la forma de timedQuery (D-5)
+async function userWithTimeout() {
+  let timer;
+  const clock = new Promise((resolve) => { timer = setTimeout(() => resolve(null), CONNECTION_TIMEOUT); });
+  const result = await Promise.race([client.auth.getUser().catch((error) => ({ data: null, error })), clock]);
+  clearTimeout(timer);
+  if (result === null) return { data: null, error: { name: 'TimeoutError', message: 'Network timeout' }, timedOut: true };
+  return { ...result, timedOut: false };
+}
+
+// → 'empty' | 'busy' | 'ok' | 'noResponse' | 'sessionGone' | 'error'. Una sola pestaña envía (RF-14)
+async function sendStrikeQueue() {
+  if (!sessionActive || readStrikeQueue().length === 0) return 'empty';
+  if (strikeQueueState.sending) return 'busy';
+  strikeQueueState.sending = true;
+  try {
+    if (navigator.locks) {
+      return await navigator.locks.request('strike-queue', { ifAvailable: true },
+        (lock) => (lock ? flushStrikeQueue() : 'busy'));
+    }
+    return await flushStrikeQueue(); // sin Web Locks: solo por http://IP (D-4, supuesto)
+  } finally {
+    strikeQueueState.sending = false;
+  }
+}
+
+// Lee los artículos de la cola, decide cada cambio y envía los que siguen como se vieron, en orden
+async function flushStrikeQueue() {
+  const queue = readStrikeQueue(); // releída dentro del cerrojo: otra pestaña pudo vaciarla
+  if (queue.length === 0) return 'empty';
+  const startedAt = Date.now(); // presupuesto del envío: 8 s (D-7)
+  const user = await userWithTimeout();
+  let failure = strikeSendFailure(user, reachable(user));
+  if (failure === 'noResponse' || failure === 'sessionGone') return failure; // RF-16: nada se envía
+  if (failure) return finishSend([], failure);
+  const read = await timedQuery(client.from('articulos').select('id, lista, tachado')
+    .in('id', queue.map((change) => change.id)));
+  failure = strikeSendFailure(read, reachable(read));
+  if (failure) return finishSend([], failure);
+  const rows = new Map(read.data.map((row) => [row.id, row]));
+  const settled = [];
+  for (const change of queue) {
+    const outcome = queuedStrikeOutcome(change, rows.get(change.id) ?? null);
+    if (outcome !== 'apply') { // RF-10, RF-11
+      settled.push({ change, result: outcome });
+      continue;
+    }
+    if (!isStillQueued(readStrikeQueue(), change)) continue; // tocado durante el envío (D-9)
+    // D-7: al menos un guardado por envío; lo demás, en el siguiente
+    if (settled.some((s) => s.result === 'applied') && Date.now() - startedAt >= CONNECTION_TIMEOUT) break;
+    const res = await timedQuery(client.from('articulos').update({ tachado: change.value })
+      .eq('id', change.id).eq('lista', 'por_comprar').eq('tachado', change.from).select('id')); // RNF-1, D-3
+    failure = strikeSendFailure(res, reachable(res));
+    if (failure) break; // CL-6, RF-17: lo demás sigue en cola
+    if (res.data.length === 0) continue; // cambió entre la lectura y el guardado: decide la siguiente vuelta
+    settled.push({ change, result: 'applied' });
+    if (!sessionActive) break;
+  }
+  return finishSend(settled, failure);
+}
+
+// Resuelve la cola releída con lo enviado (D-9), repinta y avisa de los conflictos (RF-12, RNF-5)
+function finishSend(settled, failure) {
+  try {
+    writeStrikeQueue(settleStrikeQueue(readStrikeQueue(), settled));
+  } catch {
+    // RF-10: el siguiente envío lo dará por hecho
+  }
+  renderShopping(); // quita las marcas de lo enviado (RF-9)
+  refreshCopyNotice();
+  const names = settled.filter((s) => s.result === 'conflict').map((s) => s.change.name);
+  if (names.length) showError(conflictNoticeText(names)); // otro aviso lo sustituye (CL-9)
+  if (settled.length && !state.copyMode) scheduleListReload(); // fuera del modo copia, la lista al día
+  return failure ?? 'ok';
 }
 
 // "Terminar compra": pasa a Guardados los tachados de la base de datos, no los de la pantalla,
