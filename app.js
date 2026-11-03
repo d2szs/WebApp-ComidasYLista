@@ -695,13 +695,20 @@ function refreshCopyNotice() {
     withUnsentCount(copyNoticeText(copyState.copy.savedAt, getToday()), readStrikeQueue().length);
 }
 
-// Artículos de la copia guardada, si es la misma que la de esta pestaña (mismo savedAt): la otra
-// pestaña le pasó lo enviado (keepSentInCopy) (012 RF-8)
-function refreshCopyArticles() {
+// Lo enviado desde la otra pestaña, que lo pasó a la copia guardada (keepSentInCopy) (012 RF-7,
+// RF-8). Misma copia (mismo savedAt): sus artículos. Más nueva: solo los cambios que estaban en
+// la cola (previous) y que ella ya tiene ('done'); un conflicto no se toca hasta la carga (RF-14)
+function refreshCopyArticles(previous) {
   const saved = readSavedCopy();
-  if (!saved || !copyState.copy || saved.savedAt !== copyState.copy.savedAt) return;
-  copyState.copy = { ...copyState.copy, articles: saved.articles };
-  listState.items = saved.articles;
+  if (!saved || !copyState.copy || saved.savedAt < copyState.copy.savedAt) return;
+  let articles = saved.articles;
+  if (saved.savedAt !== copyState.copy.savedAt) {
+    const rows = new Map(saved.articles.map((item) => [item.id, item]));
+    const sent = previous.filter((change) => queuedStrikeOutcome(change, rows.get(change.id) ?? null) === 'done');
+    articles = applyStrikeQueue(copyState.copy.articles, sent).items;
+  }
+  copyState.copy = { ...copyState.copy, articles };
+  listState.items = articles;
 }
 
 // Todas las comidas del intervalo guardado; la navegación filtra al pintar (RF-8)
@@ -1318,14 +1325,17 @@ function finishSend(settled, failure, error) {
   return failure ?? 'ok';
 }
 
-// En modo copia, lo que ya tiene Supabase ('applied' o 'done') pasa a la copia en memoria y a
-// la guardada (mismo savedAt), para que al salir de la cola no vuelva a pintarse con el valor
-// viejo; los conflictos no (los pone al día la carga al salir del modo copia) (012 RF-7, CL-6)
+// Lo que ya tiene Supabase ('applied' o 'done') pasa a la copia guardada (con su savedAt) y, en
+// modo copia, a la de memoria, para que al salir de la cola no vuelva a pintarse con el valor
+// viejo, aquí ni en la otra pestaña en modo copia; los conflictos no (los pone al día la carga
+// al salir del modo copia) (012 RF-7, RF-8, CL-6)
 function keepSentInCopy(settled) {
   const sent = settled.filter((s) => s.result === 'applied' || s.result === 'done').map((s) => s.change);
-  if (!state.copyMode || !copyState.copy || sent.length === 0) return;
-  copyState.copy = { ...copyState.copy, articles: applyStrikeQueue(copyState.copy.articles, sent).items };
-  listState.items = applyStrikeQueue(listState.items, sent).items;
+  if (sent.length === 0) return;
+  if (state.copyMode && copyState.copy) {
+    copyState.copy = { ...copyState.copy, articles: applyStrikeQueue(copyState.copy.articles, sent).items };
+    listState.items = applyStrikeQueue(listState.items, sent).items;
+  }
   const saved = readSavedCopy();
   if (saved) writeCopy({ ...saved, articles: applyStrikeQueue(saved.articles, sent).items });
 }
@@ -2782,7 +2792,7 @@ function bindEvents() {
   // 012 RF-8, RF-14 (D-2, D-4): la cola la comparten las pestañas; la otra repinta al cambiar
   window.addEventListener('storage', (event) => {
     if (event.key !== STRIKE_QUEUE_KEY && event.key !== null) return;
-    if (state.copyMode) refreshCopyArticles(); // RF-8: lo enviado desde la otra pestaña ya está en la copia
+    if (state.copyMode) refreshCopyArticles(parseStrikeQueue(event.oldValue)); // RF-8: lo enviado desde la otra pestaña ya está en la copia
     renderShopping();
     refreshCopyNotice();
     if (sessionActive && !state.copyMode && !state.offline) scheduleListReload();
