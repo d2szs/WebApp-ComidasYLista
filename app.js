@@ -675,11 +675,19 @@ function enterCopyMode() {
   state.copyMode = true;
   copyState.copy = readSavedCopy();
   // RF-5; el ✕ u otro aviso lo quitan hasta la próxima entrada (RF-6, RF-20)
-  showError(copyNoticeText(copyState.copy.savedAt, getToday()), 'copy');
+  showError(withUnsentCount(copyNoticeText(copyState.copy.savedAt, getToday()), readStrikeQueue().length), 'copy'); // 012 RF-4
   loadMealsFromCopy();
   loadListFromCopy();
   setOffline(true);
   startRetry(); // RF-16
+}
+
+// Contador de la cola en el aviso del modo copia (012 RF-4, D-6); cerrado con ✕ o sustituido por
+// otro aviso, no vuelve (RF-5). Sin copia el aviso es el 'offline' de 000-base RF-50 (CL-8)
+function refreshCopyNotice() {
+  if (!state.copyMode || state.noticeKind !== 'copy') return;
+  $('error-notice-text').textContent =
+    withUnsentCount(copyNoticeText(copyState.copy.savedAt, getToday()), readStrikeQueue().length);
 }
 
 // Todas las comidas del intervalo guardado; la navegación filtra al pintar (RF-8)
@@ -846,7 +854,7 @@ function applyWriteControls() {
     $(id).disabled = state.offline;
   }
   $('article-save').disabled = state.offline || articleForm.saving;
-  $('finish-button').disabled = state.offline || listState.finishing;
+  $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
   if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
 }
@@ -930,14 +938,15 @@ function renderShopping() {
   if (loading) return;
 
   // 012 RF-3, RF-7 (D-2): la cola se aplica solo al pintar; listState.items sigue siendo lo cargado
-  const { items, unsent } = applyStrikeQueue(listState.items, readStrikeQueue());
+  const queue = readStrikeQueue();
+  const { items, unsent } = applyStrikeQueue(listState.items, queue);
   const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(items);
 
   $('pending-title').textContent = `Por comprar (${pendingCount})`;
   $('pending-list').replaceChildren(...pending.map((item) => buildPendingRow(item, unsent.has(item.id))));
   $('pending-empty').hidden = pending.length > 0; // RF-10
   $('finish-button').hidden = struckCount === 0; // RF-41
-  $('finish-button').disabled = listState.finishing || state.offline; // 011 RF-10
+  $('finish-button').disabled = listState.finishing || state.offline || queue.length > 0; // 011 RF-10, 012 RF-20
 
   $('saved-title').textContent = `Guardados (${savedCount})`;
   $('saved-toggle').setAttribute('aria-expanded', String(listState.savedOpen)); // RF-12
@@ -1139,6 +1148,7 @@ function queueStrike(item, value) {
     return false;
   }
   renderShopping();
+  refreshCopyNotice(); // RF-4
   return true;
 }
 
@@ -1149,6 +1159,7 @@ function dropQueuedStrike(id) {
   } catch {
     // RF-10: el siguiente envío lo verá con el valor querido
   }
+  refreshCopyNotice();
 }
 
 // Tachar falló sin red con la app fuera del modo copia: como el evento offline (012 RF-18)
@@ -1159,7 +1170,7 @@ function strikeWentOffline() {
 // "Terminar compra": pasa a Guardados los tachados de la base de datos, no los de la pantalla,
 // en una sola sentencia (RF-25, RF-42, CL-5, CL-11)
 async function finishShopping() {
-  if (state.offline || listState.finishing) return; // 011 RF-10
+  if (state.offline || listState.finishing || readStrikeQueue().length > 0) return; // 011 RF-10, 012 RF-20
   const { struckCount } = shoppingLists(listState.items);
   if (!(await askConfirm(finishConfirmText(struckCount), 'Aceptar'))) return; // RF-42
   if (!sessionActive) return;
@@ -1171,7 +1182,7 @@ async function finishShopping() {
     .select('id');
   if (!sessionActive) return;
   listState.finishing = false;
-  $('finish-button').disabled = state.offline; // 011 D-7
+  $('finish-button').disabled = state.offline || readStrikeQueue().length > 0; // 011 D-7, 012 RF-20
   if (error) {
     // RF-36, RF-37: la lista se queda como estaba; recargar sin red taparía este aviso con el de carga
     showError(articleErrorMessage('finish', error, navigator.onLine));
@@ -2603,6 +2614,13 @@ function bindEvents() {
     } else if (!$('screen-config').hidden) connect();
     announceForm({ hello: true }); // CL-3 (si el socket aún no ha vuelto, lo hace SUBSCRIBED)
     recheckSaved(); // D-12
+  });
+  // 012 RF-8, RF-14 (D-2, D-4): la cola la comparten las pestañas; la otra repinta al cambiar
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STRIKE_QUEUE_KEY && event.key !== null) return;
+    renderShopping();
+    refreshCopyNotice();
+    if (sessionActive && !state.copyMode && !state.offline) scheduleListReload();
   });
   window.addEventListener('offline', () => {
     goOffline();
