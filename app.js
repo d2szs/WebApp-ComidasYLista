@@ -69,8 +69,8 @@ let reviewState = initialReviewState();
 // Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
 const articleForm = { id: null, item: null, saving: false, opened: 0 };
 // 012: envío de la cola de tachados en curso en esta pestaña (D-4); errorShown: el error de
-// guardado del envío ya se mostró (RF-17: una sola vez)
-const strikeQueueState = { sending: false, errorShown: false };
+// guardado del envío ya se mostró (RF-17: una sola vez); retryTimer: reintento de la cola con red (D-8)
+const strikeQueueState = { sending: false, errorShown: false, retryTimer: null };
 
 // Formularios abiertos en otras pestañas o dispositivos (004-edicion-simultanea)
 let formsChannel = null;    // canal privado 'meal-forms' (D-1)
@@ -362,7 +362,7 @@ function applySession(session, { pageLoad = false } = {}) {
     render();
     subscribeChanges();
     loadData();
-    loadList(); // 007 RF-44: la lista se carga aunque se vea Comidas
+    loadListWithQueue(); // 007 RF-44: la lista se carga aunque se vea Comidas; 012 RF-9, RF-15, CL-5
     scheduleCopySave(); // 011 RF-1
   } else if (!session) {
     sessionActive = false;
@@ -373,6 +373,8 @@ function applySession(session, { pageLoad = false } = {}) {
       setOffline(false);
     }
     stopRetry(); // 011 RF-16: sin sesión no se reintenta
+    stopQueueRetry(); // 012 RF-15 (D-8): la cola se queda en el dispositivo
+    strikeQueueState.errorShown = false;
     clearTimeout(copyState.saveTimer);
     copyState.saveId++; // 011: descarta un guardado en curso de la sesión anterior
     onNewPassword = false;
@@ -1193,15 +1195,55 @@ async function sendStrikeQueue() {
   if (!sessionActive || readStrikeQueue().length === 0) return 'empty';
   if (strikeQueueState.sending) return 'busy';
   strikeQueueState.sending = true;
+  let sent;
   try {
     if (navigator.locks) {
-      return await navigator.locks.request('strike-queue', { ifAvailable: true },
+      sent = await navigator.locks.request('strike-queue', { ifAvailable: true },
         (lock) => (lock ? flushStrikeQueue() : 'busy'));
+    } else {
+      sent = await flushStrikeQueue(); // sin Web Locks: solo por http://IP (D-4, supuesto)
     }
-    return await flushStrikeQueue(); // sin Web Locks: solo por http://IP (D-4, supuesto)
   } finally {
     strikeQueueState.sending = false;
   }
+  const pending = readStrikeQueue().length;
+  if (needsQueueRetry(sent, pending)) startQueueRetry(); // D-8: queda cola → cada 30 s
+  else if (pending === 0) stopQueueRetry();
+  return sent;
+}
+
+// La carga de la lista de siempre, fuera del modo copia, con la cola enviada antes (RF-9, D-7)
+async function loadListWithQueue() {
+  if (!state.copyMode && !state.offline) {
+    const sent = await sendStrikeQueue();
+    if (sent === 'sessionGone') { // RF-16: inicio de sesión, la cola espera
+      checkSessionAlive();
+      return undefined;
+    }
+    // 'noResponse': la carga sigue y decide como hoy (modo copia o aviso) (D-7)
+  }
+  return loadList(); // si loadData ya entró en modo copia, pinta la copia (011 D-24)
+}
+
+// Reintento de la cola con red (RF-17, D-8): cada 30 s, solo en primer plano; no se reinicia
+function startQueueRetry() {
+  if (strikeQueueState.retryTimer || document.visibilityState !== 'visible') return;
+  strikeQueueState.retryTimer = setInterval(queueRetryTick, 30000);
+}
+
+function stopQueueRetry() {
+  clearInterval(strikeQueueState.retryTimer);
+  strikeQueueState.retryTimer = null;
+}
+
+// Sin red reintenta la 011 (retryConnection)
+function queueRetryTick() {
+  if (readStrikeQueue().length === 0) { // D-8: la cola se vació sin envío (RF-19, otra pestaña)
+    stopQueueRetry();
+    return;
+  }
+  if (!sessionActive || state.offline || document.hidden) return;
+  loadListWithQueue();
 }
 
 // Lee los artículos de la cola, decide cada cambio y envía los que siguen como se vieron, en orden
@@ -2691,6 +2733,7 @@ function bindEvents() {
     onVisibilityChange(); // RNF-5, RNF-6 (004)
     if (document.visibilityState !== 'visible') {
       stopRetry(); // 011 RF-16: en segundo plano no se reintenta
+      stopQueueRetry(); // 012 D-8: ni la cola
       return;
     }
     if (sessionActive && (state.copyMode || state.offline)) {
@@ -2698,7 +2741,7 @@ function bindEvents() {
       startRetry();
     } else {
       loadData();
-      loadList(); // 007 RF-34
+      loadListWithQueue(); // 007 RF-34; 012 RF-9, RF-17
       scheduleCopySave(); // 011 RF-1
     }
     checkSessionAlive();
@@ -2708,7 +2751,7 @@ function bindEvents() {
       retryConnection(); // 011 RF-12, D-6: solo el reintento sale del modo copia
     } else if (sessionActive) {
       loadData();
-      loadList(); // 007 RF-34
+      loadListWithQueue(); // 007 RF-34; 012 RF-9, RF-17
       scheduleCopySave(); // 011 RF-1
     } else if (!$('screen-config').hidden) connect();
     announceForm({ hello: true }); // CL-3 (si el socket aún no ha vuelto, lo hace SUBSCRIBED)
