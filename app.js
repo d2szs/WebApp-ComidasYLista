@@ -584,7 +584,8 @@ function currentRange() {
   return visibleRange(state.view, state.refDate);
 }
 
-// ===== Cargas con plazo de 8 s (011 D-5): solo lecturas; guardar y borrar, como antes =====
+// ===== Peticiones con plazo de 8 s (011 D-5): las lecturas y el tachado (007 D-25); el resto de
+// guardados y borrados, como antes =====
 // El reloj cubre también la espera de getSession() de supabase-js; sin respuesta a tiempo,
 // la petición se corta y cuenta como sin red (timedOut)
 async function timedQuery(builder) {
@@ -706,6 +707,16 @@ function setOffline(value) {
   // D-6: el reintento corre también sin copia; en modo copia solo lo para la salida
   if (value) startRetry();
   else if (!state.copyMode) stopRetry();
+}
+
+// Pasa a "sin red": evento offline y tachado que falla sin red (012 RF-18)
+function goOffline() {
+  setOffline(true); // 009 D-14
+  // 011 RF-17, RF-18 (000-base RF-50); ya en modo copia, nada
+  if (sessionActive && !state.copyMode) {
+    if (hasSavedCopy()) enterCopyMode();
+    else showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'offline'); // 007 D-8
+  }
 }
 
 // ===== Reintento y salida del modo copia (011 RF-12, RF-13, RF-16, CL-4, CL-7; D-6) =====
@@ -918,10 +929,12 @@ function renderShopping() {
   $('ingredients-button').disabled = loading || state.offline;
   if (loading) return;
 
-  const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(listState.items);
+  // 012 RF-3, RF-7 (D-2): la cola se aplica solo al pintar; listState.items sigue siendo lo cargado
+  const { items, unsent } = applyStrikeQueue(listState.items, readStrikeQueue());
+  const { pending, saved, pendingCount, savedCount, struckCount } = shoppingLists(items);
 
   $('pending-title').textContent = `Por comprar (${pendingCount})`;
-  $('pending-list').replaceChildren(...pending.map(buildPendingRow));
+  $('pending-list').replaceChildren(...pending.map((item) => buildPendingRow(item, unsent.has(item.id))));
   $('pending-empty').hidden = pending.length > 0; // RF-10
   $('finish-button').hidden = struckCount === 0; // RF-41
   $('finish-button').disabled = listState.finishing || state.offline; // 011 RF-10
@@ -940,14 +953,17 @@ function articleNameParts(item) {
   return [name, quantity];
 }
 
-// Fila de Por comprar: [casilla] [nombre] [cantidad] (RF-8, RF-24, D-11)
-function buildPendingRow(item) {
+// Fila de Por comprar: [casilla] [nombre] [cantidad] (RF-8, RF-24, D-11), y [sin enviar] si
+// tiene un cambio en cola (012 RF-3). item ya lleva la cola aplicada: CL-1 con la cola (012 RF-6)
+function buildPendingRow(item, isUnsent) {
   const row = el('li', 'article-row');
   row.classList.toggle('struck', item.tachado);
+  row.classList.toggle('unsent', isUnsent);
   const check = button('article-check', '', () => setStruck(item, !item.tachado));
   check.setAttribute('aria-pressed', String(item.tachado));
   check.setAttribute('aria-label', `Tachar «${item.nombre}»`);
   row.append(check, ...articleNameParts(item));
+  if (isUnsent) row.append(el('span', 'article-unsent', 'sin enviar'));
   return row;
 }
 
@@ -1067,22 +1083,77 @@ async function recoverArticle(item) {
 }
 
 // Tacha o desmarca un artículo de Por comprar (RF-24, RF-40); value es fijo, lo contrario de lo
-// que se veía, para que dos toques a la vez en dos dispositivos den lo mismo (CL-1)
+// que se veía, para que dos toques a la vez en dos dispositivos den lo mismo (CL-1).
+// Sin red, o si falla sin red, va a la cola de la 012 (D-25)
 async function setStruck(item, value) {
-  const { data: rows, error } = await client.from('articulos')
+  if (state.copyMode || state.offline) { // 012 RF-1: sin pedir nada
+    if (!queueStrike(item, value)) showError(articleErrorMessage('save', null, false)); // 012 CL-3
+    return;
+  }
+  const result = await timedQuery(client.from('articulos')
     .update({ tachado: value })
     .eq('id', item.id).eq('lista', 'por_comprar')
-    .select('id, nombre, cantidad, unidad, lista, tachado');
+    .select('id, nombre, cantidad, unidad, lista, tachado'));
   if (!sessionActive) return;
-  if (error) {
-    showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37
+  // 012 RF-2: el plazo cuenta como sin red aunque no haya error; la respuesta tardía no cuenta (CL-7)
+  if (result.timedOut || (result.error && isNetworkError(result.error, reachable(result)))) {
+    if (!queueStrike(item, value)) {
+      showError(articleErrorMessage('save', result.error, false)); // 012 CL-3: sin pasar a sin red
+      return;
+    }
+    strikeWentOffline(); // 012 RF-18
     return;
   }
-  if (rows.length === 0) {
-    await missingOrMoved(item.id, ARTICLE_CHANGED_MESSAGE); // CL-2 o CL-14
+  if (result.error) {
+    showError(articleErrorMessage('save', result.error, reachable(result))); // RF-36, RF-37, 012 CL-2
     return;
   }
-  replaceItem(rows[0]);
+  if (result.data.length === 0) {
+    await missingOrMoved(item.id, ARTICLE_CHANGED_MESSAGE, () => dropQueuedStrike(item.id)); // CL-2 o CL-14
+    return;
+  }
+  dropQueuedStrike(item.id); // 012 RF-19: guardado como hoy, fuera de la cola
+  replaceItem(result.data[0]);
+}
+
+// ===== Cola de tachados sin red (012 RF-1, RF-6, RF-7, CL-3; D-1; contrato de 007 D-25) =====
+function readStrikeQueue() {
+  try {
+    return parseStrikeQueue(localStorage.getItem(STRIKE_QUEUE_KEY));
+  } catch {
+    return [];
+  }
+}
+
+// Lanza si no puede guardar: lo decide quien la llama. Vacía, se borra la clave (D-1)
+function writeStrikeQueue(changes) {
+  if (changes.length) localStorage.setItem(STRIKE_QUEUE_KEY, JSON.stringify(buildStrikeQueue(changes)));
+  else localStorage.removeItem(STRIKE_QUEUE_KEY);
+}
+
+// Anota el cambio (o lo quita si vuelve a como estaba, RF-6) y repinta; false si no puede (CL-3)
+function queueStrike(item, value) {
+  try {
+    writeStrikeQueue(toggleQueuedStrike(parseStrikeQueue(localStorage.getItem(STRIKE_QUEUE_KEY)), item, value));
+  } catch {
+    return false;
+  }
+  renderShopping();
+  return true;
+}
+
+// Quita el cambio de ese artículo, sin repintar; si no se puede guardar, el envío lo da por hecho (D-1)
+function dropQueuedStrike(id) {
+  try {
+    writeStrikeQueue(removeQueuedStrike(readStrikeQueue(), id));
+  } catch {
+    // RF-10: el siguiente envío lo verá con el valor querido
+  }
+}
+
+// Tachar falló sin red con la app fuera del modo copia: como el evento offline (012 RF-18)
+function strikeWentOffline() {
+  goOffline();
 }
 
 // "Terminar compra": pasa a Guardados los tachados de la base de datos, no los de la pantalla,
@@ -1111,13 +1182,15 @@ async function finishShopping() {
 }
 
 // El artículo no estaba como se esperaba: ¿lo han borrado (CL-2) o movido (CL-12, CL-14)?
-async function missingOrMoved(id, movedMessage) {
+// onAnswered: solo setStruck lo pasa, para quitar de la cola cuando la lectura respondió (007 D-25)
+async function missingOrMoved(id, movedMessage, onAnswered) {
   const { data, error } = await client.from('articulos').select('id').eq('id', id);
   if (!sessionActive) return false;
   if (error) {
     showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37: sin red no es CL-2
     return false;
   }
+  onAnswered?.();
   if (data.length === 0) {
     articleGone();
     return false;
@@ -2532,12 +2605,7 @@ function bindEvents() {
     recheckSaved(); // D-12
   });
   window.addEventListener('offline', () => {
-    setOffline(true); // 009 D-14
-    // 011 RF-17, RF-18 (000-base RF-50); ya en modo copia, nada
-    if (sessionActive && !state.copyMode) {
-      if (hasSavedCopy()) enterCopyMode();
-      else showError('Sin conexión a internet. Los datos se actualizarán al recuperarla.', 'offline'); // 007 D-8
-    }
+    goOffline();
     peers = []; // CL-3: sin conexión no hay aviso de RF-1
     refreshMatch();
   });

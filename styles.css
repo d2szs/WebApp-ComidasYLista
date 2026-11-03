@@ -5,6 +5,7 @@
   --color-border: #e2e5ea;
   --color-text: #1f2933;
   --color-text-muted: #6b7280;
+  --color-unsent: var(--color-text-muted);      /* 012 RF-3: marca "sin enviar" */
   --color-primary: #2f6f5e;
   --color-primary-text: #ffffff;
   --color-error: #b42318;
@@ -444,6 +445,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   border-bottom: 1px solid var(--color-border);
 }
 .article-row.saved-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+/* Con un cambio en cola: cuarta columna con "sin enviar" (012 RF-3) */
+.article-row.unsent { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.article-unsent {
+  padding: 0.7rem 0 0;
+  font-size: var(--text-small);
+  color: var(--color-unsent);
+  white-space: nowrap;
+}
 .article-name {
   min-height: 40px;
   padding: 0.55rem 0;
