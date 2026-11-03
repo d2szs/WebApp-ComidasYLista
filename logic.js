@@ -1108,18 +1108,33 @@ function etagVersion(etag) {
   return match ? match[1] : null;
 }
 
-// ¿Son todos los archivos de la misma versión? Ninguno con versión (servidor local) también
-// cuenta como entera, sin id; cualquier mezcla, no (RF-10, CL-2)
+// Dos horas de despliegue separadas como mucho estos segundos son la misma versión:
+// Pages no siempre pone la misma hora a todos los archivos (D-13, CL-10)
+const SAME_VERSION_SECONDS = 10;
+
+// Segundos entre las horas de dos versiones (el hex del prefijo del ETag)
+function versionGap(a, b) {
+  return Math.abs(parseInt(a, 16) - parseInt(b, 16));
+}
+
+// ¿Son todos los archivos de la misma versión? Sí si sus horas se separan 10 s como mucho,
+// con id la más baja; ninguno con versión (servidor local) también cuenta como entera,
+// sin id; cualquier mezcla, no (RF-10, CL-2, CL-10)
 function commonVersion(etags) {
   const ids = etags.map(etagVersion);
   if (ids.every((id) => id === null)) return { whole: true, id: null };
-  const whole = ids.every((id) => id === ids[0]);
-  return whole ? { whole, id: ids[0] } : { whole: false, id: null };
+  if (ids.some((id) => id === null)) return { whole: false, id: null };
+  const sorted = [...ids].sort((a, b) => parseInt(a, 16) - parseInt(b, 16));
+  const lowest = sorted[0];
+  const whole = versionGap(lowest, sorted[sorted.length - 1]) <= SAME_VERSION_SECONDS;
+  return whole ? { whole, id: lowest } : { whole: false, id: null };
 }
 
-// La versión guardada es la publicada solo si las dos tienen id y coinciden (RF-9)
+// La versión guardada es la publicada solo si las dos tienen id y se separan
+// 10 s como mucho (RF-9, CL-10)
 function isSavedCurrent(savedId, publishedId) {
-  return savedId != null && publishedId != null && savedId === publishedId;
+  return savedId != null && publishedId != null
+    && versionGap(savedId, publishedId) <= SAME_VERSION_SECONDS;
 }
 
 // ¿Es una navegación a la página de la app? La carpeta de scope o su index.html, del mismo
@@ -1397,6 +1412,7 @@ if (typeof module !== 'undefined') {
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
+    SAME_VERSION_SECONDS,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
     retryOutcome, logOutOutcome,
