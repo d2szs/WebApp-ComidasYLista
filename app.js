@@ -2374,7 +2374,9 @@ function addIngredient(dish, data = {}) {
   const row = $('ingredient-template').content.firstElementChild.cloneNode(true);
   const name = row.querySelector('.ingredient-name');
   name.value = flattenLineBreaks(data.nombre || '');
-  row.querySelector('.ingredient-quantity').value = data.cantidad ?? '';
+  const hasAmount = data.cantidad !== null && data.cantidad !== undefined;
+  row.querySelector('.ingredient-quantity').value = hasAmount ? amountFieldText(data.cantidad) : ''; // 013 C-5
+  row.originalQuantity = hasAmount ? data.cantidad : null; // 013 D-4
   row.querySelector('.ingredient-unit').value = data.unidad || '';
   name.addEventListener('keydown', onNameKeydown);
   name.addEventListener('beforeinput', onNameBeforeInput);

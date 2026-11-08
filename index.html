@@ -335,7 +335,7 @@
   <template id="ingredient-template">
     <div class="ingredient">
       <textarea class="ingredient-name" rows="1" placeholder="Ingrediente" aria-label="Ingrediente" enterkeyhint="go"></textarea>
-      <input type="number" class="ingredient-quantity" placeholder="Cant." min="0" step="any" inputmode="decimal" aria-label="Cantidad">
+      <input type="text" class="ingredient-quantity" placeholder="Cant." maxlength="10" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Cantidad">
       <select class="ingredient-unit" aria-label="Unidad">
         <option value="">—</option>
         <option value="und">und.</option>
@@ -343,13 +343,19 @@
         <option value="gr">gr.</option>
         <option value="l">l.</option>
         <option value="ml">ml.</option>
+        <option value="bote">bote</option>
+        <option value="lata">lata</option>
+        <option value="paquete">paquete</option>
         <option value="cda">cda.</option>
         <option value="cdta">cdta.</option>
         <option value="pizca">pizca</option>
+        <option value="chorrito">chorrito</option>
         <option value="vaso">vaso</option>
         <option value="vasito">vasito</option>
         <option value="taza">taza</option>
         <option value="diente">diente</option>
+        <option value="loncha">loncha</option>
+        <option value="sobre">sobre</option>
       </select>
       <button type="button" class="btn btn-icon ingredient-remove" aria-label="Quitar ingrediente">✕</button>
     </div>
