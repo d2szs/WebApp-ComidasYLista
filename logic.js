@@ -14,11 +14,19 @@ const MEAL_TYPES = [
 const UNITS = {
   und: 'und.', kg: 'kg.', gr: 'gr.', l: 'l.', ml: 'ml.', cda: 'cda.', cdta: 'cdta.',
   pizca: 'pizca', vaso: 'vaso', vasito: 'vasito', taza: 'taza', diente: 'diente',
+  bote: 'bote', lata: 'lata', paquete: 'paquete', chorrito: 'chorrito', loncha: 'loncha',
+  sobre: 'sobre', docena: 'docena', botella: 'botella',
 };
-// Plural de las unidades que son palabras; las abreviaturas no cambian (D-15)
-const UNIT_PLURALS = { pizca: 'pizcas', vaso: 'vasos', vasito: 'vasitos', taza: 'tazas', diente: 'dientes' };
-const INGREDIENT_UNITS = ['und', 'kg', 'gr', 'l', 'ml', 'cda', 'cdta', 'pizca', 'vaso', 'vasito', 'taza', 'diente'];
-const ARTICLE_UNITS = ['und', 'kg', 'gr', 'l', 'ml'];
+// Plural de las unidades que son palabras; las abreviaturas no cambian (D-15; 013 C-8)
+const UNIT_PLURALS = {
+  pizca: 'pizcas', vaso: 'vasos', vasito: 'vasitos', taza: 'tazas', diente: 'dientes',
+  bote: 'botes', lata: 'latas', paquete: 'paquetes', chorrito: 'chorritos', loncha: 'lonchas',
+  sobre: 'sobres', docena: 'docenas', botella: 'botellas',
+};
+// Orden de los desplegables de ingrediente y de artículo (013 C-10, C-11)
+const INGREDIENT_UNITS = ['und', 'kg', 'gr', 'l', 'ml', 'bote', 'lata', 'paquete', 'cda', 'cdta',
+  'pizca', 'chorrito', 'vaso', 'vasito', 'taza', 'diente', 'loncha', 'sobre'];
+const ARTICLE_UNITS = ['und', 'kg', 'gr', 'l', 'ml', 'docena', 'bote', 'lata', 'paquete', 'botella'];
 
 // ===== Fechas (sin toISOString: trabaja en hora local) =====
 
@@ -865,8 +873,15 @@ function needsShortWeekDates(nameWidths, numberWidths, spaceWidth, available) {
 
 const PERIOD_ORDER_MESSAGE = 'El final del periodo no puede ser anterior al principio.';
 const PERIOD_DATES_MESSAGE = 'Elige el día de principio y el de fin del periodo.';
-// Tipo de cada unidad de compra: solo se suman las del mismo tipo (RF-5, RF-11)
-const UNIT_KINDS = { und: 'count', kg: 'weight', gr: 'weight', l: 'volume', ml: 'volume' };
+// Tipo de cada unidad de compra: solo se suman las del mismo tipo (RF-5, RF-11); cada unidad
+// de recuento es su propio tipo (013 D-7)
+const UNIT_KINDS = {
+  und: 'count', kg: 'weight', gr: 'weight', l: 'volume', ml: 'volume',
+  bote: 'jar', lata: 'can', paquete: 'pack', docena: 'dozen', botella: 'bottle',
+};
+// Unidad de cada tipo de recuento, y orden de los tipos en el detalle (013 D-7, C-17)
+const KIND_UNITS = { count: 'und', jar: 'bote', can: 'lata', pack: 'paquete', dozen: 'docena', bottle: 'botella' };
+const KIND_ORDER = ['count', 'jar', 'can', 'pack', 'weight', 'volume', 'dozen', 'bottle'];
 
 // De la comida del sábado (hoy si es sábado; si no, el próximo) a la cena del viernes (RF-2)
 function defaultPeriod(today) {
@@ -908,7 +923,7 @@ function mealsInPeriod(meals, from, to) {
     .sort((a, b) => compareMoments(momentOf(a), momentOf(b)));
 }
 
-// Ingrediente de compra: con cantidad y en una unidad de artículo (RF-29)
+// Ingrediente de compra: con cantidad y en una unidad de artículo (RF-29; 013 C-14)
 function isPurchaseIngredient(ingredient) {
   return ingredient.cantidad !== null && ingredient.cantidad !== undefined
     && ARTICLE_UNITS.includes(ingredient.unidad);
@@ -924,10 +939,14 @@ function baseQuantity(cantidad, unidad) {
   return unidad === 'kg' || unidad === 'l' ? Number(Number(cantidad) + 'e3') : Number(cantidad);
 }
 
-// Total de un tipo en su unidad: kg. (o l.) si todo venía así o llega a 1000; si no, gr. (o ml.)
-function kindTotal(kind, list) {
+// Total de un tipo en su unidad: kg. (o l.) si todo venía así o llega a 1000; si no, gr. (o ml.).
+// Los de recuento, con roundUp, al entero de arriba tras quitar restos (013 C-15, D-8)
+function kindTotal(kind, list, roundUp = false) {
   const total = list.reduce((sum, a) => sum + baseQuantity(a.cantidad, a.unidad), 0);
-  if (kind === 'count') return { cantidad: roundQuantity(total), unidad: 'und' };
+  if (KIND_UNITS[kind]) {
+    const exact = roundQuantity(total);
+    return { cantidad: roundUp ? Math.ceil(exact) : exact, unidad: KIND_UNITS[kind] };
+  }
   const [big, small] = kind === 'weight' ? ['kg', 'gr'] : ['l', 'ml'];
   if (list.every((a) => a.unidad === big) || total >= 1000) {
     return { cantidad: roundQuantity(Number(total + 'e-3')), unidad: big };
@@ -936,12 +955,13 @@ function kindTotal(kind, list) {
 }
 
 // Suma de cantidades de compra: un tipo → { cantidad, unidad }; varios → detail
-// "2 und. + 160 gr." en el orden und., peso, volumen (RF-5, RF-11, RF-15)
-function combineAmounts(amounts) {
-  const totals = ['count', 'weight', 'volume']
+// "2 und. + 1 lata + 160 gr." en el orden de KIND_ORDER (RF-5, RF-11, RF-15; 013 C-17).
+// roundUp: solo las líneas de la revisión; "Sumar" suma sin volver a redondear (013 D-8)
+function combineAmounts(amounts, { roundUp = false } = {}) {
+  const totals = KIND_ORDER
     .map((kind) => [kind, amounts.filter((a) => UNIT_KINDS[a.unidad] === kind)])
     .filter(([, list]) => list.length > 0)
-    .map(([kind, list]) => kindTotal(kind, list));
+    .map(([kind, list]) => kindTotal(kind, list, roundUp));
   if (totals.length === 1) return { ...totals[0], detail: null };
   return {
     cantidad: null,
@@ -972,7 +992,7 @@ function periodLines(meals, from, to, items) {
     const article = findEquivalent(items, group.name);
     const nombre = article ? article.nombre : group.name;
     const status = !article ? 'new' : article.lista === 'guardados' ? 'saved' : 'listed';
-    return { key, nombre, ...combineAmounts(group.amounts), status, article, tooLong: nombre.length > MAX_ARTICLE_NAME };
+    return { key, nombre, ...combineAmounts(group.amounts, { roundUp: true }), status, article, tooLong: nombre.length > MAX_ARTICLE_NAME };
   });
   const listed = (line) => line.status === 'listed';
   return [
