@@ -233,7 +233,7 @@
       <div class="article-amount">
         <label class="field">
           <span>Cantidad</span>
-          <input type="number" id="article-quantity" min="0" step="any" inputmode="decimal">
+          <input type="text" id="article-quantity" maxlength="10" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
         </label>
         <label class="field">
           <span>Unidad</span>
@@ -244,6 +244,11 @@
             <option value="gr">gr.</option>
             <option value="l">l.</option>
             <option value="ml">ml.</option>
+            <option value="docena">docena</option>
+            <option value="bote">bote</option>
+            <option value="lata">lata</option>
+            <option value="paquete">paquete</option>
+            <option value="botella">botella</option>
           </select>
         </label>
       </div>

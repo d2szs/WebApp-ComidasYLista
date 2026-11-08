@@ -1436,7 +1436,7 @@ function openArticleForm(item = null) {
   $('article-form-title').textContent = item ? 'Editar artículo' : 'Añadir artículo';
   $('article-delete').hidden = !item; // RF-43: "Añadir artículo" no tiene "Borrar"
   $('article-name').value = item ? item.nombre : '';
-  $('article-quantity').value = item && item.cantidad !== null ? String(item.cantidad) : '';
+  $('article-quantity').value = item && item.cantidad !== null ? amountFieldText(item.cantidad) : ''; // 013 C-5
   $('article-unit').value = (item && item.unidad) || '';
   clearArticleMarks();
   showArticleFormError('');
