@@ -1700,10 +1700,11 @@ function onReviewCancel(event) {
   if (!reviewState.saving) closeReview();
 }
 
-// Valores en bruto del formulario, para validateArticleForm (CL-7: badInput)
+// Valores en bruto del formulario, para validateArticleForm; original: la cantidad guardada del
+// artículo que se edita (013-unidades-fracciones C-5, D-4)
 function readArticleForm() {
-  const quantity = $('article-quantity');
-  return { name: $('article-name').value, quantity: quantity.value, badInput: quantity.validity.badInput, unit: $('article-unit').value };
+  const original = articleForm.item ? articleForm.item.cantidad : null;
+  return { name: $('article-name').value, quantity: $('article-quantity').value, original, unit: $('article-unit').value };
 }
 
 async function saveArticle(event) {
@@ -2464,8 +2465,10 @@ function readRows(dish) {
 }
 
 // Valores en bruto de una fila y de un plato, para la lógica (D-6)
+// original: la cantidad guardada con que se rellenó la fila, si la hay (013-unidades-fracciones D-4)
 function readRow(row) {
-  return { name: row.name.value, quantity: row.quantity.value, badInput: row.quantity.validity.badInput, unit: row.unit.value };
+  const original = row.row.originalQuantity ?? null;
+  return { name: row.name.value, quantity: row.quantity.value, original, unit: row.unit.value };
 }
 
 function readDish(dish) {

@@ -171,12 +171,71 @@ function dishTitle(type, index) {
   return index === 0 ? 'Primer plato' : 'Segundo plato';
 }
 
-// "0,5 kg.", "2 dientes" o '' sin cantidad; una unidad desconocida se muestra tal cual
-// (007-lista-compra RF-8, D-10; plural, D-15)
+// ===== Cantidades: escrita (texto) y mostrada (013-unidades-fracciones) =====
+
+// Fracciones reconocidas, como [numerador, denominador] (Definiciones)
+const KNOWN_FRACTIONS = [[1, 2], [1, 3], [1, 4], [3, 4], [2, 3]];
+// Caracteres de fracción que se leen como " n/d" (C-1, D-2)
+const FRACTION_CHARS = { '½': ' 1/2', '⅓': ' 1/3', '¼': ' 1/4', '¾': ' 3/4', '⅔': ' 2/3' };
+
+// Cantidad escrita → número mayor que 0, o null si no es una de las formas válidas
+// (entero, decimal con coma o punto, fracción, entero con fracción menor que 1) · C-1, C-2, D-2
+function parseAmountText(text) {
+  const normal = String(text)
+    .replace(/[½⅓¼¾⅔]/g, (char) => FRACTION_CHARS[char])
+    .replace(/^ +| +$/g, '') // solo el espacio normal: un tabulador o un espacio duro dan error
+    .replace(/ *\/ */g, '/')
+    .replace(/ {2,}/g, ' ');
+  let value = null;
+  let parts;
+  if (/^(\d+([.,]\d*)?|[.,]\d+)$/.test(normal)) {
+    value = Number(normal.replace(',', '.'));
+  } else if ((parts = normal.match(/^(\d+)\/(\d+)$/))) {
+    if (Number(parts[2]) > 0) value = Number(parts[1]) / Number(parts[2]);
+  } else if ((parts = normal.match(/^(\d+) (\d+)\/(\d+)$/))) {
+    const [num, den] = [Number(parts[2]), Number(parts[3])];
+    if (den > 0 && num < den) value = Number(parts[1]) + num / den;
+  }
+  return value !== null && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+// Número → "1 1/2" si la parte decimal coincide (a menos de 0,001) con una fracción reconocida;
+// si no, en formato español con 3 decimales como mucho (C-6, C-7, D-3)
+function amountText(cantidad, useGrouping) {
+  const value = Number(cantidad);
+  const whole = Math.floor(value);
+  const fraction = KNOWN_FRACTIONS.find(([num, den]) => Math.abs(value - whole - num / den) < 0.001);
+  const number = (n) => n.toLocaleString('es-ES', useGrouping ? {} : { useGrouping: false });
+  if (!fraction) return number(value);
+  const text = `${fraction[0]}/${fraction[1]}`;
+  return whole ? `${number(whole)} ${text}` : text;
+}
+
+// Cantidad mostrada: "1/2", "2 1/4", "0,375", "10.000" (C-6, C-7)
+function formatAmount(cantidad) {
+  return amountText(cantidad, true);
+}
+
+// Texto del campo al editar: como formatAmount, sin separador de miles (en el campo el punto
+// es decimal: "10.000" se leería como 10) · C-5, D-3
+function amountFieldText(cantidad) {
+  return amountText(cantidad, false);
+}
+
+// Cantidad de un campo: si el texto sigue siendo el del número guardado, ese número tal cual
+// (0,333 se ve "1/3" y sigue 0,333); si no, la cantidad escrita · C-5, D-4
+function amountFromField(text, original) {
+  if (original !== null && original !== undefined && text === amountFieldText(original)) return Number(original);
+  return parseAmountText(text);
+}
+
+// "1/2 kg.", "2 dientes" o '' sin cantidad; una unidad desconocida se muestra tal cual
+// (007-lista-compra RF-8, D-10). Las palabras, en plural solo con más de 1 tal como se ve
+// (013-unidades-fracciones C-8, D-3)
 function formatQuantity(cantidad, unidad) {
   if (cantidad === null || cantidad === undefined) return '';
-  const plural = Number(cantidad) !== 1 && UNIT_PLURALS[unidad];
-  return `${Number(cantidad).toLocaleString('es-ES')} ${plural || UNITS[unidad] || unidad}`;
+  const plural = roundQuantity(Number(cantidad)) > 1 && UNIT_PLURALS[unidad];
+  return `${formatAmount(cantidad)} ${plural || UNITS[unidad] || unidad}`;
 }
 
 // "Harina: 0,5 kg."; sin cantidad, solo el nombre ("Sal"); una unidad desconocida se muestra tal cual
@@ -204,11 +263,13 @@ function deleteConfirmText(meal) {
 
 // ===== Formulario: distribución de los platos y filas vacías =====
 // Las filas y los platos llegan en bruto desde el formulario (D-6):
-// row = { name, quantity, badInput, unit }; rawDish = { name, recipe, reference, rows }
+// row = { name, quantity, original, unit }: quantity es el texto del campo y original, el número
+// guardado con que se rellenó (o null) · 013-unidades-fracciones D-5
+// rawDish = { name, recipe, reference, rows }
 
-// Una fila vacía no se guarda; una cantidad no numérica (badInput) cuenta como dato
+// Una fila vacía no se guarda; una cantidad que no se puede leer cuenta como dato
 function isIngredientRowEmpty(row) {
-  return !row.name.trim() && row.quantity === '' && !row.badInput && !row.unit;
+  return !row.name.trim() && !row.quantity.trim() && !row.unit;
 }
 
 function dishHasData(rawDish) {
@@ -244,18 +305,13 @@ function cleanIngredientName(text) {
   return flattenLineBreaks(text).replace(/ {2,}/g, ' ').trim();
 }
 
-// Cantidad del campo en bruto: número mayor que 0, o null si está vacía, no es un número
-// (badInput, CL-5) o no es mayor que 0. La comparten ingrediente y artículo (007-lista-compra D-10)
-function parseQuantity(raw, badInput) {
-  const quantity = Number(raw);
-  return !badInput && raw !== '' && Number.isFinite(quantity) && quantity > 0 ? quantity : null;
-}
-
-// Cantidad y unidad, las dos o ninguna: { cantidad, unidad, invalid } con los campos que
-// fallan ('quantity', 'unit'). La comparten ingrediente y artículo (D-17)
-function checkAmount(quantity, badInput, unit, units) {
-  if (quantity === '' && !badInput && !unit) return { cantidad: null, unidad: null, invalid: [] };
-  const cantidad = parseQuantity(quantity, badInput);
+// Cantidad (texto del campo y número original, ver amountFromField) y unidad, las dos o
+// ninguna: { cantidad, unidad, invalid } con los campos que fallan ('quantity', 'unit'). La
+// comparten ingrediente y artículo (D-17). Solo espacios cuenta como vacía (013 D-5)
+function checkAmount(text, original, unit, units) {
+  const empty = !text.trim();
+  if (empty && !unit) return { cantidad: null, unidad: null, invalid: [] };
+  const cantidad = empty ? null : amountFromField(text, original);
   const invalid = [];
   if (cantidad === null) invalid.push('quantity');
   if (!units.includes(unit)) invalid.push('unit');
@@ -283,7 +339,7 @@ function validateDish(rawDish, index, nameMessage) {
   rawDish.rows.forEach((row, i) => {
     if (isIngredientRowEmpty(row)) return;
     const name = cleanIngredientName(row.name);
-    const amount = checkAmount(row.quantity, row.badInput, row.unit, INGREDIENT_UNITS);
+    const amount = checkAmount(row.quantity, row.original, row.unit, INGREDIENT_UNITS);
     if (!name) fail(INGREDIENT_ERROR, 'name', i);
     amount.invalid.forEach((field) => fail(INGREDIENT_ERROR, field, i));
     // Sin cantidad ni unidad: { nombre, cantidad: null, unidad: null } (D-16)
@@ -648,12 +704,12 @@ const ARTICLE_QUANTITY_ERROR = 'Indica la cantidad (mayor que 0) y la unidad, o 
 // Valida el formulario de artículo (añadir o editar, RF-29): { data } con las claves de la base de
 // datos, o { error, invalid } con los campos que fallan ('name', 'quantity', 'unit'). Con los dos
 // fallos se marcan todos y sale el mensaje del nombre (RF-16, RF-17, RF-18, CL-7)
-function validateArticleForm({ name, quantity, badInput, unit }) {
+function validateArticleForm({ name, quantity, original, unit }) {
   const invalid = [];
   const nombre = cleanIngredientName(name);
   if (!nombre) invalid.push('name');
 
-  const amount = checkAmount(quantity, badInput, unit, ARTICLE_UNITS);
+  const amount = checkAmount(quantity, original, unit, ARTICLE_UNITS);
   invalid.push(...amount.invalid);
 
   if (invalid.length) {
@@ -1388,7 +1444,8 @@ if (typeof module !== 'undefined') {
     initialPanelYear, panelArrows, monthPanel, chooseMonth,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
-    flattenLineBreaks, cleanIngredientName, parseQuantity, checkAmount, formatQuantity,
+    flattenLineBreaks, cleanIngredientName, checkAmount, formatQuantity,
+    parseAmountText, formatAmount, amountFieldText, amountFromField,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
