@@ -757,13 +757,41 @@ function shoppingLists(items) {
   };
 }
 
+// Alguna palabra del nombre empieza por lo escrito, sin mayúsculas ni acentos; lo escrito
+// vacío o solo con espacios no coincide con nada (RF-21; 014 Definiciones)
+function matchesTyped(name, typed) {
+  const key = articleKey(typed);
+  return key !== '' && (' ' + articleKey(name)).includes(' ' + key);
+}
+
 // Hasta MAX_SUGGESTIONS artículos de Guardados, en orden, con alguna palabra que empieza por
 // lo escrito (sin mayúsculas ni acentos); [] si lo escrito queda vacío (RF-21, RF-22)
 function suggestions(items, typed) {
-  const key = articleKey(typed);
-  if (!key) return [];
   return shoppingLists(items).saved
-    .filter((item) => (' ' + articleKey(item.nombre)).includes(' ' + key))
+    .filter((item) => matchesTyped(item.nombre, typed))
+    .slice(0, MAX_SUGGESTIONS);
+}
+
+// Sugerencias de una fila de ingrediente (014 Definiciones, C-1 a C-6; plan D-10, D-11): hasta
+// MAX_SUGGESTIONS nombres que coinciden con lo escrito, primero los artículos (las dos listas)
+// y luego los nombres de comidas que no son equivalentes a ningún artículo, cada grupo en
+// orden alfabético. No salen un nombre idéntico a lo escrito (sin los espacios de los extremos)
+// ni uno equivalente a otherNames (las demás filas del plato). Las exclusiones van antes del tope.
+function ingredientSuggestions({ items, mealNames, typed, otherNames }) {
+  const taken = new Set(otherNames.map(articleKey).filter((key) => key !== ''));
+  const articleNames = items.map((item) => item.nombre);
+  const seen = new Set(articleNames.map(articleKey));
+  const fromMeals = [];
+  for (const name of mealNames) {
+    const key = articleKey(name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    fromMeals.push(name);
+  }
+  const byName = (a, b) => ARTICLE_COLLATOR.compare(a, b);
+  const exact = typed.trim();
+  return [...articleNames.sort(byName), ...fromMeals.sort(byName)]
+    .filter((name) => matchesTyped(name, typed) && name !== exact && !taken.has(articleKey(name)))
     .slice(0, MAX_SUGGESTIONS);
 }
 
@@ -1477,7 +1505,7 @@ if (typeof module !== 'undefined') {
     sameSlot, activePeers, updatePeers, hasMatch, formMessage, needsReply,
     MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince, leavesSlot,
     MAX_ARTICLE_NAME, MAX_SUGGESTIONS, validateArticleForm, articleKey, compareArticles,
-    shoppingLists, suggestions,
+    shoppingLists, suggestions, matchesTyped, ingredientSuggestions,
     findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
     ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE, openingScreen,
