@@ -2400,6 +2400,7 @@ function addIngredient(dish, data = {}) {
   name.addEventListener('keydown', onNameKeydown);
   name.addEventListener('beforeinput', onNameBeforeInput);
   name.addEventListener('input', (event) => onNameInput(name, event));
+  setupIngredientSuggestions(row, name);
   nameObserver.observe(name);
   row.querySelector('.ingredient-remove').addEventListener('click', () => {
     nameObserver.unobserve(name);
@@ -2462,7 +2463,72 @@ function onNameInput(name, event) {
     name.setSelectionRange(selectionStart, selectionEnd);
   }
   fitNameHeight(name);
-  if (TYPED_BREAKS.includes(event.inputType)) submitFromName();
+  if (TYPED_BREAKS.includes(event.inputType)) return submitFromName();
+  renderIngredientSuggestions(name.closest('.ingredient')); // 014 C-1, C-2
+}
+
+// ===== Sugerencias de nombre en la fila de ingrediente (014) =====
+// Una lista por fila (D-14): el foco no sale del nombre; mousedown no lo quita (también al
+// tocar) y la elección va en click
+let ingredientListCount = 0;
+
+function setupIngredientSuggestions(row, name) {
+  const list = row.querySelector('.ingredient-suggestions');
+  list.id = `ingredient-suggestions-${++ingredientListCount}`;
+  name.setAttribute('aria-controls', list.id);
+  name.addEventListener('blur', () => closeIngredientSuggestions(row)); // C-8
+  list.addEventListener('mousedown', (event) => event.preventDefault());
+  list.addEventListener('click', (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option) pickIngredientSuggestion(row, option.textContent);
+  });
+}
+
+// Sugerencias para lo escrito en la fila, sin repetir las otras filas del mismo plato (C-5)
+function rowSuggestions(row) {
+  const others = [...row.parentElement.querySelectorAll('.ingredient')]
+    .filter((other) => other !== row)
+    .map((other) => other.querySelector('.ingredient-name').value);
+  return ingredientSuggestions({
+    items: listState.items, // D-10
+    mealNames: suggestionMealNames(), // D-8
+    typed: row.querySelector('.ingredient-name').value,
+    otherNames: others,
+  });
+}
+
+// Pinta la lista de la fila; sin sugerencias, oculta y sin hueco (C-1, C-2). Como texto (I-9)
+function renderIngredientSuggestions(row) {
+  const found = rowSuggestions(row);
+  const list = row.querySelector('.ingredient-suggestions');
+  list.replaceChildren(...found.map((text, index) => {
+    const option = el('li', 'suggestion', text);
+    option.id = `${list.id}-${index}`;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', 'false');
+    return option;
+  }));
+  list.hidden = found.length === 0;
+  row.querySelector('.ingredient-name').setAttribute('aria-expanded', String(found.length > 0));
+}
+
+function closeIngredientSuggestions(row) {
+  const list = row.querySelector('.ingredient-suggestions');
+  list.hidden = true;
+  list.replaceChildren();
+  const name = row.querySelector('.ingredient-name');
+  name.setAttribute('aria-expanded', 'false');
+  name.removeAttribute('aria-activedescendant');
+}
+
+// Elegir: el nombre pasa a ser la sugerencia, la lista se cierra y el cursor va a "Cant."
+// sin tocar cantidad ni unidad; no guarda nada (C-10, C-15)
+function pickIngredientSuggestion(row, text) {
+  const name = row.querySelector('.ingredient-name');
+  name.value = text;
+  fitNameHeight(name);
+  closeIngredientSuggestions(row);
+  row.querySelector('.ingredient-quantity').focus();
 }
 
 function fillDish(dish, data) {

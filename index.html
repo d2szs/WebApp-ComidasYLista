@@ -334,7 +334,7 @@
   <!-- Plantilla de una fila de ingrediente -->
   <template id="ingredient-template">
     <div class="ingredient">
-      <textarea class="ingredient-name" rows="1" placeholder="Ingrediente" aria-label="Ingrediente" enterkeyhint="go"></textarea>
+      <textarea class="ingredient-name" rows="1" placeholder="Ingrediente" aria-label="Ingrediente" enterkeyhint="go" role="combobox" aria-autocomplete="list" aria-expanded="false"></textarea>
       <input type="text" class="ingredient-quantity" placeholder="Cant." maxlength="10" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Cantidad">
       <select class="ingredient-unit" aria-label="Unidad">
         <option value="">—</option>
@@ -358,6 +358,7 @@
         <option value="sobre">sobre</option>
       </select>
       <button type="button" class="btn btn-icon ingredient-remove" aria-label="Quitar ingrediente">✕</button>
+      <ul class="suggestions ingredient-suggestions" role="listbox" aria-label="Sugerencias de ingrediente" hidden></ul>
     </div>
   </template>
 
