@@ -14,6 +14,7 @@
   --color-alert-bg: #fff4d6;
   --color-alert-text: #6b4a00;
   --color-today: #e8f3ef;
+  --color-marked: #d3e7df;                      /* 014 C-11: sugerencia marcada con ↑/↓ */
   --color-no-copy-bg: var(--color-border);      /* 011 RF-15: días fuera de la copia */
   --color-no-copy-text: var(--color-text-muted);
   --opacity-disabled: 0.6;                      /* controles desactivados (011 RF-10) */
@@ -660,6 +661,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
    oculta no queda hueco */
 .ingredient-suggestions { grid-column: 1 / -1; grid-row: 2; margin: 0; }
 .ingredient-suggestions .suggestion + .suggestion { border-top: 1px solid var(--color-border); }
+.ingredient-suggestions [aria-selected="true"] { background: var(--color-marked); } /* C-11 */
 /* Móvil: nombre y ✕ en la primera línea; cantidad y unidad, a medias, en la segunda */
 .ingredient-name {
   grid-column: 1 / -1;

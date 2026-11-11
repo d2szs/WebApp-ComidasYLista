@@ -2441,17 +2441,37 @@ function submitFromName() {
   if (!save.disabled) $('meal-form').requestSubmit(save);
 }
 
+// Con la lista visible, ↑/↓ marcan, Intro con marcada elige y Esc solo cierra la lista; si
+// no, Intro guarda como hoy. Con un teclado de composición, nada nuestro (014 C-11 a C-13, D-16)
 function onNameKeydown(event) {
-  if (event.key !== 'Enter' || event.isComposing) return;
-  event.preventDefault();
-  submitFromName();
+  if (event.isComposing) return;
+  const row = event.target.closest('.ingredient');
+  const open = !row.querySelector('.ingredient-suggestions').hidden;
+  if (open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    event.preventDefault();
+    moveIngredientMark(row, event.key === 'ArrowDown' ? 'down' : 'up');
+  } else if (open && event.key === 'Escape') {
+    event.preventDefault(); // anula el cierre del diálogo: la siguiente Esc sí lo cierra
+    closeIngredientSuggestions(row);
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    enterFromName(row);
+  }
 }
 
-// Teclados que no avisan de la tecla (keydown 229): el salto no entra y se envía (D-3)
+// Teclados que no avisan de la tecla (keydown 229): el salto no entra y se envía (D-3),
+// o elige la marcada (014 D-17)
 function onNameBeforeInput(event) {
   if (!TYPED_BREAKS.includes(event.inputType)) return;
   event.preventDefault();
-  submitFromName();
+  enterFromName(event.target.closest('.ingredient'));
+}
+
+// Intro: con una sugerencia marcada, la elige sin guardar; sin ninguna, guarda (014 C-12)
+function enterFromName(row) {
+  const marked = row.querySelector('.ingredient-suggestions [aria-selected="true"]');
+  if (marked) pickIngredientSuggestion(row, marked.textContent);
+  else submitFromName();
 }
 
 // Un salto pegado, o uno que no se pudo anular, pasa a espacio sin mover el cursor (CL-1)
@@ -2510,8 +2530,22 @@ function renderIngredientSuggestions(row) {
     return option;
   }));
   list.hidden = found.length === 0;
-  row.querySelector('.ingredient-name').setAttribute('aria-expanded', String(found.length > 0));
+  const name = row.querySelector('.ingredient-name');
+  name.setAttribute('aria-expanded', String(found.length > 0));
+  name.removeAttribute('aria-activedescendant'); // lista nueva: ninguna marcada
   if (grew) list.scrollIntoView({ block: 'nearest' }); // C-26 (D-21): lo justo; si se ve, nada
+}
+
+// ↑/↓: marca la siguiente o la anterior (D-12) y la deja a la vista (014 C-11, D-14)
+function moveIngredientMark(row, key) {
+  const options = [...row.querySelectorAll('.ingredient-suggestions [role="option"]')];
+  const current = options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+  const next = moveMark(current, options.length, key);
+  options.forEach((option, index) => option.setAttribute('aria-selected', String(index === next)));
+  const name = row.querySelector('.ingredient-name');
+  if (next < 0) return name.removeAttribute('aria-activedescendant');
+  name.setAttribute('aria-activedescendant', options[next].id);
+  options[next].scrollIntoView({ block: 'nearest' });
 }
 
 function closeIngredientSuggestions(row) {
