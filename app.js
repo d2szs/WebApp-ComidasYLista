@@ -2501,6 +2501,7 @@ function rowSuggestions(row) {
 function renderIngredientSuggestions(row) {
   const found = rowSuggestions(row);
   const list = row.querySelector('.ingredient-suggestions');
+  const grew = found.length > 0 && (list.hidden || found.length !== list.children.length);
   list.replaceChildren(...found.map((text, index) => {
     const option = el('li', 'suggestion', text);
     option.id = `${list.id}-${index}`;
@@ -2510,6 +2511,7 @@ function renderIngredientSuggestions(row) {
   }));
   list.hidden = found.length === 0;
   row.querySelector('.ingredient-name').setAttribute('aria-expanded', String(found.length > 0));
+  if (grew) list.scrollIntoView({ block: 'nearest' }); // C-26 (D-21): lo justo; si se ve, nada
 }
 
 function closeIngredientSuggestions(row) {

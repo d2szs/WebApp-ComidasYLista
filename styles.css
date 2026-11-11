@@ -655,8 +655,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   margin-bottom: var(--ingredient-row-gap);
 }
 .ingredient > * { min-width: 0; }
-/* Sugerencias de nombre (014 C-1): bajo la fila, a todo el ancho, con el estilo de Compra */
-.ingredient-suggestions { grid-column: 1 / -1; margin: 0; }
+/* Sugerencias de nombre (014 C-1, D-15): en móvil, entre el nombre y la cantidad, a todo el
+   ancho; cantidad y unidad se colocan solas en la fila libre siguiente, así que con la lista
+   oculta no queda hueco */
+.ingredient-suggestions { grid-column: 1 / -1; grid-row: 2; margin: 0; }
 .ingredient-suggestions .suggestion + .suggestion { border-top: 1px solid var(--color-border); }
 /* Móvil: nombre y ✕ en la primera línea; cantidad y unidad, a medias, en la segunda */
 .ingredient-name {
@@ -789,4 +791,5 @@ textarea.ingredient-name {
   .ingredient-quantity { grid-column: 2; grid-row: 1; }
   .ingredient-unit { grid-column: 3; grid-row: 1; }
   .ingredient-remove { grid-column: 4; grid-row: 1; justify-self: auto; align-self: auto; width: auto; }
+  .ingredient-suggestions { grid-row: 3; margin-top: var(--ingredient-gap); } /* bajo la fila entera */
 }
