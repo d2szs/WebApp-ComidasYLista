@@ -18,7 +18,8 @@ const state = {
 };
 // 011: copia para ver sin red; saveId descarta guardados adelantados por otro (D-3);
 // retryTimer y probing, el reintento de cada 30 s (RF-16, D-6)
-const copyState = { copy: null, saveTimer: null, saveId: 0, retryTimer: null, probing: false, rerun: false };
+const copyState = { copy: null, saveTimer: null, saveId: 0, retryTimer: null, probing: false, rerun: false,
+  mealNames: null }; // 014 D-7: nombres de comidas de la última carga buena (null: aún ninguna)
 
 let panelYear = null;   // año que muestra el panel de meses (006 RF-2, RF-6)
 let panelPressedOutside = false; // la pulsación empezó fuera del panel (006 D-1)
@@ -376,6 +377,7 @@ function applySession(session, { pageLoad = false } = {}) {
     stopQueueRetry(); // 012 RF-15 (D-8): la cola se queda en el dispositivo
     strikeQueueState.errorShown = false;
     clearTimeout(copyState.saveTimer);
+    copyState.mealNames = null; // 014 D-8: se olvidan; la copia se conserva
     copyState.saveId++; // 011: descarta un guardado en curso de la sesión anterior
     onNewPassword = false;
     closeDialogs(); // CL-13: antes de quitar el canal, para anunciar el formulario cerrado
@@ -625,6 +627,11 @@ function listQuery() {
   return client.from('articulos').select('id, nombre, cantidad, unidad, lista, tachado');
 }
 
+// Nombres de comidas para sugerir: un text[] de la base de datos (014 D-2, D-6)
+function mealNamesQuery() {
+  return client.rpc('nombres_ingredientes');
+}
+
 // ===== Copia para ver sin red (011 RF-1, RF-2, RF-3, CL-1, RNF-1) =====
 // Agrupa disparadores seguidos (entrar, primer plano, red, tiempo real) en un guardado (D-3)
 function scheduleCopySave() {
@@ -645,10 +652,22 @@ async function saveCopy() {
   const id = ++copyState.saveId;
   const { from, to } = copyRange(getToday());
   const savedAt = Date.now(); // D-2: justo antes de las descargas
-  const [meals, list] = await Promise.all([timedQuery(mealsQuery(from, to)), timedQuery(listQuery())]);
+  const [meals, list, names] = await Promise.all([
+    timedQuery(mealsQuery(from, to)), timedQuery(listQuery()), timedQuery(mealNamesQuery())]);
   if (id !== copyState.saveId || !sessionActive) return;
+  const mealNames = names.error ? null : cleanMealNames(names.data);
+  if (mealNames) copyState.mealNames = mealNames; // 014 D-7: aunque fallen comidas o lista
   if (meals.error || list.error) return; // CL-1: se queda la anterior, sin aviso
-  writeCopy(buildCopy({ savedAt, from, to, meals: meals.data, articles: list.data }));
+  // 014 C-21: sin nombres nuevos, los de memoria o los de la copia anterior, nunca []
+  const keptNames = copyState.mealNames ?? cleanMealNames(readSavedCopy()?.mealNames) ?? undefined;
+  writeCopy(buildCopy({ savedAt, from, to, meals: meals.data, articles: list.data, mealNames: keptNames }));
+}
+
+// Nombres de comidas para sugerir (014 D-8): en modo copia, los de la copia en pantalla; fuera,
+// los de la última carga buena o, si aún no hay, los de la copia guardada; sin nada, []
+function suggestionMealNames() {
+  if (state.copyMode) return copyMealNames(copyState.copy);
+  return copyState.mealNames ?? copyMealNames(readSavedCopy());
 }
 
 // Una sola escritura; no pisa una copia más nueva de otra pestaña (D-2). Si no cabe, nada (CL-1)
