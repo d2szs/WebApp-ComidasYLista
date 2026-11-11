@@ -656,7 +656,10 @@ async function saveCopy() {
     timedQuery(mealsQuery(from, to)), timedQuery(listQuery()), timedQuery(mealNamesQuery())]);
   if (id !== copyState.saveId || !sessionActive) return;
   const mealNames = names.error ? null : cleanMealNames(names.data);
-  if (mealNames) copyState.mealNames = mealNames; // 014 D-7: aunque fallen comidas o lista
+  if (mealNames) {
+    copyState.mealNames = mealNames; // 014 D-7: aunque fallen comidas o lista
+    refreshOpenIngredientSuggestions(); // 014 C-17
+  }
   if (meals.error || list.error) return; // CL-1: se queda la anterior, sin aviso
   // 014 C-21: sin nombres nuevos, los de memoria o los de la copia anterior, nunca []
   const keptNames = copyState.mealNames ?? cleanMealNames(readSavedCopy()?.mealNames) ?? undefined;
@@ -980,6 +983,7 @@ function renderShopping() {
   $('list-loading').hidden = !loading; // RF-11, D-13
   $('list-content').hidden = loading;
   renderSuggestions(); // cada recarga recalcula las sugerencias de lo escrito (RF-22, CL-16, CL-18)
+  refreshOpenIngredientSuggestions(); // 014 C-17, C-19, C-22: también las del formulario
   // 009 RF-33: hasta la primera carga correcta; v4.1: sin red, también en modo copia (D-14)
   $('ingredients-button').disabled = loading || state.offline;
   if (loading) return;
@@ -2536,16 +2540,43 @@ function renderIngredientSuggestions(row) {
   if (grew) list.scrollIntoView({ block: 'nearest' }); // C-26 (D-21): lo justo; si se ve, nada
 }
 
-// ↑/↓: marca la siguiente o la anterior (D-12) y la deja a la vista (014 C-11, D-14)
-function moveIngredientMark(row, key) {
-  const options = [...row.querySelectorAll('.ingredient-suggestions [role="option"]')];
-  const current = options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
-  const next = moveMark(current, options.length, key);
-  options.forEach((option, index) => option.setAttribute('aria-selected', String(index === next)));
+function rowOptions(row) {
+  return [...row.querySelectorAll('.ingredient-suggestions [role="option"]')];
+}
+
+function markedIndex(options) {
+  return options.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+}
+
+// Marca la opción index (-1: ninguna) y la deja a la vista (014 C-11, D-14)
+function setIngredientMark(row, index) {
+  const options = rowOptions(row);
+  options.forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
   const name = row.querySelector('.ingredient-name');
-  if (next < 0) return name.removeAttribute('aria-activedescendant');
-  name.setAttribute('aria-activedescendant', options[next].id);
-  options[next].scrollIntoView({ block: 'nearest' });
+  if (index < 0) return name.removeAttribute('aria-activedescendant');
+  name.setAttribute('aria-activedescendant', options[index].id);
+  options[index].scrollIntoView({ block: 'nearest' });
+}
+
+// ↑/↓: marca la siguiente o la anterior, sin dar la vuelta (D-12)
+function moveIngredientMark(row, key) {
+  const options = rowOptions(row);
+  setIngredientMark(row, moveMark(markedIndex(options), options.length, key));
+}
+
+// Tras una carga o al entrar o salir del modo copia, la lista de la fila con el cursor se
+// recalcula con lo escrito (sale aunque antes no hubiera ninguna), sin cerrar el formulario;
+// la marcada sigue si sigue en la lista (014 C-17, C-19, C-22, D-13)
+function refreshOpenIngredientSuggestions() {
+  const name = document.activeElement;
+  if (!name?.matches('#meal-dialog[open] .ingredient-name')) return;
+  const row = name.closest('.ingredient');
+  const before = rowOptions(row);
+  const oldNames = before.map((option) => option.textContent);
+  renderIngredientSuggestions(row);
+  const newNames = rowOptions(row).map((option) => option.textContent);
+  const kept = keptMark(oldNames, markedIndex(before), newNames);
+  if (kept >= 0) setIngredientMark(row, kept);
 }
 
 function closeIngredientSuggestions(row) {
