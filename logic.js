@@ -772,6 +772,21 @@ function suggestions(items, typed) {
     .slice(0, MAX_SUGGESTIONS);
 }
 
+// Marca de las sugerencias con ↑/↓ (014 C-11, D-12): index -1 es ninguna; ↓ marca la
+// siguiente (sin marcada, la primera; en la última se queda), ↑ la anterior (desde la primera,
+// ninguna; sin marcada, nada)
+function moveMark(index, count, key) {
+  if (count === 0) return -1;
+  const current = Math.min(index, count - 1);
+  if (key === 'down') return Math.min(current + 1, count - 1);
+  return current <= 0 ? -1 : current - 1;
+}
+
+// Marca tras recalcular la lista: la misma sugerencia si sigue (por nombre), si no ninguna (014 D-13)
+function keptMark(oldList, oldIndex, newList) {
+  return oldIndex < 0 ? -1 : newList.indexOf(oldList[oldIndex]);
+}
+
 // Sugerencias de una fila de ingrediente (014 Definiciones, C-1 a C-6; plan D-10, D-11): hasta
 // MAX_SUGGESTIONS nombres que coinciden con lo escrito, primero los artículos (las dos listas)
 // y luego los nombres de comidas que no son equivalentes a ningún artículo, cada grupo en
@@ -1263,9 +1278,24 @@ function copyRange(today) {
   return { from: addDays(monday, -28), to: addDays(monday, 20) };
 }
 
-// Copia lista para guardar: fechas en 'aaaa-mm-dd' y savedAt en milisegundos (RF-2)
-function buildCopy({ savedAt, from, to, meals, articles }) {
-  return { format: COPY_FORMAT, savedAt, from: toISODate(from), to: toISODate(to), meals, articles };
+// Copia lista para guardar: fechas en 'aaaa-mm-dd' y savedAt en milisegundos (RF-2); con
+// mealNames, los nombres de comidas para sugerir, campo opcional del mismo formato (014 D-9)
+function buildCopy({ savedAt, from, to, meals, articles, mealNames }) {
+  const copy = { format: COPY_FORMAT, savedAt, from: toISODate(from), to: toISODate(to), meals, articles };
+  return mealNames === undefined ? copy : { ...copy, mealNames };
+}
+
+// Nombres de comidas de la respuesta de nombres_ingredientes: un array de textos, sin los
+// vacíos; null si no tiene esa forma (entonces se quedan los anteriores, 014 C-21, D-7)
+function cleanMealNames(value) {
+  if (!Array.isArray(value) || !value.every((name) => typeof name === 'string')) return null;
+  return value.filter((name) => name.trim() !== '');
+}
+
+// Nombres de comidas de una copia; [] si no hay copia o es de una versión anterior o el campo
+// está mal (014 C-20, D-9)
+function copyMealNames(copy) {
+  return cleanMealNames(copy?.mealNames) ?? [];
 }
 
 // Texto guardado → copia, o null si falta o no se sabe leer: cuenta como sin copia (CL-2)
@@ -1505,7 +1535,7 @@ if (typeof module !== 'undefined') {
     sameSlot, activePeers, updatePeers, hasMatch, formMessage, needsReply,
     MATCH_MESSAGE, SAVED_ELSEWHERE_MESSAGE, matchNotice, saveOutcome, savedSince, leavesSlot,
     MAX_ARTICLE_NAME, MAX_SUGGESTIONS, validateArticleForm, articleKey, compareArticles,
-    shoppingLists, suggestions, matchesTyped, ingredientSuggestions,
+    shoppingLists, suggestions, matchesTyped, ingredientSuggestions, moveMark, keptMark,
     findEquivalent, articleExistsMessage, articleDeleteText, finishConfirmText, addOutcome,
     articleErrorMessage, articleSaveErrorMessage, ARTICLE_UNEXPECTED_MESSAGE, ARTICLE_GONE_MESSAGE,
     ARTICLE_CHANGED_MESSAGE, NO_STRUCK_MESSAGE, openingScreen,
@@ -1519,6 +1549,7 @@ if (typeof module !== 'undefined') {
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     SAME_VERSION_SECONDS,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
+    cleanMealNames, copyMealNames,
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
     retryOutcome, logOutOutcome,
     STRIKE_QUEUE_KEY, STRIKE_QUEUE_FORMAT, buildStrikeQueue, parseStrikeQueue,
