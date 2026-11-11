@@ -2456,6 +2456,7 @@ function onNameKeydown(event) {
     moveIngredientMark(row, event.key === 'ArrowDown' ? 'down' : 'up');
   } else if (open && event.key === 'Escape') {
     event.preventDefault(); // anula el cierre del diálogo: la siguiente Esc sí lo cierra
+    row.typedName = false; // cerrada a propósito: una carga no la vuelve a abrir
     closeIngredientSuggestions(row);
   } else if (event.key === 'Enter') {
     event.preventDefault();
@@ -2488,7 +2489,9 @@ function onNameInput(name, event) {
   }
   fitNameHeight(name);
   if (TYPED_BREAKS.includes(event.inputType)) return submitFromName();
-  renderIngredientSuggestions(name.closest('.ingredient')); // 014 C-1, C-2
+  const row = name.closest('.ingredient');
+  row.typedName = true; // desde aquí, las cargas recalculan su lista (014 C-8, C-22)
+  renderIngredientSuggestions(row); // 014 C-1, C-2
 }
 
 // ===== Sugerencias de nombre en la fila de ingrediente (014) =====
@@ -2500,7 +2503,10 @@ function setupIngredientSuggestions(row, name) {
   const list = row.querySelector('.ingredient-suggestions');
   list.id = `ingredient-suggestions-${++ingredientListCount}`;
   name.setAttribute('aria-controls', list.id);
-  name.addEventListener('blur', () => closeIngredientSuggestions(row)); // C-8
+  name.addEventListener('blur', () => { // C-8: al salir se cierra y se olvida lo escrito
+    row.typedName = false;
+    closeIngredientSuggestions(row);
+  });
   list.addEventListener('mousedown', (event) => event.preventDefault());
   list.addEventListener('click', (event) => {
     const option = event.target.closest('[role="option"]');
@@ -2566,11 +2572,13 @@ function moveIngredientMark(row, key) {
 
 // Tras una carga o al entrar o salir del modo copia, la lista de la fila con el cursor se
 // recalcula con lo escrito (sale aunque antes no hubiera ninguna), sin cerrar el formulario;
-// la marcada sigue si sigue en la lista (014 C-17, C-19, C-22, D-13)
+// la marcada sigue si sigue en la lista. Solo si en ella se ha escrito o borrado desde que
+// tiene el cursor: si no, ninguna lista (014 C-8, C-9, C-17, C-19, C-22, D-13)
 function refreshOpenIngredientSuggestions() {
   const name = document.activeElement;
   if (!name?.matches('#meal-dialog[open] .ingredient-name')) return;
   const row = name.closest('.ingredient');
+  if (!row.typedName) return;
   const before = rowOptions(row);
   const oldNames = before.map((option) => option.textContent);
   renderIngredientSuggestions(row);
