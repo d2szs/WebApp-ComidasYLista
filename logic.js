@@ -1199,6 +1199,45 @@ function addChanges(lines, choices, items) {
   return changes;
 }
 
+// ===== 017-cantidad-mezclada: cantidad escrita en las líneas con unidades mezcladas =====
+
+// ¿Lleva la línea el campo "Comprar"? Unidades mezcladas y nombre que cabe en la lista (C-1)
+function isMixedLine(line) {
+  return Boolean(line.detail) && !line.tooLong;
+}
+
+// Lo escrito ({ text, unit }, o nada) comprobado como en "Añadir artículo" (D-2)
+function typedAmount(entry) {
+  return checkAmount(entry?.text ?? '', null, entry?.unit ?? '', ARTICLE_UNITS);
+}
+
+// Líneas con la cantidad escrita: solo las mezcladas con lo escrito válido; si no, como están (C-2, C-3, D-3)
+function typedLines(lines, typed) {
+  return lines.map((line) => {
+    if (!isMixedLine(line)) return line;
+    const amount = typedAmount(typed.get(line.key));
+    if (amount.invalid.length || amount.cantidad === null) return line;
+    return { ...line, cantidad: amount.cantidad, unidad: amount.unidad };
+  });
+}
+
+// Keys de las líneas marcadas (nuevas o de Guardados) con lo escrito a medias o no válido,
+// en el orden de las líneas; las desmarcadas y las ya en la lista no cuentan (C-7, C-8)
+function typedErrors(lines, choices, typed) {
+  return lines
+    .filter((line) => isMixedLine(line) && line.status !== 'listed' && choices.get(line.key) === 'on')
+    .filter((line) => typedAmount(typed.get(line.key)).invalid.length > 0)
+    .map((line) => line.key);
+}
+
+// Elección tras cambiar lo escrito: "Sumar" o "Cambiar a" que dejan de ofrecerse → "Dejar" (C-5)
+function choiceAfterTyping(line, choice, entry) {
+  if (line.status !== 'listed' || (choice !== 'sum' && choice !== 'change')) return choice;
+  const [typedLine] = typedLines([line], new Map([[line.key, entry]]));
+  const options = lineOptions(typedLine);
+  return (choice === 'sum' ? options.sum : options.change) ? choice : 'keep';
+}
+
 // Error de la revisión: action 'load' (comidas del periodo) o 'add' (Añadir), con la causa;
 // un 23505 no habla de comidas (RF-21, RF-22)
 function ingredientsErrorMessage(action, error, online) {
@@ -1553,7 +1592,7 @@ if (typeof module !== 'undefined') {
     periodLines, lineOptions,
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
-    ingredientsErrorMessage,
+    ingredientsErrorMessage, typedAmount, typedLines, typedErrors, choiceAfterTyping,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     SAME_VERSION_SECONDS,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
