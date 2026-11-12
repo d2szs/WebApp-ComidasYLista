@@ -1088,10 +1088,11 @@ function openingChoice(line) {
   return line.tooLong ? 'off' : 'on';
 }
 
-// Elecciones de las líneas nuevas a partir de las anteriores, por key (RF-23, D-9, D-11)
-function mergeChoices(previous, previousLines, lines) {
+// Elecciones de las líneas nuevas a partir de las anteriores, por key; typed: lo escrito en
+// las mezcladas, que decide si se siguen ofreciendo Sumar y Cambiar a (RF-23, D-9, D-11; 017 C-10)
+function mergeChoices(previous, previousLines, lines, typed = new Map()) {
   const choices = new Map();
-  for (const line of lines) {
+  for (const line of typedLines(lines, typed)) {
     const before = previousLines.find((l) => l.key === line.key);
     const choice = before ? previous.get(line.key) : undefined;
     let next = openingChoice(line);
@@ -1115,15 +1116,27 @@ function linesInView(review) {
   return !periodError(review.from, review.to) && !review.loadError && !review.loading && !review.noIngredients;
 }
 
-// Líneas, elecciones y noIngredients tras recalcular: nada cambia mientras se añade ni sin
-// líneas a la vista; un periodo sin ingredientes no pierde lo elegido (RF-17, RF-20, RF-23, D-11)
+// Líneas, elecciones, noIngredients, lo escrito (typed) y sus errores (typedErrorKeys) tras
+// recalcular: nada cambia mientras se añade ni sin líneas a la vista; un periodo sin
+// ingredientes no pierde lo elegido; lo escrito y su error siguen solo en las líneas que
+// siguen mezcladas (RF-17, RF-20, RF-23, D-11; 017 C-10, C-11, D-1)
 function recalcReview(review, newLines) {
   const { lines, choices, noIngredients } = review;
+  const typed = review.typed ?? new Map();
+  const typedErrorKeys = review.typedErrorKeys ?? [];
   if (review.saving || periodError(review.from, review.to) || review.loadError || review.loading) {
-    return { lines, choices, noIngredients };
+    return { lines, choices, noIngredients, typed, typedErrorKeys };
   }
-  if (newLines.length === 0) return { lines, choices, noIngredients: true };
-  return { lines: newLines, choices: mergeChoices(choices, lines, newLines), noIngredients: false };
+  if (newLines.length === 0) return { lines, choices, noIngredients: true, typed, typedErrorKeys };
+  const mixed = new Set(newLines.filter(isMixedLine).map((line) => line.key));
+  const newTyped = new Map([...typed].filter(([key]) => mixed.has(key)));
+  return {
+    lines: newLines,
+    choices: mergeChoices(choices, lines, newLines, newTyped),
+    noIngredients: false,
+    typed: newTyped,
+    typedErrorKeys: typedErrorKeys.filter((key) => mixed.has(key)),
+  };
 }
 
 // "Añadir (n)": marcadas (sin nombre demasiado largo) más las de Sumar o Cambiar a (RF-9, RF-12, CL-4)
@@ -1230,9 +1243,14 @@ function typedErrors(lines, choices, typed) {
     .map((line) => line.key);
 }
 
-// Elección tras cambiar lo escrito: "Sumar" o "Cambiar a" que dejan de ofrecerse → "Dejar" (C-5)
+// Elección tras cambiar lo escrito: en una nueva o de Guardados, escribir algo la marca (C-6);
+// en una ya en la lista, "Sumar" o "Cambiar a" que dejan de ofrecerse → "Dejar" (C-5)
 function choiceAfterTyping(line, choice, entry) {
-  if (line.status !== 'listed' || (choice !== 'sum' && choice !== 'change')) return choice;
+  if (line.status !== 'listed') {
+    const written = Boolean(entry?.text?.trim() || entry?.unit);
+    return choice === 'off' && written ? 'on' : choice;
+  }
+  if (choice !== 'sum' && choice !== 'change') return choice;
   const [typedLine] = typedLines([line], new Map([[line.key, entry]]));
   const options = lineOptions(typedLine);
   return (choice === 'sum' ? options.sum : options.change) ? choice : 'keep';
