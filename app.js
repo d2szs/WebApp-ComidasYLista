@@ -64,6 +64,7 @@ function initialReviewState(requestId = 0) {
   return {
     open: false, from: null, to: null, meals: [], lines: [], choices: new Map(), loading: false,
     loadError: null, noIngredients: false, saveError: null, saving: false, reloadPending: false, requestId,
+    typed: new Map(), typedErrorKeys: [], // 017: lo escrito en "Comprar" y las líneas con error (D-1)
   };
 }
 let reviewState = initialReviewState();
@@ -1647,6 +1648,8 @@ function onPeriodFieldChange() {
     reviewState[side] = { date: $(PERIOD_FIELDS[side].date).value, type: $(PERIOD_FIELDS[side].type).value };
   }
   reviewState.saveError = null;
+  reviewState.typed = new Map(); // 017 C-9, C-12: otro periodo, campos vacíos y sin errores
+  reviewState.typedErrorKeys = [];
   loadReviewMeals({ showLoading: true });
 }
 
@@ -1717,6 +1720,11 @@ function renderReview() {
   $('ingredients-message').hidden = !view.message;
   $('ingredients-retry').hidden = view.mode !== 'error'; // RF-21
   renderReviewLines(view);
+  renderReviewButtons(view);
+}
+
+// "Añadir (n)", periodo y "Cancelar" según lo que se ve (RF-12, RF-17)
+function renderReviewButtons(view) {
   $('ingredients-add').textContent = addButtonText(view.count);
   $('ingredients-add').disabled = view.addDisabled;
   for (const side of ['from', 'to']) { // RF-17: mientras se añade
@@ -1726,19 +1734,25 @@ function renderReview() {
   $('ingredients-cancel').disabled = view.controlsDisabled;
 }
 
-// Vuelve a pintar las líneas conservando el desplazamiento y el foco de la casilla u opción
+// Vuelve a pintar las líneas conservando el desplazamiento y el foco de la casilla, la opción
+// o el campo "Comprar", con el cursor donde estaba (017 C-10)
 function renderReviewLines(view) {
   const list = $('ingredients-lines');
   const active = list.contains(document.activeElement) ? document.activeElement : null;
-  const focus = active && { key: active.dataset.key, value: active.value };
+  const focus = active && {
+    key: active.dataset.key, value: active.value, field: active.dataset.field,
+    start: active.selectionStart, end: active.selectionEnd,
+  };
   const scroll = list.scrollTop;
   list.replaceChildren(...view.lines.map((line, index) => reviewLineElement(line, index, view.controlsDisabled)));
   list.hidden = view.lines.length === 0;
   list.scrollTop = scroll;
   if (!focus) return;
-  const again = [...list.querySelectorAll('input')]
-    .find((input) => input.dataset.key === focus.key && input.value === focus.value);
-  if (again) again.focus({ preventScroll: true });
+  const again = [...list.querySelectorAll('input, select')].find((input) => input.dataset.key === focus.key
+    && (focus.field ? input.dataset.field === focus.field : input.value === focus.value));
+  if (!again || again.disabled) return;
+  again.focus({ preventScroll: true });
+  if (focus.field === 'text' && focus.start !== null) again.setSelectionRange(focus.start, focus.end);
 }
 
 // Una línea: casilla (nueva o en Guardados), nombre, cantidad, detalle o estado y, si ya está
@@ -1767,10 +1781,19 @@ function reviewLineElement(line, index, disabled) {
     row.append(reviewText('review-meta', LINE_TOO_LONG_MESSAGE));
     return row;
   }
+  if (line.detail) row.append(...reviewAmountElements(line, disabled)); // 017 C-1, C-7
   if (line.status === 'saved') row.append(reviewText('review-meta', SAVED_LINE_TEXT));
-  const options = lineOptions(line);
-  if (!options) return row;
-  row.append(reviewText('review-meta', options.listed));
+  if (line.status !== 'listed') return row;
+  row.append(reviewText('review-meta', lineOptions(line).listed));
+  const group = reviewOptionsElement(line, index, disabled);
+  if (group) row.append(group);
+  return row;
+}
+
+// Opciones de una línea ya en la lista, con lo escrito en "Comprar" si es válido (017 C-4, C-5, D-3)
+function reviewOptionsElement(line, index, disabled) {
+  const choice = reviewState.choices.get(line.key);
+  const options = lineOptions(typedLines([line], reviewState.typed)[0]);
   const group = document.createElement('div');
   group.className = 'review-options';
   group.setAttribute('role', 'radiogroup');
@@ -1789,8 +1812,41 @@ function reviewLineElement(line, index, disabled) {
     label.append(radio, reviewText('', options[value]));
     group.append(label);
   }
-  row.append(group);
-  return row;
+  return group;
+}
+
+// "Comprar:" con su cantidad y unidad (como en "Añadir artículo") y, si tiene error, el mensaje
+// (017 C-1, C-7, D-2)
+function reviewAmountElements(line, disabled) {
+  const entry = reviewState.typed.get(line.key) || { text: '', unit: '' };
+  const hasError = reviewState.typedErrorKeys.includes(line.key);
+  const invalid = hasError ? typedAmount(entry).invalid : [];
+  const box = document.createElement('div');
+  box.className = 'review-amount';
+  const quantity = document.createElement('input');
+  quantity.type = 'text';
+  quantity.maxLength = 10;
+  quantity.autocomplete = 'off';
+  quantity.setAttribute('autocapitalize', 'off');
+  quantity.setAttribute('autocorrect', 'off');
+  quantity.spellcheck = false;
+  quantity.value = entry.text;
+  quantity.setAttribute('aria-label', `Cantidad a comprar de ${line.nombre}`);
+  const unit = $('article-unit').cloneNode(true); // mismas unidades que "Añadir artículo"
+  unit.removeAttribute('id');
+  unit.value = entry.unit;
+  unit.setAttribute('aria-label', `Unidad a comprar de ${line.nombre}`);
+  for (const [input, field] of [[quantity, 'text'], [unit, 'unit']]) {
+    input.dataset.key = line.key;
+    input.dataset.field = field;
+    input.disabled = disabled; // C-13: solo mientras se añade
+    input.classList.toggle('invalid-field', invalid.includes(field === 'text' ? 'quantity' : 'unit'));
+  }
+  box.append(reviewText('review-amount-label', 'Comprar:'), quantity, unit);
+  if (!hasError) return [box];
+  const error = reviewText('review-error error-message', ARTICLE_QUANTITY_ERROR);
+  error.setAttribute('role', 'alert');
+  return [box, error];
 }
 
 function reviewText(className, text) {
@@ -1803,10 +1859,54 @@ function reviewText(className, text) {
 // Casilla u opción tocada: cambia lo elegido y vuelve a pintar (RF-9, RF-12)
 function onReviewLineChange(event) {
   const input = event.target;
-  if (!input.dataset.key) return;
+  if (!input.dataset.key || input.dataset.field) return; // "Comprar" va por onReviewAmountInput
+
   if (input.type === 'checkbox') reviewState.choices.set(input.dataset.key, input.checked ? 'on' : 'off');
   else if (input.checked) reviewState.choices.set(input.dataset.key, input.value);
   renderReview();
+}
+
+// Escribir en "Comprar": guarda lo escrito, marca la casilla o deja "Dejar" y quita el error de
+// la línea; pinta solo esa línea sin sustituir el campo, para no perder el foco ni el teclado
+// (017 C-5, C-6, C-9, D-1)
+function onReviewAmountInput(event) {
+  const input = event.target;
+  const key = input.dataset.key;
+  if (!key || !input.dataset.field) return;
+  const row = input.closest('.review-line');
+  const line = reviewState.lines.find((l) => l.key === key);
+  if (!line || !row) return;
+  const entry = {
+    text: row.querySelector('[data-field="text"]').value,
+    unit: row.querySelector('[data-field="unit"]').value,
+  };
+  reviewState.typed.set(key, entry);
+  reviewState.choices.set(key, choiceAfterTyping(line, reviewState.choices.get(key), entry));
+  reviewState.typedErrorKeys = reviewState.typedErrorKeys.filter((k) => k !== key);
+  const view = reviewView({ ...reviewState, offline: state.offline });
+  const box = row.querySelector('input[type="checkbox"]');
+  if (box) box.checked = reviewState.choices.get(key) === 'on';
+  row.querySelector('.review-error')?.remove();
+  row.querySelectorAll('.review-amount .invalid-field').forEach((el) => el.classList.remove('invalid-field'));
+  const oldGroup = row.querySelector('.review-options');
+  if (line.status === 'listed') {
+    const index = reviewState.lines.indexOf(line);
+    const group = reviewOptionsElement(line, index, view.controlsDisabled);
+    if (oldGroup) oldGroup.replaceWith(group);
+    else row.append(group);
+  }
+  renderReviewButtons(view);
+}
+
+// Errores de "Comprar" al pulsar "Añadir (n)": los marca y lleva el cursor al primer campo que
+// falla de la primera línea con error; true si hay alguno (017 C-7, C-9)
+function showTypedErrors() {
+  reviewState.typedErrorKeys = typedErrors(reviewState.lines, reviewState.choices, reviewState.typed);
+  if (reviewState.typedErrorKeys.length === 0) return false;
+  renderReview();
+  const field = $('ingredients-lines').querySelector('.review-amount .invalid-field');
+  if (field) field.focus();
+  return true;
 }
 
 // "Añadir (n)": aplica lo elegido al pulsar entero o nada; si la otra persona ha cambiado la
@@ -1816,9 +1916,11 @@ async function submitReview(event) {
   // RF-17: un solo envío; v4.1: sin red no hace nada (CL-8)
   if (reviewState.saving || reviewView({ ...reviewState, offline: state.offline }).addDisabled) return;
   reviewState.saveError = null; // RF-22: el mensaje se quita al pulsar
+  if (showTypedErrors()) return; // 017 C-7: no se añade nada
   reviewState.saving = true;
   renderReview();
-  const { lines, choices } = reviewState; // lo elegido al pulsar
+  const { choices } = reviewState; // lo elegido al pulsar
+  const lines = typedLines(reviewState.lines, reviewState.typed); // 017 C-3, C-4: con lo escrito
   let saveError = ingredientsErrorMessage('add', {}, true); // D-2: tras ADD_RETRIES 'cambiado'
   for (let attempt = 1; attempt <= ADD_RETRIES; attempt++) {
     const changes = addChanges(lines, choices, listState.items);
@@ -3049,6 +3151,7 @@ function bindEvents() {
   $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
   $('ingredients-retry').addEventListener('click', () => loadReviewMeals({ showLoading: true })); // RF-21
   $('ingredients-lines').addEventListener('change', onReviewLineChange); // RF-9
+  $('ingredients-lines').addEventListener('input', onReviewAmountInput); // 017 C-6
   $('ingredients-form').addEventListener('submit', submitReview); // RF-13
   for (const side of ['from', 'to']) {
     $(PERIOD_FIELDS[side].date).addEventListener('change', onPeriodFieldChange); // RF-3

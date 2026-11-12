@@ -651,6 +651,13 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .review-options { grid-column: 2 / -1; display: flex; flex-direction: column; }
 .review-option { display: flex; align-items: center; gap: 0.5rem; min-height: 2.5rem; cursor: pointer; }
 .review-option input { width: 1.25rem; height: 1.25rem; margin: 0; flex: none; accent-color: var(--color-primary); }
+/* "Comprar:" de las líneas con unidades mezcladas (017 C-1, C-14): cantidad que se estrecha y
+   unidad a su ancho, los dos de al menos 2,5rem de alto */
+.review-amount { grid-column: 2 / -1; display: flex; align-items: center; gap: 0.4rem; margin: 0.3rem 0 0.2rem; }
+.review-amount-label { flex: none; font-size: var(--text-small); color: var(--color-text-muted); }
+.review-amount input { flex: 1 1 5rem; min-width: 0; max-width: 7rem; min-height: 2.5rem; }
+.review-amount select { flex: none; width: auto; min-height: 2.5rem; padding-left: 0.4rem; padding-right: 0.2rem; }
+.review-error { grid-column: 2 / -1; margin: 0.2rem 0; font-size: var(--text-small); }
 
 .dish { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
 .dish-title { padding: 0 0.3rem; font-weight: 600; }
