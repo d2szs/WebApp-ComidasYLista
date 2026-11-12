@@ -230,6 +230,14 @@ function amountFieldText(cantidad) {
   return amountText(cantidad, false);
 }
 
+// Cantidad y unidad del formulario tras elegir una sugerencia: con las dos vacías, las del
+// artículo guardado (vacías si no tiene); con alguna escrita, sin cambios (016 C-4)
+function pickedAmountFields(item, quantity, unit) {
+  if (quantity.trim() !== '' || unit !== '') return { quantity, unit };
+  if (item.cantidad === null || item.cantidad === undefined) return { quantity: '', unit: '' };
+  return { quantity: amountFieldText(item.cantidad), unit: item.unidad || '' };
+}
+
 // Cantidad de un campo: si el texto sigue siendo el del número guardado, ese número tal cual
 // (0,333 se ve "1/3" y sigue 0,333); si no, la cantidad escrita · C-5, D-4
 function amountFromField(text, original) {
@@ -1523,7 +1531,7 @@ if (typeof module !== 'undefined') {
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
     flattenLineBreaks, cleanIngredientName, checkAmount, formatQuantity,
-    parseAmountText, formatAmount, amountFieldText, amountFromField,
+    parseAmountText, formatAmount, amountFieldText, amountFromField, pickedAmountFields,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
     translateError, syncStatusAction, isOtherMeal, wasDeleted,
     duplicateMessage, saveErrorMessage,
