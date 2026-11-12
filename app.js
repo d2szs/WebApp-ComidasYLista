@@ -68,7 +68,9 @@ function initialReviewState(requestId = 0) {
 }
 let reviewState = initialReviewState();
 // Formulario de artículo (007 T9): id null = "Añadir artículo"; opened sube al abrirlo
-const articleForm = { id: null, item: null, saving: false, opened: 0 };
+// typedName: se ha escrito o borrado en el nombre (las cargas recalculan su lista, 016 C-11);
+// found: los artículos de las sugerencias a la vista; picked: el último elegido
+const articleForm = { id: null, item: null, saving: false, opened: 0, typedName: false, found: [], picked: null };
 // 012: envío de la cola de tachados en curso en esta pestaña (D-4); errorShown: el error de
 // guardado del envío ya se mostró (RF-17: una sola vez); retryTimer: reintento de la cola con red (D-8)
 const strikeQueueState = { sending: false, errorShown: false, retryTimer: null };
@@ -984,6 +986,7 @@ function renderShopping() {
   $('list-content').hidden = loading;
   renderSuggestions(); // cada recarga recalcula las sugerencias de lo escrito (RF-22, CL-16, CL-18)
   refreshOpenIngredientSuggestions(); // 014 C-17, C-19, C-22: también las del formulario
+  refreshArticleSuggestions(); // 016 C-11
   // 009 RF-33: hasta la primera carga correcta; v4.1: sin red, también en modo copia (D-14)
   $('ingredients-button').disabled = loading || state.offline;
   if (loading) return;
@@ -1507,9 +1510,96 @@ function openArticleForm(item = null) {
   $('article-name').value = item ? item.nombre : '';
   $('article-quantity').value = item && item.cantidad !== null ? amountFieldText(item.cantidad) : ''; // 013 C-5
   $('article-unit').value = (item && item.unidad) || '';
+  articleForm.typedName = false;
+  articleForm.picked = null;
+  closeArticleSuggestions(); // 016 C-2: "Editar artículo" nunca tiene
   clearArticleMarks();
   showArticleFormError('');
   $('article-dialog').showModal();
+}
+
+// ===== Sugerencias en el nombre de "Añadir artículo" (016) =====
+// Como las de ingrediente (D-3): el foco no sale del nombre; mousedown no lo quita y la
+// elección va en click. Solo en "Añadir artículo" (C-2)
+function onArticleNameInput() {
+  if (articleForm.id) return;
+  articleForm.typedName = true;
+  renderArticleSuggestions(); // C-1, C-10: sin marcada
+}
+
+// Las de Guardados para lo escrito, como en el campo rápido (C-1); como texto (I-9)
+function renderArticleSuggestions() {
+  const list = $('article-suggestions');
+  articleForm.found = suggestions(listState.items, $('article-name').value);
+  list.replaceChildren(...articleForm.found.map((item, index) => {
+    const option = el('li', 'suggestion', item.nombre);
+    option.id = `article-suggestion-${index}`;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', 'false');
+    return option;
+  }));
+  list.hidden = articleForm.found.length === 0;
+  $('article-name').setAttribute('aria-expanded', String(!list.hidden));
+  $('article-name').removeAttribute('aria-activedescendant');
+}
+
+function articleOptions() {
+  return [...$('article-suggestions').querySelectorAll('[role="option"]')];
+}
+
+// Marca la opción index (-1: ninguna) y la deja a la vista (C-6)
+function setArticleMark(index) {
+  const options = articleOptions();
+  options.forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+  if (index < 0) return $('article-name').removeAttribute('aria-activedescendant');
+  $('article-name').setAttribute('aria-activedescendant', options[index].id);
+  options[index].scrollIntoView({ block: 'nearest' });
+}
+
+// Cada carga recalcula la lista abierta sin tocar lo escrito; la marcada sigue si sigue (C-11).
+// Cerrada (Esc o al salir del nombre), sigue cerrada hasta escribir o borrar
+function refreshArticleSuggestions() {
+  if (!$('article-dialog').open || articleForm.id || !articleForm.typedName) return;
+  const before = articleOptions();
+  const oldNames = before.map((option) => option.textContent);
+  const oldIndex = markedIndex(before);
+  renderArticleSuggestions();
+  setArticleMark(keptMark(oldNames, oldIndex, articleForm.found.map((item) => item.nombre)));
+}
+
+function closeArticleSuggestions() {
+  $('article-suggestions').hidden = true;
+  $('article-suggestions').replaceChildren();
+  articleForm.found = [];
+  $('article-name').setAttribute('aria-expanded', 'false');
+  $('article-name').removeAttribute('aria-activedescendant');
+}
+
+// Elegir: nombre guardado, cantidad y unidad guardadas solo si las dos estaban vacías, lista
+// cerrada y cursor en Cantidad; no guarda nada: recupera Guardar (C-3, C-4, D-2)
+function pickArticleSuggestion(item) {
+  $('article-name').value = item.nombre;
+  const fields = pickedAmountFields(item, $('article-quantity').value, $('article-unit').value);
+  $('article-quantity').value = fields.quantity;
+  $('article-unit').value = fields.unit;
+  articleForm.picked = item;
+  articleForm.typedName = false;
+  closeArticleSuggestions();
+  $('article-quantity').focus();
+}
+
+function setupArticleSuggestions() {
+  const list = $('article-suggestions');
+  $('article-name').addEventListener('input', onArticleNameInput);
+  $('article-name').addEventListener('blur', () => { // C-9, D-1
+    articleForm.typedName = false;
+    closeArticleSuggestions();
+  });
+  list.addEventListener('mousedown', (event) => event.preventDefault());
+  list.addEventListener('click', (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option) pickArticleSuggestion(articleForm.found[articleOptions().indexOf(option)]);
+  });
 }
 
 function closeArticleForm() {
@@ -1772,7 +1862,8 @@ function onReviewCancel(event) {
 // Valores en bruto del formulario, para validateArticleForm; original: la cantidad guardada del
 // artículo que se edita (013-unidades-fracciones C-5, D-4)
 function readArticleForm() {
-  const original = articleForm.item ? articleForm.item.cantidad : null;
+  const source = articleForm.item || articleForm.picked; // 016: la guardada del elegido, exacta
+  const original = source ? source.cantidad : null;
   return { name: $('article-name').value, quantity: $('article-quantity').value, original, unit: $('article-unit').value };
 }
 
@@ -2935,6 +3026,7 @@ function bindEvents() {
   $('article-cancel').addEventListener('click', closeArticleForm);
   $('article-delete').addEventListener('click', deleteFromArticleForm);
   $('article-form').addEventListener('submit', saveArticle);
+  setupArticleSuggestions(); // 016
   $('ingredients-button').addEventListener('click', openReview);
   $('ingredients-cancel').addEventListener('click', closeReview); // RF-4
   $('ingredients-retry').addEventListener('click', () => loadReviewMeals({ showLoading: true })); // RF-21

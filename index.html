@@ -227,8 +227,9 @@
 
       <label class="field">
         <span>Nombre</span>
-        <input type="text" id="article-name" maxlength="200" autocomplete="off">
+        <input type="text" id="article-name" maxlength="200" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="article-suggestions">
       </label>
+      <ul id="article-suggestions" class="suggestions article-suggestions" role="listbox" aria-label="Sugerencias de Guardados" hidden></ul>
 
       <div class="article-amount">
         <label class="field">

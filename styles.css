@@ -615,6 +615,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 .dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
 .dialog-small { width: min(380px, calc(100% - 1rem)); }
+/* 016 C-1: entre el nombre y la cantidad, pegada al nombre; marcada como en ingredientes */
+.article-suggestions { margin: calc(0.25rem - var(--space)) 0 var(--space); }
+.article-suggestions .suggestion + .suggestion { border-top: 1px solid var(--color-border); }
+.article-suggestions [aria-selected="true"] { background: var(--color-marked); }
 .article-amount { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; } /* 007 RF-14 */
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--space); }
 /* Revisión de ingredientes (009 D-5): en columna, las líneas se desplazan por dentro */
