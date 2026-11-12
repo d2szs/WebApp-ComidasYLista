@@ -1044,8 +1044,12 @@ function buildSavedRow(item) {
   return row;
 }
 
-// Sugerencias de Guardados para lo escrito en el campo rápido (RF-21, RF-22); como texto (RNF-6)
-function renderSuggestions() {
+// Sugerencias de Guardados para lo escrito en el campo rápido (RF-21, RF-22); como texto (RNF-6).
+// keepMark: tras una recarga, la marcada sigue si sigue en la lista; al escribir, ninguna (015 C-8, C-9)
+function renderSuggestions(keepMark = true) {
+  const before = quickOptions();
+  const oldNames = before.map((pick) => pick.textContent);
+  const oldIndex = keepMark ? quickMarkedIndex(before) : -1;
   const found = suggestions(listState.items, $('quick-add-input').value);
   $('quick-suggestions').replaceChildren(...found.map((item) => {
     const li = el('li');
@@ -1055,6 +1059,32 @@ function renderSuggestions() {
     return li;
   }));
   $('quick-suggestions').hidden = found.length === 0;
+  setQuickMark(keptMark(oldNames, oldIndex, found.map((item) => item.nombre))); // 015 D-3
+}
+
+function quickOptions() {
+  return [...$('quick-suggestions').querySelectorAll('.suggestion')];
+}
+
+function quickMarkedIndex(options = quickOptions()) {
+  return options.findIndex((pick) => pick.classList.contains('marked'));
+}
+
+// Marca la sugerencia index (-1: ninguna) y la deja a la vista (015 C-1, C-2)
+function setQuickMark(index) {
+  const options = quickOptions();
+  options.forEach((pick, i) => pick.classList.toggle('marked', i === index));
+  if (index >= 0) options[index].scrollIntoView({ block: 'nearest' });
+}
+
+// ↑/↓ con sugerencias visibles marcan sin mover el cursor del campo; con un teclado de
+// composición, nada nuestro. Intro lo resuelve el envío del formulario (015 C-1, C-2, C-11, C-12)
+function onQuickKeydown(event) {
+  if (event.isComposing || $('quick-suggestions').hidden) return;
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  event.preventDefault();
+  const options = quickOptions();
+  setQuickMark(moveMark(quickMarkedIndex(options), options.length, event.key === 'ArrowDown' ? 'down' : 'up'));
 }
 
 // Tocar una sugerencia la recupera (RF-23); el campo solo se vacía si se recuperó y nadie
@@ -1102,7 +1132,10 @@ async function addArticle({ nombre, cantidad, unidad }, fromForm = false) {
 // Intro o [+] en el campo rápido (RF-13, RF-16, CL-16, CL-17)
 async function submitQuickAdd(event) {
   event.preventDefault();
-  if (state.offline || listState.quickPending) return; // 011 RF-10; CL-17: otro Intro o [+] mientras espera no hace nada
+  if (state.offline) return; // 011 RF-10
+  const marked = quickOptions()[quickMarkedIndex()];
+  if (marked) return marked.click(); // 015 C-3, C-12: con una marcada, la recupera como al tocarla
+  if (listState.quickPending) return; // CL-17: otro Intro o [+] mientras espera no hace nada
   const input = $('quick-add-input');
   const name = cleanIngredientName(input.value);
   if (!name) return; // RF-16: sin mensaje
@@ -2906,7 +2939,9 @@ function bindEvents() {
     if (reviewState.open && !$('ingredients-dialog').open) closeReview();
   });
   $('quick-add').addEventListener('submit', submitQuickAdd);
-  $('quick-add-input').addEventListener('input', renderSuggestions); // RF-21, RF-22
+  $('quick-add-input').addEventListener('input', () => renderSuggestions(false)); // RF-21, RF-22; 015 C-9
+  $('quick-add-input').addEventListener('keydown', onQuickKeydown); // 015 C-1, C-2
+  $('quick-add-input').addEventListener('blur', () => setQuickMark(-1)); // 015 C-10: sigue visible, sin marcada
   $('error-notice-close').addEventListener('click', () => hideError());
 
   formState.dish1 = buildFormDish($('form-dish-1'));

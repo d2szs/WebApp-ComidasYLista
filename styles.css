@@ -413,6 +413,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   cursor: pointer;
 }
 .suggestions li + li .suggestion { border-top: 1px solid var(--color-border); }
+.suggestion.marked { background: var(--color-marked); } /* 015 C-1: marcada con ↑/↓ */
 .list-loading { margin-top: var(--space); color: var(--color-text-muted); }
 .ingredients-button { width: 100%; margin-top: 0.5rem; } /* 009 RF-1 */
 .list-section { margin-top: calc(var(--space) * 1.25); }
