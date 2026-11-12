@@ -55,7 +55,7 @@ let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' (007 RF-1)
 // Lista de la compra (007): artículos como llegan de la base de datos; loaded = primera carga
 // hecha (RF-11). requestId sigue subiendo al cerrar sesión, para descartar respuestas viejas (CL-10)
 function initialListState(requestId = 0) {
-  return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, finishing: false };
+  return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, quickClosed: false, finishing: false };
 }
 let listState = initialListState();
 // Revisión de ingredientes de comidas (009, plan § Algoritmo); requestId nunca vuelve a
@@ -1045,12 +1045,13 @@ function buildSavedRow(item) {
 }
 
 // Sugerencias de Guardados para lo escrito en el campo rápido (RF-21, RF-22); como texto (RNF-6).
-// keepMark: tras una recarga, la marcada sigue si sigue en la lista; al escribir, ninguna (015 C-8, C-9)
+// keepMark: tras una recarga, la marcada sigue si sigue en la lista; al escribir, ninguna (015 C-8, C-9).
+// Cerrada con Esc, sigue cerrada hasta escribir o borrar (015 C-7, D-2)
 function renderSuggestions(keepMark = true) {
   const before = quickOptions();
   const oldNames = before.map((pick) => pick.textContent);
   const oldIndex = keepMark ? quickMarkedIndex(before) : -1;
-  const found = suggestions(listState.items, $('quick-add-input').value);
+  const found = listState.quickClosed ? [] : suggestions(listState.items, $('quick-add-input').value);
   $('quick-suggestions').replaceChildren(...found.map((item) => {
     const li = el('li');
     const pick = button('suggestion', item.nombre, () => pickSuggestion(item));
@@ -1077,10 +1078,22 @@ function setQuickMark(index) {
   if (index >= 0) options[index].scrollIntoView({ block: 'nearest' });
 }
 
-// ↑/↓ con sugerencias visibles marcan sin mover el cursor del campo; con un teclado de
-// composición, nada nuestro. Intro lo resuelve el envío del formulario (015 C-1, C-2, C-11, C-12)
+// Escribir o borrar vuelve a abrir la lista, sin marcada (015 C-7, C-9)
+function onQuickInput() {
+  listState.quickClosed = false;
+  renderSuggestions(false);
+}
+
+// ↑/↓ con sugerencias visibles marcan sin mover el cursor del campo y Esc cierra la lista sin
+// tocar el texto; con un teclado de composición, nada nuestro. Intro lo resuelve el envío del
+// formulario (015 C-1, C-2, C-6, C-11, C-12)
 function onQuickKeydown(event) {
   if (event.isComposing || $('quick-suggestions').hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    listState.quickClosed = true;
+    return renderSuggestions();
+  }
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
   event.preventDefault();
   const options = quickOptions();
@@ -2939,7 +2952,7 @@ function bindEvents() {
     if (reviewState.open && !$('ingredients-dialog').open) closeReview();
   });
   $('quick-add').addEventListener('submit', submitQuickAdd);
-  $('quick-add-input').addEventListener('input', () => renderSuggestions(false)); // RF-21, RF-22; 015 C-9
+  $('quick-add-input').addEventListener('input', onQuickInput); // RF-21, RF-22; 015 C-7, C-9
   $('quick-add-input').addEventListener('keydown', onQuickKeydown); // 015 C-1, C-2
   $('quick-add-input').addEventListener('blur', () => setQuickMark(-1)); // 015 C-10: sigue visible, sin marcada
   $('error-notice-close').addEventListener('click', () => hideError());
