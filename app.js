@@ -1588,9 +1588,25 @@ function pickArticleSuggestion(item) {
   $('article-quantity').focus();
 }
 
+// Con la lista visible, ↑/↓ marcan y Esc solo la cierra (la siguiente Esc cierra el
+// formulario); Intro lo resuelve el envío, también sin aviso de la tecla. Componiendo, nada (C-6, C-8, C-13)
+function onArticleNameKeydown(event) {
+  if (event.isComposing || $('article-suggestions').hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault(); // anula el cierre del diálogo
+    articleForm.typedName = false; // cerrada a propósito: una carga no la reabre (C-11)
+    return closeArticleSuggestions();
+  }
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  event.preventDefault();
+  const options = articleOptions();
+  setArticleMark(moveMark(markedIndex(options), options.length, event.key === 'ArrowDown' ? 'down' : 'up'));
+}
+
 function setupArticleSuggestions() {
   const list = $('article-suggestions');
   $('article-name').addEventListener('input', onArticleNameInput);
+  $('article-name').addEventListener('keydown', onArticleNameKeydown);
   $('article-name').addEventListener('blur', () => { // C-9, D-1
     articleForm.typedName = false;
     closeArticleSuggestions();
@@ -1869,6 +1885,8 @@ function readArticleForm() {
 
 async function saveArticle(event) {
   event.preventDefault();
+  const marked = articleOptions().findIndex((option) => option.getAttribute('aria-selected') === 'true');
+  if (marked >= 0) return pickArticleSuggestion(articleForm.found[marked]); // 016 C-3, C-13: elige, no guarda
   if (state.offline || articleForm.saving) return; // RF-32; 011 RF-10 (también con Intro)
   clearArticleMarks();
   showArticleFormError('');
