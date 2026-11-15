@@ -595,6 +595,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .detail-dish { margin-bottom: var(--space); }
 .detail-dish h3 { margin: 0 0 0.3rem; font-size: var(--text-normal); }
 .detail-subtitle { margin: 0.5rem 0 0.2rem; font-size: var(--text-small); color: var(--color-text-muted); }
+.detail-persons { margin-top: 0; } /* el h3 ya deja 0,3 rem debajo (018 D-9) */
 .detail-dish ul { margin: 0; padding-left: 1.2rem; }
 .detail-recipe { margin: 0; white-space: pre-wrap; }
 .detail-dish a { color: var(--color-primary); word-break: break-all; }

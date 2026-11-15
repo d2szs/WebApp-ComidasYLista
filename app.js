@@ -2600,6 +2600,8 @@ function buildDetail(meal) {
 function buildDishDetail(dish, title) {
   const box = el('div', 'detail-dish');
   box.append(el('p', 'detail-subtitle', title), el('h3', null, dish.nombre));
+  const persons = personsText(dish.personas); // 018 C-8, C-9, C-11
+  if (persons) box.append(el('p', 'detail-subtitle detail-persons', persons));
 
   if (dish.ingredientes?.length) {
     const list = el('ul');
