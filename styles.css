@@ -15,6 +15,9 @@
   --color-alert-bg: #fff4d6;
   --color-alert-text: #6b4a00;
   --color-today: #f9e4e3;                       /* tomate muy claro (019 C-8) */
+  --color-tomato: #bf2f2e;                      /* Comidas activa y hoy (019 C-7, C-8) */
+  --color-mackerel-text: #3d7591;               /* caballa oscura: texto e iconos (019 D-1) */
+  --color-mackerel-light: #f0f6f9;              /* caballa muy clara: Compra activa (019 C-7) */
   --color-marked: #f1e6d8;                      /* 014 C-11: sugerencia marcada con ↑/↓ */
   --color-no-copy-bg: var(--color-border);      /* 011 RF-15: días fuera de la copia */
   --color-no-copy-text: var(--color-text-muted);
@@ -280,7 +283,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 #screen-app[data-screen="list"] .header { padding: 0; border-bottom: none; }
 
 /* Barra de pantallas (007 RF-1, D-7): fija en los dos diseños; el icono toma el color del botón.
-   La pantalla actual, en verde sobre verde claro; la otra, en gris y sin fondo */
+   La pantalla actual, en su color sobre ese color muy claro; la otra, en gris y sin fondo */
 .header > .screen-bar {
   position: fixed;
   z-index: 10;
@@ -300,7 +303,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   cursor: pointer;
 }
 .screen-button svg { flex: none; }
-.screen-button.active { background: var(--color-today); color: var(--color-primary); }
+/* 019 C-7: Comidas activa en tomate, Compra en caballa oscura, sobre su color muy claro */
+.screen-button.active { background: var(--color-today); color: var(--color-tomato); }
+.screen-button.active[data-screen="list"] { background: var(--color-mackerel-light); color: var(--color-mackerel-text); }
 
 /* Cada pantalla oculta lo de la otra (007 RF-2, RF-3, D-7) */
 #screen-app[data-screen="list"] .view-selector,
@@ -370,7 +375,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   cursor: pointer;
 }
 .panel-month.visible { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-text); }
-.panel-month.today { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.panel-month.today { outline: 2px solid var(--color-tomato); outline-offset: 2px; } /* 019 C-8 */
 
 /* ===== Avisos ===== */
 .error-notice {
@@ -550,7 +555,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   justify-content: flex-start;
 }
 .month-day.outside { opacity: 0.45; }
-.month-day.today { background: var(--color-today); outline: 2px solid var(--color-primary); }
+.month-day.today { background: var(--color-today); outline: 2px solid var(--color-tomato); } /* 019 C-8 */
 .month-number { font-size: var(--text-small); font-weight: 600; }
 .month-meals { display: flex; gap: 3px; margin-top: 0.25rem; flex-wrap: wrap; }
 .month-meal { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; font-size: 0.75rem; }
@@ -560,7 +565,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 /* Vista semanal */
 .week { display: grid; gap: 0.6rem; }
 .week-day { background: var(--color-surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0.6rem; }
-.week-day.today { outline: 2px solid var(--color-primary); }
+.week-day.today { background: var(--color-today); outline: 2px solid var(--color-tomato); } /* 019 C-8 */
 /* Con letra muy grande, el número baja; el nombre solo se parte si ni él cabe (008 CL-10, D-11) */
 .week-date { display: block; width: 100%; margin-bottom: 0.4rem; padding: 0; border: none; background: none; text-align: left; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
 /* Si algún nombre completo no cabe, los siete abreviados ("Mié. 21"): lo decide app.js (008 RF-15, D-11) */
