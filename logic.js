@@ -1311,6 +1311,7 @@ const CONNECTION_TIMEOUT = 8000;
 const APP_FILES = [
   './', './styles.css', './supabase.js', './logic.js', './app.js', './manifest.json',
   './favicon.png', './icon-192.png', './icon-512.png', './icon-maskable.png',
+  './logo-acceso.svg', './logo-barra-pc.svg', './logo-barra-movil.svg', // 019 C-5
 ];
 
 // ===== Versiones de los archivos (010-instalacion-webapp) =====
