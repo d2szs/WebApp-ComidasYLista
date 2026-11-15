@@ -1,20 +1,21 @@
 /* ===== Variables: colores, tipografía y tamaños ===== */
 :root {
-  --color-bg: #f6f7f9;
+  /* Paleta (019 D-1): berenjena #1B091F, crema #FDF7F0, tomate #BF2F2E, caballa #528CA9 */
+  --color-bg: #fdf7f0;                          /* crema */
   --color-surface: #ffffff;
-  --color-border: #e2e5ea;
+  --color-border: #e8dfd4;
   --color-text: #1f2933;
   --color-text-muted: #6b7280;
   --color-unsent: var(--color-text-muted);      /* 012 RF-3: marca "sin enviar" */
-  --color-primary: #2f6f5e;
-  --color-primary-text: #ffffff;
+  --color-primary: #1b091f;                     /* berenjena: barra, botones, foco, enlaces */
+  --color-primary-text: #fdf7f0;                /* crema sobre berenjena */
   --color-error: #b42318;
   --color-error-bg: #fdecea;
   --color-info-bg: #eef4ff;
   --color-alert-bg: #fff4d6;
   --color-alert-text: #6b4a00;
-  --color-today: #e8f3ef;
-  --color-marked: #d3e7df;                      /* 014 C-11: sugerencia marcada con ↑/↓ */
+  --color-today: #f9e4e3;                       /* tomate muy claro (019 C-8) */
+  --color-marked: #f1e6d8;                      /* 014 C-11: sugerencia marcada con ↑/↓ */
   --color-no-copy-bg: var(--color-border);      /* 011 RF-15: días fuera de la copia */
   --color-no-copy-text: var(--color-text-muted);
   --opacity-disabled: 0.6;                      /* controles desactivados (011 RF-10) */
@@ -606,7 +607,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .detail-persons { margin-top: 0; } /* el h3 ya deja 0,3 rem debajo (018 D-9) */
 .detail-dish ul { margin: 0; padding-left: 1.2rem; }
 .detail-recipe { margin: 0; white-space: pre-wrap; }
-.detail-dish a { color: var(--color-primary); word-break: break-all; }
+.detail-dish a { color: var(--color-primary); text-decoration: underline; word-break: break-all; } /* 019 D-3 */
 .detail-buttons { display: flex; gap: 0.5rem; }
 
 /* Días fuera de la copia, en modo copia: vacíos y en gris (011 RF-15) */
