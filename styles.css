@@ -36,6 +36,8 @@
   --top-bar-height: 2.75rem;
   --sidebar-width: 12rem;
   --sidebar-width-collapsed: 4rem;
+  --logo-bar-height: 1.75rem;                   /* 019 C-2, C-3 */
+  --logo-access-size: 6rem;                     /* 019 C-1 */
 
   --ingredient-gap: 0.3rem;
   --ingredient-row-gap: 0.8rem;
@@ -119,6 +121,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   box-shadow: var(--shadow);
 }
 
+/* Logo de las pantallas de acceso (019 C-1): sustituye al título "KcKc", centrado */
+.access-logo { display: block; margin: 0 auto var(--space); text-align: center; }
+.access-logo img, img.access-logo { display: block; width: var(--logo-access-size); height: var(--logo-access-size); margin: 0 auto; }
+
 .loading-text { color: var(--color-text-muted); }
 
 .field { display: block; margin-bottom: var(--space); }
@@ -157,7 +163,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   color: var(--color-primary-text);
 }
 .app-title { margin: 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.app-logo { font-size: var(--text-large); font-weight: 700; }
+/* Logos de la barra (019 C-2, C-3): a la altura del texto; sin imagen, se ve "KcKc" (C-4) */
+.app-logo, .app-logo-mobile { flex: none; display: block; height: var(--logo-bar-height); font-weight: 700; }
 /* Círculo con la inicial: 2rem de círculo en una zona de toque de 2.5rem */
 .user-button {
   flex: none;
@@ -242,11 +249,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 .user-menu-item:hover, .user-menu-item:focus-visible { background: var(--color-bg); }
 
-/* Móvil: nombre de la pantalla; pc: "KcKc", y el nombre solo para el lector de pantalla (D-7) */
+/* Móvil: logo y nombre de la pantalla; pc: logo, y el nombre solo para el lector de pantalla (D-7) */
 @media (max-width: 767.98px) {
   .app-logo { display: none; }
 }
 @media (min-width: 768px) {
+  .app-logo-mobile { display: none; }
   .app-title {
     position: absolute;
     width: 1px;

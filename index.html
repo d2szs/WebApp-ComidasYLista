@@ -14,6 +14,7 @@
   <!-- Pantalla de configuración: claves sin definir o Supabase sin respuesta -->
   <section id="screen-config" class="screen screen-centered" hidden>
     <div class="card">
+      <img class="access-logo" src="./logo-acceso.svg" alt="KcKc">
       <h1>No se puede conectar</h1>
       <p id="config-message"></p>
       <button type="button" id="config-retry" class="btn btn-primary">Reintentar</button>
@@ -28,7 +29,7 @@
   <!-- Inicio de sesión -->
   <section id="screen-login" class="screen screen-centered" hidden>
     <form id="form-login" class="card" novalidate>
-      <h1>KcKc</h1>
+      <h1 class="access-logo"><img src="./logo-acceso.svg" alt="KcKc"></h1>
       <label class="field">
         <span>Email</span>
         <input type="email" id="login-email" autocomplete="username" required>
@@ -45,7 +46,7 @@
 
     <!-- Recuperación de la contraseña: se alterna con el formulario de login -->
     <form id="form-recovery" class="card" novalidate hidden>
-      <h1>KcKc</h1>
+      <h1 class="access-logo"><img src="./logo-acceso.svg" alt="KcKc"></h1>
       <label class="field">
         <span>Email</span>
         <input type="email" id="recovery-email" autocomplete="username" required>
@@ -60,7 +61,7 @@
   <!-- Nueva contraseña: solo se llega con un enlace de recuperación válido -->
   <section id="screen-new-password" class="screen screen-centered" hidden>
     <form id="form-new-password" class="card" novalidate>
-      <h1>KcKc</h1>
+      <h1 class="access-logo"><img src="./logo-acceso.svg" alt="KcKc"></h1>
       <p id="new-password-account">Cambiando la contraseña de <strong id="new-password-email"></strong></p>
       <label class="field">
         <span>Contraseña nueva</span>
@@ -80,13 +81,14 @@
 
   <!-- Aplicación -->
   <section id="screen-app" class="screen" data-screen="meals" hidden>
-    <!-- Barra superior (008 RF-1 a RF-4): nombre de la pantalla en el móvil, "KcKc" en el pc -->
+    <!-- Barra superior (008 RF-1 a RF-4): logo y nombre de la pantalla en el móvil, logo en el pc (019 C-2, C-3) -->
     <div class="top-bar">
       <!-- ☰ solo en el pc ancho (008 RF-9, D-10) -->
       <button type="button" id="sidebar-toggle" class="sidebar-toggle" aria-label="Contraer o expandir la barra lateral" aria-controls="screen-bar" aria-expanded="true">
         <span aria-hidden="true">☰</span>
       </button>
-      <span class="app-logo">KcKc</span>
+      <img class="app-logo" src="./logo-barra-pc.svg" alt="KcKc">
+      <img class="app-logo-mobile" src="./logo-barra-movil.svg" alt="KcKc">
       <h1 id="app-title" class="app-title">Comidas</h1>
       <button type="button" id="user-button" class="user-button" aria-label="Menú del usuario" aria-haspopup="dialog" aria-expanded="false">
         <span id="user-initial" aria-hidden="true"></span>
