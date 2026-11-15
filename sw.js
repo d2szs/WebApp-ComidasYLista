@@ -57,7 +57,8 @@ async function openApp() {
   const index = await download(PAGE, 'no-cache');
   if (!index) return saved ? savedPage(saved) : Response.error(); // CL-4: página de error del navegador
   const publishedId = etagVersion(index.etag);
-  if (saved && isSavedCurrent(saved.id, publishedId)) return savedPage(saved);
+  // Guardada incompleta (le falta un archivo de la app): se baja entera, como una nueva (020 C-1)
+  if (saved && isSavedCurrent(saved.id, publishedId) && await isComplete(saved)) return savedPage(saved);
   const rest = await downloadSet(FILES.filter(url => url !== PAGE), 'no-cache');
   if (!rest) return saved ? savedPage(saved) : toResponse(index); // corte a medias (RF-11)
   const set = [index, ...rest];
@@ -116,10 +117,11 @@ function saveSet(set, id) {
 // Guarda la versión entera, la marca la última y sustituye a las anteriores (RF-11).
 // Si falla antes de la marca, borra lo guardado a medias y deja la anterior: false (D-11).
 // Si la guardada entera ya es esta versión (aunque con otra hora del margen), no la
-// vuelve a escribir: true (011 D-9, CL-10)
+// vuelve a escribir: true (011 D-9, CL-10). Si está incompleta, se escribe: con el mismo id,
+// encima, en la misma caché (020 D-2)
 async function saveWhole(set, id) {
   const saved = await savedVersion();
-  if (saved && isSavedCurrent(saved.id, id)) return true;
+  if (saved && isSavedCurrent(saved.id, id) && await isComplete(saved)) return true;
   const name = CACHE_PREFIX + (id ?? 'local-' + Date.now());
   const created = !(await caches.has(name)); // solo se borra una caché creada aquí (011 D-9)
   try {
@@ -144,6 +146,12 @@ async function savedVersion() {
     if (mark) return { id: (await mark.text()) || null, cache };
   }
   return null;
+}
+
+// ¿Tiene la versión guardada todos los archivos de la app? (020 C-1, C-5, D-1)
+async function isComplete(saved) {
+  const urls = (await saved.cache.keys()).map(request => request.url);
+  return missingFiles(urls, FILES).length === 0;
 }
 
 async function savedPage(saved) {
