@@ -306,6 +306,30 @@ function formDishLayout(type, secondHasData) {
   };
 }
 
+// ===== Personas de la receta (018-personas-receta) =====
+
+// Texto del campo: { personas: n } si son 1-2 cifras de 1 a 99, { personas: null } si está
+// vacío (o no hay campo, D-10), { invalid: true } si no vale
+function personsFromField(text) {
+  const clean = (text || '').trim();
+  if (!clean) return { personas: null };
+  const value = Number(clean);
+  if (!/^\d{1,2}$/.test(clean) || value < 1) return { invalid: true };
+  return { personas: value };
+}
+
+// Valor guardado: el número si es entero del 1 al 99; si no (sin clave, texto, raro), null
+function savedPersons(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 99 ? value : null;
+}
+
+// "Para 4 personas", "Para 1 persona" o null si no hay personas válidas
+function personsText(value) {
+  const persons = savedPersons(value);
+  if (persons === null) return null;
+  return persons === 1 ? 'Para 1 persona' : `Para ${persons} personas`;
+}
+
 // ===== Formulario: validación =====
 
 // Saltos de línea y tabuladores que pasan a espacio en el nombre del ingrediente (CL-1)
@@ -1587,6 +1611,7 @@ if (typeof module !== 'undefined') {
     initialPanelYear, panelArrows, monthPanel, chooseMonth,
     mealKey, dishNames, dishTitle, formatIngredient, safeLink, deleteConfirmText,
     formDishLayout, isIngredientRowEmpty, dishHasData, validateDish, validateMealForm,
+    personsFromField, savedPersons, personsText,
     flattenLineBreaks, cleanIngredientName, checkAmount, formatQuantity,
     parseAmountText, formatAmount, amountFieldText, amountFromField, pickedAmountFields,
     keysDefined, configMessage, loginInputError, isNetworkError, translateLoginError,
