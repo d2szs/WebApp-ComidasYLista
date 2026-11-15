@@ -1352,6 +1352,13 @@ function isSavedCurrent(savedId, publishedId) {
     && versionGap(savedId, publishedId) <= SAME_VERSION_SECONDS;
 }
 
+// Archivos de la app que le faltan a una versión guardada, en el orden de la app; los
+// guardados de más (un archivo que la versión quita, la marca) no cuentan (020 C-5, C-6, D-3)
+function missingFiles(savedUrls, appUrls) {
+  const saved = new Set(savedUrls);
+  return appUrls.filter((url) => !saved.has(url));
+}
+
 // ¿Es una navegación a la página de la app? La carpeta de scope o su index.html, del mismo
 // origen y con cualquier ?… o #… (enlace de recuperación); nada más (RF-9, RF-15, CL-8)
 function isAppPage(url, scope) {
@@ -1644,7 +1651,7 @@ if (typeof module !== 'undefined') {
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage, typedAmount, typedLines, typedErrors, choiceAfterTyping,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
-    SAME_VERSION_SECONDS,
+    SAME_VERSION_SECONDS, missingFiles,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
     cleanMealNames, copyMealNames,
     WEEKDAY_NAMES, MONTH_ABBR, copyNoticeText, authStorageKey, storedSessionEmail, opensInCopy,
