@@ -2641,6 +2641,7 @@ function buildFormDish(container) {
     title: find('.dish-title'),
     nameLabel: find('.dish-name-label'),
     name: find('.dish-name'),
+    persons: find('.dish-persons'), // 018 D-11: markInvalid lo busca como 'persons'
     ingredients: find('.ingredients'),
     recipe: find('.dish-recipe'),
     reference: find('.dish-reference'),
@@ -2865,6 +2866,7 @@ function pickIngredientSuggestion(row, text) {
 
 function fillDish(dish, data) {
   dish.name.value = data?.nombre || '';
+  dish.persons.value = String(savedPersons(data?.personas) ?? ''); // 018 C-6, C-11
   dish.recipe.value = data?.receta || '';
   dish.reference.value = data?.referencia || '';
   dish.ingredients.querySelectorAll('.ingredient-name').forEach((name) => nameObserver.unobserve(name));
@@ -2893,6 +2895,7 @@ function readRow(row) {
 function readDish(dish) {
   return {
     name: dish.name.value,
+    persons: dish.persons.value,
     recipe: dish.recipe.value,
     reference: dish.reference.value,
     rows: readRows(dish).map(readRow),

@@ -661,6 +661,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 .dish { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
 .dish-title { padding: 0 0.3rem; font-weight: 600; }
+.dish-persons { width: 4rem; } /* 018 C-1: sin estirarse como los demás campos */
 .ingredient {
   display: grid;
   grid-template-columns: 1fr 1fr;
