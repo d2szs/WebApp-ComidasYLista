@@ -281,7 +281,7 @@ function deleteConfirmText(meal) {
 // Las filas y los platos llegan en bruto desde el formulario (D-6):
 // row = { name, quantity, original, unit }: quantity es el texto del campo y original, el número
 // guardado con que se rellenó (o null) · 013-unidades-fracciones D-5
-// rawDish = { name, recipe, reference, rows }
+// rawDish = { name, persons, recipe, reference, rows } (persons puede faltar: vacío, 018 D-10)
 
 // Una fila vacía no se guarda; una cantidad que no se puede leer cuenta como dato
 function isIngredientRowEmpty(row) {
@@ -289,7 +289,8 @@ function isIngredientRowEmpty(row) {
 }
 
 function dishHasData(rawDish) {
-  return Boolean(rawDish.name.trim() || rawDish.recipe.trim() || rawDish.reference.trim())
+  return Boolean(rawDish.name.trim() || (rawDish.persons || '').trim()
+    || rawDish.recipe.trim() || rawDish.reference.trim())
     || rawDish.rows.some((row) => !isIngredientRowEmpty(row));
 }
 
@@ -362,6 +363,7 @@ function checkAmount(text, original, unit, units) {
 
 const INGREDIENT_ERROR = 'Completa cada ingrediente: nombre y, si lleva cantidad, cantidad mayor que 0 y unidad.';
 const REFERENCE_ERROR = 'La referencia debe ser un enlace que empiece por http:// o https://';
+const PERSONS_ERROR = 'Escribe las personas como un número entero del 1 al 99.';
 
 // Valida un plato en bruto: { dish } con las claves de la base de datos, o { error, invalid }
 function validateDish(rawDish, index, nameMessage) {
@@ -374,6 +376,10 @@ function validateDish(rawDish, index, nameMessage) {
 
   const dishName = rawDish.name.trim();
   if (!dishName) fail(nameMessage, 'name');
+
+  // Personas: después del nombre y antes de los ingredientes (018 C-5, D-3)
+  const persons = personsFromField(rawDish.persons);
+  if (persons.invalid) fail(PERSONS_ERROR, 'persons');
 
   const ingredients = [];
   rawDish.rows.forEach((row, i) => {
@@ -390,7 +396,7 @@ function validateDish(rawDish, index, nameMessage) {
   if (reference && !safeLink(reference)) fail(REFERENCE_ERROR, 'reference');
 
   if (error) return { error, invalid };
-  return { dish: { nombre: dishName, ingredientes: ingredients, receta: rawDish.recipe.trim(), referencia: reference } };
+  return { dish: { nombre: dishName, personas: persons.personas, ingredientes: ingredients, receta: rawDish.recipe.trim(), referencia: reference } };
 }
 
 // Valida el formulario en bruto { date, type, dishes }: { data } listo para guardar, o { error, invalid }.
