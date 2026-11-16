@@ -58,6 +58,9 @@ function initialListState(requestId = 0) {
   return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, quickClosed: false, finishing: false };
 }
 let listState = initialListState();
+// Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
+// que guarda cada botón
+const existsState = { article: null, choice: null, saving: false };
 // Revisión de ingredientes de comidas (009, plan § Algoritmo); requestId nunca vuelve a
 // empezar mientras la app está abierta (D-12)
 function initialReviewState(requestId = 0) {
@@ -399,6 +402,7 @@ function applySession(session, { pageLoad = false } = {}) {
 function closeDialogs() {
   const confirmDialog = $('confirm-dialog');
   if (confirmDialog.open) confirmDialog.close();
+  closeExists(); // 021 C-14
   closeArticleForm(); // 007 CL-8
   if (reviewState.open) closeReview(); // 009 CL-5
   const mealDialog = $('meal-dialog');
@@ -907,6 +911,7 @@ function applyWriteControls() {
   for (const id of ['add-button', 'add-article-button', 'quick-add-button', 'article-delete']) {
     $(id).disabled = state.offline;
   }
+  refreshExistsButtons(); // 021 C-13
   $('article-save').disabled = state.offline || articleForm.saving;
   $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
@@ -1120,8 +1125,9 @@ function pickSuggestion(item) {
 }
 
 // Alta con anadir_articulo (RF-13, RF-19, RF-20, RF-39, CL-4); true si quedó añadido o recuperado.
-// fromForm: los mensajes van dentro del formulario de artículo (llega en T9)
-async function addArticle({ nombre, cantidad, unidad }, fromForm = false) {
+// fromForm: los mensajes van dentro del formulario de artículo (llega en T9).
+// askIfListed: si ya está en Por comprar, sin aviso y devuelve 'listed' (021 C-8)
+async function addArticle({ nombre, cantidad, unidad }, fromForm = false, askIfListed = false) {
   const report = (text) => (fromForm ? showArticleFormError(text) : showError(text));
   let result;
   try {
@@ -1135,6 +1141,7 @@ async function addArticle({ nombre, cantidad, unidad }, fromForm = false) {
     return false;
   }
   const outcome = addOutcome(result.data);
+  if (outcome.kind === 'exists' && askIfListed && outcome.list === 'por_comprar') return 'listed';
   if (outcome.kind === 'exists') { // RF-19, CL-4, RF-45
     report(articleExistsMessage(outcome.name, outcome.list));
     loadList();
@@ -1174,14 +1181,91 @@ async function submitQuickAdd(event) {
   const sent = fields.map((field) => field.value); // CL-16, 021 C-4: lo cambiado mientras espera no se borra
   listState.quickPending = true; // los campos siguen editables (CL-17)
   try {
-    const ok = await addArticle(checked.data, false);
+    // 021 C-7: sin cantidad, el aviso de hoy; con ella, la ventana (C-8)
+    const ok = await addArticle(checked.data, false, checked.data.cantidad !== null);
     if (!sessionActive) return;
-    if (ok && fields.every((field, i) => field.value === sent[i])) fields.forEach((field) => { field.value = ''; });
+    if (ok === 'listed') return await askExisting(checked.data);
+    if (ok && fields.every((field, i) => field.value === sent[i])) clearQuickFields();
     renderSuggestions();
     input.focus();
   } finally {
     listState.quickPending = false;
   }
+}
+
+// Vacía los tres campos y deja el cursor en el nombre (021 C-4, C-9, C-10)
+function clearQuickFields() {
+  quickFields().forEach((field) => { field.value = ''; });
+  showQuickError('');
+  renderSuggestions();
+  $('quick-add-input').focus();
+}
+
+// Ya en Por comprar con cantidad escrita: la ventana, con el artículo de la lista recargada (D-2)
+async function askExisting(written) {
+  const listError = await loadList();
+  if (!sessionActive || listError) return; // el error de carga ya se ve; los campos se quedan
+  const article = findEquivalent(listState.items, written.nombre);
+  if (!article || article.lista !== 'por_comprar') return showError(ARTICLE_CHANGED_MESSAGE); // C-11
+  const choice = existingArticleChoice(article, written);
+  Object.assign(existsState, { article, choice, saving: false });
+  $('exists-text').textContent = choice.text;
+  for (const [id, option] of [['exists-sum', choice.sum], ['exists-change', choice.change]]) {
+    $(id).hidden = !option;
+    $(id).textContent = option ? option.label : '';
+  }
+  refreshExistsButtons();
+  $('exists-dialog').showModal(); // I-12: encima de todo
+}
+
+// Sin red o mientras guarda, "Sumar" y "Cambiar a" desactivados; "Dejar", solo mientras guarda (C-13)
+function refreshExistsButtons() {
+  $('exists-sum').disabled = state.offline || existsState.saving;
+  $('exists-change').disabled = state.offline || existsState.saving;
+  $('exists-keep').disabled = existsState.saving;
+}
+
+function closeExists() {
+  existsState.article = null;
+  existsState.choice = null;
+  existsState.saving = false;
+  if ($('exists-dialog').open) $('exists-dialog').close();
+}
+
+// "Dejar" o Esc: nada cambia, se vacían los campos (C-10); mientras guarda, Esc no cierra
+function keepExisting() {
+  if (existsState.saving) return;
+  closeExists();
+  clearQuickFields();
+}
+
+// "Sumar" o "Cambiar a": un solo cambio con su "antes"; si el otro lo ha cambiado, no se guarda (D-1, C-9, C-11, C-12)
+async function applyExisting(option) {
+  if (state.offline || existsState.saving || !option) return;
+  const { article } = existsState;
+  existsState.saving = true;
+  refreshExistsButtons();
+  const change = {
+    accion: 'cambiar',
+    id: article.id,
+    antes: { lista: article.lista, cantidad: article.cantidad, unidad: article.unidad },
+    cantidad: option.cantidad,
+    unidad: option.unidad,
+  };
+  let result;
+  try {
+    result = await client.rpc('anadir_ingredientes', { p_cambios: [change] });
+  } catch (error) {
+    result = { error };
+  }
+  if (!sessionActive || !existsState.saving) return; // I-13: ya se cerró sin guardar
+  closeExists();
+  const outcome = result.data?.resultado;
+  if (result.error) showError(articleErrorMessage('save', result.error, navigator.onLine)); // C-12
+  else if (outcome === 'cambiado') showError(ARTICLE_CHANGED_MESSAGE); // C-11
+  else if (outcome !== 'hecho') showError(ARTICLE_UNEXPECTED_MESSAGE);
+  else clearQuickFields(); // C-9
+  loadList();
 }
 
 // Sustituye un artículo por el que devuelve el servidor y repinta (RF-37, D-9)
@@ -3208,6 +3292,10 @@ function bindEvents() {
 
   $('confirm-yes').addEventListener('click', () => $('confirm-dialog').close('yes'));
   $('confirm-no').addEventListener('click', () => $('confirm-dialog').close('no'));
+  $('exists-keep').addEventListener('click', keepExisting); // 021 C-10
+  $('exists-sum').addEventListener('click', () => applyExisting(existsState.choice?.sum)); // C-9
+  $('exists-change').addEventListener('click', () => applyExisting(existsState.choice?.change));
+  $('exists-dialog').addEventListener('cancel', (event) => { event.preventDefault(); keepExisting(); });
 
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {
