@@ -403,8 +403,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 /* 021 C-1, C-15: nombre a todo el ancho; debajo Cantidad estrecha, Unidad a su ancho y [+] a la
    derecha, los tres de al menos 40 × 40 px */
 .quick-add-amount { display: flex; align-items: stretch; gap: 0.5rem; margin-top: 0.5rem; }
-.quick-add-quantity { flex: 0 1 6rem; min-width: 0; min-height: 2.5rem; }
-.quick-add-unit { flex: none; width: auto; min-height: 2.5rem; }
+/* 021 C-1 (modificado): Cantidad y Unidad, mitad y mitad hasta [+] */
+.quick-add-quantity, .quick-add-unit { flex: 1 1 0; width: auto; min-width: 0; min-height: 2.5rem; }
 .quick-add-button { min-width: 2.75rem; min-height: 2.5rem; margin-left: auto; font-size: var(--text-large); line-height: 1; }
 .quick-add-error { margin: 0.5rem 0 0; font-size: var(--text-small); }
 /* Sugerencias de Guardados bajo el campo rápido (RF-21, RF-23); zona de toque de 40 px (RNF-7) */
