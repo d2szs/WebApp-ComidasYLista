@@ -1104,6 +1104,31 @@ function lineOptions(line) {
   };
 }
 
+// ===== 021-cantidad-campo-rapido: ventana "ya está en la lista" del campo rápido =====
+
+// Texto y botones al añadir con cantidad un artículo ya en Por comprar: text con la cantidad de
+// la lista; sum ("Sumar: 2 l.", solo si se pueden sumar, como en la revisión: 013 D-8) y change
+// ("Cambiar a 2 l.", solo si se ve distinta de la de la lista), con la cantidad que guardan o null
+function existingArticleChoice(article, written) {
+  const hasArticleAmount = article.cantidad !== null && article.cantidad !== undefined && UNIT_KINDS[article.unidad];
+  const current = formatQuantity(article.cantidad, article.unidad);
+  const typed = formatQuantity(written.cantidad, written.unidad);
+  let sum = null;
+  if (hasArticleAmount) {
+    const total = combineAmounts([article, written]);
+    if (!total.detail) {
+      sum = { label: `Sumar: ${formatQuantity(total.cantidad, total.unidad)}`, cantidad: total.cantidad, unidad: total.unidad };
+    }
+  }
+  const change = typed === current ? null
+    : { label: `Cambiar a ${typed}`, cantidad: written.cantidad, unidad: written.unidad };
+  return {
+    text: current ? `«${article.nombre}» ya está en la lista: ${current}` : `«${article.nombre}» ya está en la lista.`,
+    sum,
+    change,
+  };
+}
+
 // ===== 009-ingredientes-automaticos: elecciones, lo que se ve y cambios a enviar =====
 
 const NO_INGREDIENTS_MESSAGE = 'No hay ingredientes que comprar en las comidas de este periodo.';
@@ -1646,7 +1671,7 @@ if (typeof module !== 'undefined') {
     userInitial, isSidebarCollapsed, shortWeekDate, needsShortWeekDates,
     PERIOD_ORDER_MESSAGE, PERIOD_DATES_MESSAGE, UNIT_KINDS, defaultPeriod, compareMoments,
     periodError, isCurrentLoad, mealsInPeriod, isPurchaseIngredient, roundQuantity, combineAmounts,
-    periodLines, lineOptions,
+    periodLines, lineOptions, existingArticleChoice,
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
     ingredientsErrorMessage, typedAmount, typedLines, typedErrors, choiceAfterTyping,
