@@ -1059,8 +1059,7 @@ function renderSuggestions(keepMark = true) {
   const found = listState.quickClosed ? [] : suggestions(listState.items, $('quick-add-input').value);
   $('quick-suggestions').replaceChildren(...found.map((item) => {
     const li = el('li');
-    const pick = button('suggestion', item.nombre, () => pickSuggestion(item));
-    pick.disabled = state.offline; // 011 RF-10: recuperar
+    const pick = button('suggestion', item.nombre, () => pickSuggestion(item)); // sin red también (021 C-13)
     li.append(pick);
     return li;
   }));
@@ -1105,17 +1104,19 @@ function onQuickKeydown(event) {
   setQuickMark(moveMark(quickMarkedIndex(options), options.length, event.key === 'ArrowDown' ? 'down' : 'up'));
 }
 
-// Tocar una sugerencia la recupera (RF-23); el campo solo se vacía si se recuperó y nadie
-// lo cambió mientras esperaba (CL-16, CL-18)
-async function pickSuggestion(item) {
-  if (state.offline) return; // 011 RF-10
-  const input = $('quick-add-input');
-  const sent = input.value;
-  const ok = await recoverArticle(item);
-  if (!sessionActive) return;
-  if (ok && input.value === sent) input.value = '';
+// Elegir una sugerencia no guarda nada: nombre guardado, cantidad y unidad guardadas solo si las
+// dos estaban vacías, lista cerrada hasta escribir o borrar en el nombre y cursor en Cantidad.
+// También sin red: solo rellena (021 C-6, C-13; como "Añadir artículo", 016 C-3, C-4)
+function pickSuggestion(item) {
+  const [input, quantity, unit] = quickFields();
+  const fields = pickedAmountFields(item, quantity.value, unit.value);
+  input.value = item.nombre;
+  quantity.value = fields.quantity;
+  unit.value = fields.unit;
+  showQuickError('');
+  listState.quickClosed = true;
   renderSuggestions();
-  input.focus();
+  quantity.focus();
 }
 
 // Alta con anadir_articulo (RF-13, RF-19, RF-20, RF-39, CL-4); true si quedó añadido o recuperado.
@@ -1160,9 +1161,9 @@ function showQuickError(text) {
 // Intro o [+] en el campo rápido, con cantidad y unidad (RF-13, RF-16, CL-16, CL-17; 021 C-2 a C-5)
 async function submitQuickAdd(event) {
   event.preventDefault();
-  if (state.offline) return; // 011 RF-10
   const marked = quickOptions()[quickMarkedIndex()];
-  if (marked) return marked.click(); // 015 C-3, C-12: con una marcada, la recupera como al tocarla
+  if (marked) return marked.click(); // 015 C-12, 021 C-6: con una marcada, la elige como al tocarla
+  if (state.offline) return; // 011 RF-10, 021 C-13
   if (listState.quickPending) return; // CL-17: otro Intro o [+] mientras espera no hace nada
   const fields = quickFields();
   const [input, quantity, unit] = fields;
