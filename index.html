@@ -149,11 +149,29 @@
 
     <!-- Pantalla Compra (007 RF-6): campo rápido, Por comprar y Guardados -->
     <main id="shopping" class="shopping">
+      <!-- 021 C-1: nombre a todo el ancho, sugerencias y debajo Cantidad, Unidad y [+] -->
       <form id="quick-add" class="quick-add" novalidate>
         <input type="text" id="quick-add-input" maxlength="200" placeholder="Añadir artículo..." aria-label="Añadir artículo" autocomplete="off" enterkeyhint="done">
-        <button type="submit" id="quick-add-button" class="btn btn-primary quick-add-button" aria-label="Añadir">+</button>
+        <ul id="quick-suggestions" class="suggestions" aria-label="Sugerencias de Guardados" hidden></ul>
+        <div class="quick-add-amount">
+          <input type="text" id="quick-add-quantity" class="quick-add-quantity" maxlength="10" placeholder="Cant." aria-label="Cantidad" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+          <select id="quick-add-unit" class="quick-add-unit" aria-label="Unidad">
+            <option value="">Unidad</option>
+            <option value="und">und.</option>
+            <option value="kg">kg.</option>
+            <option value="gr">gr.</option>
+            <option value="l">l.</option>
+            <option value="ml">ml.</option>
+            <option value="docena">docena</option>
+            <option value="bote">bote</option>
+            <option value="lata">lata</option>
+            <option value="paquete">paquete</option>
+            <option value="botella">botella</option>
+          </select>
+          <button type="submit" id="quick-add-button" class="btn btn-primary quick-add-button" aria-label="Añadir">+</button>
+        </div>
+        <p id="quick-add-error" class="error-message quick-add-error" role="alert" hidden></p>
       </form>
-      <ul id="quick-suggestions" class="suggestions" aria-label="Sugerencias de Guardados" hidden></ul>
       <!-- 009 RF-1, RF-33: desactivado hasta la primera carga correcta de la lista -->
       <button type="button" id="ingredients-button" class="btn ingredients-button" disabled>Añadir ingredientes de comidas</button>
 

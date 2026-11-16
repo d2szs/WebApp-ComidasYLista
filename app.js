@@ -903,7 +903,8 @@ function resumeSyncNotice() {
 // Activa o desactiva lo que guarda, mueve o borra según state.offline (RF-10, D-7); tachar,
 // "Cerrar sesión", "Editar" y los campos de los formularios no cambian (RF-11, RF-19, CL-6)
 function applyWriteControls() {
-  for (const id of ['add-button', 'add-article-button', 'quick-add-input', 'quick-add-button', 'article-delete']) {
+  // 021 C-13: en el campo rápido se sigue escribiendo; solo [+] se desactiva
+  for (const id of ['add-button', 'add-article-button', 'quick-add-button', 'article-delete']) {
     $(id).disabled = state.offline;
   }
   $('article-save').disabled = state.offline || articleForm.saving;
@@ -1146,22 +1147,35 @@ async function addArticle({ nombre, cantidad, unidad }, fromForm = false) {
   return true;
 }
 
-// Intro o [+] en el campo rápido (RF-13, RF-16, CL-16, CL-17)
+// Los tres campos del campo rápido: nombre, cantidad y unidad (021 C-4)
+function quickFields() {
+  return [$('quick-add-input'), $('quick-add-quantity'), $('quick-add-unit')];
+}
+
+function showQuickError(text) {
+  $('quick-add-error').textContent = text;
+  $('quick-add-error').hidden = !text;
+}
+
+// Intro o [+] en el campo rápido, con cantidad y unidad (RF-13, RF-16, CL-16, CL-17; 021 C-2 a C-5)
 async function submitQuickAdd(event) {
   event.preventDefault();
   if (state.offline) return; // 011 RF-10
   const marked = quickOptions()[quickMarkedIndex()];
   if (marked) return marked.click(); // 015 C-3, C-12: con una marcada, la recupera como al tocarla
   if (listState.quickPending) return; // CL-17: otro Intro o [+] mientras espera no hace nada
-  const input = $('quick-add-input');
-  const name = cleanIngredientName(input.value);
-  if (!name) return; // RF-16: sin mensaje
-  const sent = input.value; // CL-16: lo escrito mientras espera no se borra
-  listState.quickPending = true; // el campo sigue editable (CL-17)
+  const fields = quickFields();
+  const [input, quantity, unit] = fields;
+  if (!cleanIngredientName(input.value)) return; // RF-16, 021 C-5: sin mensaje
+  const checked = validateArticleForm({ name: input.value, quantity: quantity.value, original: null, unit: unit.value });
+  if (checked.error) return showQuickError(checked.error); // 021 C-5
+  showQuickError('');
+  const sent = fields.map((field) => field.value); // CL-16, 021 C-4: lo cambiado mientras espera no se borra
+  listState.quickPending = true; // los campos siguen editables (CL-17)
   try {
-    const ok = await addArticle({ nombre: name, cantidad: null, unidad: null }, false);
+    const ok = await addArticle(checked.data, false);
     if (!sessionActive) return;
-    if (ok && input.value === sent) input.value = '';
+    if (ok && fields.every((field, i) => field.value === sent[i])) fields.forEach((field) => { field.value = ''; });
     renderSuggestions();
     input.focus();
   } finally {
@@ -3173,6 +3187,9 @@ function bindEvents() {
   $('quick-add-input').addEventListener('input', onQuickInput); // RF-21, RF-22; 015 C-7, C-9
   $('quick-add-input').addEventListener('keydown', onQuickKeydown); // 015 C-1, C-2
   $('quick-add-input').addEventListener('blur', () => setQuickMark(-1)); // 015 C-10: sigue visible, sin marcada
+  // 021 C-5: el mensaje de cantidad se quita al cambiar Cantidad o Unidad
+  $('quick-add-quantity').addEventListener('input', () => showQuickError(''));
+  $('quick-add-unit').addEventListener('change', () => showQuickError(''));
   $('error-notice-close').addEventListener('click', () => hideError());
 
   formState.dish1 = buildFormDish($('form-dish-1'));
