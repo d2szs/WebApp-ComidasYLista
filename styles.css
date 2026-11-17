@@ -643,6 +643,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: var(--space); }
 /* 021 C-8, C-15: si no caben en una línea, pasan a otra, alineados a la derecha */
 .exists-buttons { flex-wrap: wrap; }
+/* 022 C-13: un nombre largo pasa a varias líneas; campos y botones de al menos 40 × 40 px */
+.recover-title { overflow-wrap: anywhere; }
+.recover-dialog input, .recover-dialog select, .recover-dialog .btn { min-height: 2.5rem; min-width: 2.5rem; }
 /* Revisión de ingredientes (009 D-5): en columna, las líneas se desplazan por dentro */
 .ingredients-dialog { max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); }
 .ingredients-dialog[open] { display: flex; flex-direction: column; }

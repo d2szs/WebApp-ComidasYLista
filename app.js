@@ -61,6 +61,8 @@ let listState = initialListState();
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
 const existsState = { article: null, choice: null, saving: false };
+// Ventana de ↺ en Guardados (022): el artículo como se vio al abrirla; saving, mientras guarda (C-10)
+const recoverState = { item: null, saving: false };
 // Revisión de ingredientes de comidas (009, plan § Algoritmo); requestId nunca vuelve a
 // empezar mientras la app está abierta (D-12)
 function initialReviewState(requestId = 0) {
@@ -403,6 +405,7 @@ function closeDialogs() {
   const confirmDialog = $('confirm-dialog');
   if (confirmDialog.open) confirmDialog.close();
   closeExists(); // 021 C-14
+  closeRecover(); // 022 C-12
   closeArticleForm(); // 007 CL-8
   if (reviewState.open) closeReview(); // 009 CL-5
   const mealDialog = $('meal-dialog');
@@ -912,6 +915,7 @@ function applyWriteControls() {
     $(id).disabled = state.offline;
   }
   refreshExistsButtons(); // 021 C-13
+  refreshRecoverButtons(); // 022 C-11
   $('article-save').disabled = state.offline || articleForm.saving;
   $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
@@ -1044,7 +1048,7 @@ function buildSavedRow(item) {
   recover.type = 'button';
   recover.setAttribute('aria-label', `Pasar «${item.nombre}» a Por comprar`);
   recover.disabled = state.offline; // 011 RF-10
-  recover.addEventListener('click', () => recoverArticle(item)); // RF-26
+  recover.addEventListener('click', () => openRecover(item)); // 022 C-1
   const remove = el('button', 'article-action', '✕');
   remove.type = 'button';
   remove.setAttribute('aria-label', `Borrar «${item.nombre}»`);
@@ -1274,21 +1278,89 @@ function replaceItem(row) {
   renderShopping();
 }
 
-// Pasa un artículo de Guardados a Por comprar (RF-23, RF-26); true si quedó recuperado (CL-18)
-async function recoverArticle(item) {
-  if (state.offline) return false; // 011 RF-10
-  const { data: rows, error } = await client.from('articulos')
-    .update({ lista: 'por_comprar', tachado: false })
-    .eq('id', item.id).eq('lista', 'guardados')
-    .select('id, nombre, cantidad, unidad, lista, tachado');
-  if (!sessionActive) return false;
-  if (error) {
-    showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37
-    return false;
+// ===== Ventana de ↺ en Guardados (022) =====
+const RECOVER_FIELDS = { quantity: 'recover-quantity', unit: 'recover-unit' };
+
+function showRecoverError(text) {
+  $('recover-error').textContent = text;
+  $('recover-error').hidden = !text;
+  if (!text) document.querySelectorAll('#recover-form .invalid-field').forEach((n) => n.classList.remove('invalid-field'));
+}
+
+// Sin red o mientras guarda, "Añadir" desactivado; mientras guarda, también "Cancelar" (C-10, C-11)
+function refreshRecoverButtons() {
+  $('recover-add').disabled = state.offline || recoverState.saving;
+  $('recover-cancel').disabled = recoverState.saving;
+}
+
+// Rellena con la cantidad y la unidad guardadas, sin guardar nada; foco en "Añadir" (C-1, C-2)
+function openRecover(item) {
+  if (state.offline) return; // 011 RF-10
+  Object.assign(recoverState, { item, saving: false });
+  $('recover-title').textContent = `Pasar «${item.nombre}» a Por comprar`; // I-9: como texto
+  $('recover-quantity').value = item.cantidad !== null ? amountFieldText(item.cantidad) : ''; // 013 C-5
+  $('recover-unit').value = item.unidad || '';
+  showRecoverError('');
+  refreshRecoverButtons();
+  $('recover-dialog').showModal(); // I-12: encima de todo
+  $('recover-add').focus(); // C-2: sin cursor en ningún campo
+}
+
+function closeRecover() {
+  recoverState.item = null;
+  recoverState.saving = false;
+  if ($('recover-dialog').open) $('recover-dialog').close();
+}
+
+// "Cancelar" o Esc: sigue en Guardados (C-6); mientras guarda, no cierra (C-10)
+function cancelRecover() {
+  if (!recoverState.saving) closeRecover();
+}
+
+// "Añadir" o Intro: pasa a Por comprar con lo que se ve; solo si sigue en Guardados (C-3 a C-9, D-2, D-3)
+async function submitRecover(event) {
+  event.preventDefault();
+  const { item } = recoverState;
+  if (state.offline || recoverState.saving || !item) return; // C-10, C-11: también con Intro
+  showRecoverError('');
+  const checked = validateArticleForm({
+    name: item.nombre, quantity: $('recover-quantity').value, original: item.cantidad, unit: $('recover-unit').value,
+  });
+  if (checked.error) { // C-5
+    checked.invalid.forEach((field) => $(RECOVER_FIELDS[field])?.classList.add('invalid-field'));
+    return showRecoverError(checked.error);
   }
-  if (rows.length === 0) return missingOrMoved(item.id, null); // CL-2 → false, CL-12 → true
-  replaceItem(rows[0]);
-  return true;
+  recoverState.saving = true;
+  refreshRecoverButtons();
+  const result = await timedQuery(client.from('articulos')
+    .update({ lista: 'por_comprar', tachado: false, cantidad: checked.data.cantidad, unidad: checked.data.unidad })
+    .eq('id', item.id).eq('lista', 'guardados')
+    .select('id, nombre, cantidad, unidad, lista, tachado'));
+  if (!sessionActive || recoverState.item !== item) return; // I-13: ya se cerró sin guardar
+  recoverState.saving = false;
+  refreshRecoverButtons();
+  if (result.error) { // C-9: la ventana sigue abierta con lo escrito
+    return showRecoverError(articleErrorMessage('save', result.error, reachable(result)));
+  }
+  closeRecover();
+  if (result.data.length === 0) return missingOrMoved(item.id, ARTICLE_CHANGED_MESSAGE); // C-7, C-8
+  replaceItem(result.data[0]);
+}
+
+// Intro en Unidad envía, como en Cantidad (C-3)
+function onRecoverUnitKeydown(event) {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  $('recover-form').requestSubmit();
+}
+
+function setupRecover() {
+  $('recover-form').addEventListener('submit', submitRecover);
+  $('recover-cancel').addEventListener('click', cancelRecover);
+  $('recover-dialog').addEventListener('cancel', (event) => { event.preventDefault(); cancelRecover(); });
+  $('recover-quantity').addEventListener('input', () => showRecoverError('')); // C-5, C-9
+  $('recover-unit').addEventListener('change', () => showRecoverError(''));
+  $('recover-unit').addEventListener('keydown', onRecoverUnitKeydown);
 }
 
 // Tacha o desmarca un artículo de Por comprar (RF-24, RF-40); value es fijo, lo contrario de lo
@@ -1541,19 +1613,15 @@ async function finishShopping() {
 // onAnswered: solo setStruck lo pasa, para quitar de la cola cuando la lectura respondió (007 D-25)
 async function missingOrMoved(id, movedMessage, onAnswered) {
   const { data, error } = await client.from('articulos').select('id').eq('id', id);
-  if (!sessionActive) return false;
+  if (!sessionActive) return;
   if (error) {
     showError(articleErrorMessage('save', error, navigator.onLine)); // RF-36, RF-37: sin red no es CL-2
-    return false;
+    return;
   }
   onAnswered?.();
-  if (data.length === 0) {
-    articleGone();
-    return false;
-  }
+  if (data.length === 0) return articleGone();
   if (movedMessage) showError(movedMessage); // CL-14
   loadList();
-  return true;
 }
 
 // Borra un artículo tras confirmarlo, con ✕ o con "Borrar" del formulario (RF-31, RF-43).
@@ -3296,6 +3364,7 @@ function bindEvents() {
   $('exists-sum').addEventListener('click', () => applyExisting(existsState.choice?.sum)); // C-9
   $('exists-change').addEventListener('click', () => applyExisting(existsState.choice?.change));
   $('exists-dialog').addEventListener('cancel', (event) => { event.preventDefault(); keepExisting(); });
+  setupRecover(); // 022
 
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {
