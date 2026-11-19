@@ -198,6 +198,24 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   line-height: 1;
 }
 .user-button:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
+/* 🔍 (023 C-1): empuja a la derecha la lupa y el círculo, que va pegado a ella */
+.search-button {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.search-button + .user-button { margin-left: 0; }
+.search-button:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
 /* ☰: oculto salvo en el pc ancho (RF-3, D-10) */
 .sidebar-toggle {
   display: none;
@@ -267,6 +285,71 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
     overflow: hidden;
     clip-path: inset(50%);
   }
+}
+
+/* ===== Buscador (023 C-2, C-29, D-7): a pantalla completa, encima de todo; en el pc, en una
+   columna centrada. Se desplaza por dentro, sin mover la página de debajo ===== */
+.search-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.search-dialog::backdrop { background: var(--color-bg); }
+.search-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--top-bar-height);
+  padding: 0.35rem 0.5rem 0.35rem var(--space);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+.search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.6rem;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+.search-field:focus-within { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
+.search-field input { flex: 1; min-width: 0; padding: 0.45rem 0; border: none; background: none; color: var(--color-text); }
+.search-field input:focus { outline: none; }
+.search-close {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font-size: var(--text-large);
+  cursor: pointer;
+}
+.search-close:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
+.search-results { padding: 0 var(--space) var(--space); overflow-wrap: anywhere; }
+/* D-8: la franja de aviso, dentro del buscador mientras está abierto */
+.search-dialog .error-notice { margin: var(--space) var(--space) 0; }
+@media (min-width: 768px) {
+  .search-dialog { right: 0; left: 0; width: min(40rem, 100%); margin: 0 auto; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+  .search-dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
 }
 
 /* ===== Cabecera: selector y navegación, pegados bajo la barra superior (RNF-1, D-4) ===== */

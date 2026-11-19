@@ -408,6 +408,8 @@ function closeDialogs() {
   closeRecover(); // 022 C-12
   closeArticleForm(); // 007 CL-8
   if (reviewState.open) closeReview(); // 009 CL-5
+  searchState.query = ''; // 023 C-28, D-9: se olvida la búsqueda guardada
+  closeSearch({ restoreFocus: false }); // 023 C-28: abierto en una sección oculta, dejaría la página inerte
   const mealDialog = $('meal-dialog');
   if (!mealDialog.open) return;
   formState.open = false;
@@ -2565,6 +2567,50 @@ function logOutFromMenu() {
   logOut();
 }
 
+// ===== Buscador (023) =====
+// Búsqueda guardada, solo en memoria: se pierde al recargar y se borra al cerrar sesión
+// (C-4, C-5, D-9)
+const searchState = { query: '', restoreFocus: true };
+
+// Modal: lo de debajo queda inerte y no cambia (C-2, C-3, D-7). El campo trae la búsqueda
+// guardada, seleccionada (C-4), y la franja de aviso pasa dentro, bajo el campo (C-31, D-8)
+function openSearch() {
+  const input = $('search-input');
+  input.value = searchState.query;
+  $('search-dialog').insertBefore($('error-notice'), $('search-results'));
+  $('search-dialog').showModal();
+  $('search-button').setAttribute('aria-expanded', 'true');
+  input.focus();
+  input.select();
+  renderSearch();
+}
+
+// restoreFocus: false al ir a una comida, que deja el foco en la página (D-10)
+function closeSearch({ restoreFocus = true } = {}) {
+  if (!$('search-dialog').open) return;
+  searchState.restoreFocus = restoreFocus;
+  $('search-dialog').close();
+}
+
+// Evento close: llega con ✕, Esc, una comida o closeDialogs. La franja vuelve a su sitio con
+// el mismo texto y el foco, a 🔍 (C-3, C-31, D-8)
+function onSearchClosed() {
+  $('loading-indicator').before($('error-notice'));
+  $('search-button').setAttribute('aria-expanded', 'false');
+  if (searchState.restoreFocus) $('search-button').focus({ preventScroll: true });
+  searchState.restoreFocus = true;
+}
+
+function onSearchInput() {
+  searchState.query = $('search-input').value;
+  renderSearch();
+}
+
+// Grupos de resultados; nada mientras el campo está vacío o solo con espacios (C-7)
+function renderSearch() {
+  $('search-results').replaceChildren();
+}
+
 // ===== Barra lateral (008) =====
 // Se lee una vez al arrancar, no al entrar: sobrevive al cierre de sesión (RF-11, D-8).
 // Sin localStorage, expandida (CL-5)
@@ -3288,6 +3334,10 @@ function bindEvents() {
   $('user-menu').addEventListener('click', onUserMenuClick);
   $('user-menu').addEventListener('close', () => $('user-button').setAttribute('aria-expanded', 'false'));
   $('user-menu-logout').addEventListener('click', logOutFromMenu);
+  $('search-button').addEventListener('click', openSearch); // 023 C-2
+  $('search-close').addEventListener('click', () => closeSearch()); // 023 C-3
+  $('search-dialog').addEventListener('close', onSearchClosed); // 023 C-3, C-31, D-8
+  $('search-input').addEventListener('input', onSearchInput); // 023 C-8
   // Al cruzar los 768 px cambia el diseño (CSS) y el menú se cierra (CL-8)
   matchMedia('(min-width: 768px)').addEventListener('change', closeUserMenu);
   $('sidebar-toggle').addEventListener('click', toggleSidebar);
