@@ -1000,6 +1000,7 @@ function renderShopping() {
   renderSuggestions(); // cada recarga recalcula las sugerencias de lo escrito (RF-22, CL-16, CL-18)
   refreshOpenIngredientSuggestions(); // 014 C-17, C-19, C-22: también las del formulario
   refreshArticleSuggestions(); // 016 C-11
+  if ($('search-dialog').open) renderSearchShopping(); // 023 C-20, C-34, D-12: también con "Cargando…"
   // 009 RF-33: hasta la primera carga correcta; v4.1: sin red, también en modo copia (D-14)
   $('ingredients-button').disabled = loading || state.offline;
   if (loading) return;
@@ -2570,7 +2571,8 @@ function logOutFromMenu() {
 // ===== Buscador (023) =====
 // Búsqueda guardada, solo en memoria: se pierde al recargar y se borra al cerrar sesión
 // (C-4, C-5, D-9)
-const searchState = { query: '', restoreFocus: true };
+// focusId: artículo cuyo "Editar artículo" o ↺ se abrió desde un resultado (D-16)
+const searchState = { query: '', restoreFocus: true, focusId: null };
 
 // Modal: lo de debajo queda inerte y no cambia (C-2, C-3, D-7). El campo trae la búsqueda
 // guardada, seleccionada (C-4), y la franja de aviso pasa dentro, bajo el campo (C-31, D-8)
@@ -2608,7 +2610,81 @@ function onSearchInput() {
 
 // Grupos de resultados; nada mientras el campo está vacío o solo con espacios (C-7)
 function renderSearch() {
-  $('search-results').replaceChildren();
+  renderSearchShopping();
+}
+
+// Grupo Compra con los artículos tal como se pintan en la lista, cola de tachados incluida;
+// "Buscando…" hasta la primera carga (C-10, C-11, C-34, D-12). Lo llama también
+// renderShopping, así llegan los cambios del otro, los guardados y la red (C-17, C-18, C-20, C-24)
+function renderSearchShopping() {
+  const group = $('search-shopping');
+  const list = $('search-shopping-list');
+  group.hidden = searchKey(searchState.query) === '';
+  if (group.hidden) {
+    list.replaceChildren();
+    return;
+  }
+  const kept = focusedResult(list);
+  let found = [];
+  let text = SEARCH_LOADING_TEXT;
+  if (listState.loaded) {
+    const { items } = applyStrikeQueue(listState.items, readStrikeQueue());
+    found = shoppingResults(items, searchState.query);
+    text = found.length > 0 ? '' : SEARCH_NO_ARTICLES_TEXT;
+  }
+  list.replaceChildren(...found.map(buildSearchArticle));
+  $('search-shopping-state').textContent = text;
+  $('search-shopping-state').hidden = !text;
+  if (kept) focusSearchArticle(kept.id, kept.className);
+}
+
+// Resultado: [nombre cantidad] [lista] [↺ solo en Guardados]; como texto (C-10, C-30)
+function buildSearchArticle(item) {
+  const saved = item.lista === 'guardados';
+  const row = el('li', 'search-article');
+  row.dataset.id = String(item.id);
+  row.classList.toggle('struck', !saved && item.tachado);
+  if (saved) row.classList.add('saved-row');
+  const open = button('search-article-open', undefined, () => openFromSearch(item, openArticleForm)); // C-17
+  open.append(el('span', 'search-article-name', item.nombre));
+  const quantity = formatQuantity(item.cantidad, item.unidad);
+  if (quantity) open.append(' ', el('span', 'search-article-quantity', quantity));
+  row.append(open, el('span', 'search-article-list', saved ? 'Guardados' : 'Por comprar'));
+  if (saved) {
+    const recover = button('article-action search-article-recover', '↺', () => openFromSearch(item, openRecover)); // C-18
+    recover.setAttribute('aria-label', `Pasar «${item.nombre}» a Por comprar`);
+    recover.disabled = state.offline; // C-24, I-6
+    row.append(recover);
+  }
+  return row;
+}
+
+// "Editar artículo" o la ventana de ↺, encima del buscador, sin cambiar nada de ellas (C-17, C-18)
+function openFromSearch(item, open) {
+  searchState.focusId = String(item.id);
+  open(item);
+}
+
+// Artículo y botón con el foco dentro de los resultados, para no perderlo al repintar (D-16)
+function focusedResult(list) {
+  const active = document.activeElement;
+  const row = list.contains(active) ? active.closest('.search-article') : null;
+  return row ? { id: row.dataset.id, className: active.className } : null;
+}
+
+// Foco en ese botón del artículo, o en su nombre (↺ ya no está), o en el campo si ya no sale (D-16)
+function focusSearchArticle(id, className = '') {
+  const row = [...$('search-shopping-list').children].find((node) => node.dataset.id === id);
+  const target = row && ([...row.querySelectorAll('button')].find((node) => node.className === className && !node.disabled)
+    || row.querySelector('.search-article-open'));
+  (target || $('search-input')).focus();
+}
+
+// Al cerrarse "Editar artículo" o ↺ abiertos desde un resultado, el foco vuelve a él (D-16)
+function onSearchChildClosed() {
+  const id = searchState.focusId;
+  searchState.focusId = null;
+  if (id !== null && $('search-dialog').open) focusSearchArticle(id);
 }
 
 // ===== Barra lateral (008) =====
@@ -3338,6 +3414,8 @@ function bindEvents() {
   $('search-close').addEventListener('click', () => closeSearch()); // 023 C-3
   $('search-dialog').addEventListener('close', onSearchClosed); // 023 C-3, C-31, D-8
   $('search-input').addEventListener('input', onSearchInput); // 023 C-8
+  $('article-dialog').addEventListener('close', onSearchChildClosed); // 023 D-16
+  $('recover-dialog').addEventListener('close', onSearchChildClosed); // 023 D-16
   // Al cruzar los 768 px cambia el diseño (CSS) y el menú se cierra (CL-8)
   matchMedia('(min-width: 768px)').addEventListener('change', closeUserMenu);
   $('sidebar-toggle').addEventListener('click', toggleSidebar);

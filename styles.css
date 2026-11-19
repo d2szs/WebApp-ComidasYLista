@@ -345,6 +345,32 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 .search-close:focus-visible { outline: 2px solid var(--color-primary-text); outline-offset: 0; }
 .search-results { padding: 0 var(--space) var(--space); overflow-wrap: anywhere; }
+.search-group { margin-top: calc(var(--space) * 1.25); }
+.search-group-title { margin: 0 0 0.4rem; font-size: var(--text-large); }
+.search-list { list-style: none; margin: 0; padding: 0; }
+.search-state { margin: 0.4rem 0; color: var(--color-text-muted); }
+/* Resultado de Compra (C-10, C-29): el nombre salta de línea; la lista y ↺ quedan a la derecha */
+.search-article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.search-article.saved-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.search-article-open {
+  min-height: 40px;
+  padding: 0.55rem 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.search-article-quantity { color: var(--color-text-muted); }
+.search-article-list { padding: 0.65rem 0 0; font-size: var(--text-small); color: var(--color-text-muted); white-space: nowrap; }
+.search-article.struck .search-article-open { text-decoration: line-through; color: var(--color-text-muted); }
 /* D-8: la franja de aviso, dentro del buscador mientras está abierto */
 .search-dialog .error-notice { margin: var(--space) var(--space) 0; }
 @media (min-width: 768px) {

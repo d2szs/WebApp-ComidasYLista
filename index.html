@@ -114,7 +114,14 @@
         </label>
         <button type="button" id="search-close" class="search-close" aria-label="Cerrar el buscador">✕</button>
       </div>
-      <div id="search-results" class="search-results"></div>
+      <div id="search-results" class="search-results">
+        <!-- Grupo Compra (C-9 a C-11, C-34): oculto mientras no hay nada escrito (C-7) -->
+        <section id="search-shopping" class="search-group" aria-labelledby="search-shopping-title" hidden>
+          <h2 id="search-shopping-title" class="search-group-title">Compra</h2>
+          <ul id="search-shopping-list" class="search-list"></ul>
+          <p id="search-shopping-state" class="search-state" hidden></p>
+        </section>
+      </div>
     </dialog>
 
     <header class="header">
