@@ -371,6 +371,25 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .search-article-quantity { color: var(--color-text-muted); }
 .search-article-list { padding: 0.65rem 0 0; font-size: var(--text-small); color: var(--color-text-muted); white-space: nowrap; }
 .search-article.struck .search-article-open { text-decoration: line-through; color: var(--color-text-muted); }
+.search-error { color: var(--color-error); }
+/* Resultado de Comidas (C-12, C-29): platos, fecha y tipo, y el motivo, cada uno en su línea */
+.search-meal { border-bottom: 1px solid var(--color-border); }
+.search-meal-open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.55rem 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.search-meal-names { font-weight: 600; }
+.search-meal-date, .search-meal-reason { font-size: var(--text-small); color: var(--color-text-muted); }
 /* D-8: la franja de aviso, dentro del buscador mientras está abierto */
 .search-dialog .error-notice { margin: var(--space) var(--space) 0; }
 @media (min-width: 768px) {

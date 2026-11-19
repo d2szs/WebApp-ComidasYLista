@@ -2599,18 +2599,22 @@ function closeSearch({ restoreFocus = true } = {}) {
 function onSearchClosed() {
   $('loading-indicator').before($('error-notice'));
   $('search-button').setAttribute('aria-expanded', 'false');
+  cancelMealSearch(); // D-6
   if (searchState.restoreFocus) $('search-button').focus({ preventScroll: true });
+  else if (document.activeElement === $('search-button')) $('search-button').blur(); // D-10: el navegador lo devuelve solo
   searchState.restoreFocus = true;
 }
 
 function onSearchInput() {
   searchState.query = $('search-input').value;
-  renderSearch();
+  renderSearch({ wait: true });
 }
 
-// Grupos de resultados; nada mientras el campo está vacío o solo con espacios (C-7)
-function renderSearch() {
+// Grupos de resultados; nada mientras el campo está vacío o solo con espacios (C-7). Compra al
+// momento; Comidas, al abrir sin esperar y al escribir 300 ms tras la última tecla (D-6)
+function renderSearch({ wait = false } = {}) {
   renderSearchShopping();
+  searchMeals(wait);
 }
 
 // Grupo Compra con los artículos tal como se pintan en la lista, cola de tachados incluida;
@@ -2678,6 +2682,117 @@ function focusSearchArticle(id, className = '') {
   const target = row && ([...row.querySelectorAll('button')].find((node) => node.className === className && !node.disabled)
     || row.querySelector('.search-article-open'));
   (target || $('search-input')).focus();
+}
+
+// ===== Grupo Comidas del buscador (023 C-12 a C-16, C-26; D-4 a D-6) =====
+// requestId: número de la última petición; la que llega con otro se descarta (C-16, D-6).
+// typed y today: los de la primera página, que "Ver más" repite (D-5). received: filas
+// recibidas, de las que sale p_desde (D-4)
+const mealSearch = {
+  requestId: 0, timer: null, typed: '', today: '', results: [], received: 0, more: false,
+  loading: false, loadingMore: false, error: '', moreError: '',
+};
+const MEAL_SEARCH_DELAY = 300; // ms tras la última tecla (D-6)
+
+// Anula la petición en curso y la que espera: al escribir, vaciar, cerrar y cerrar sesión (D-6)
+function cancelMealSearch() {
+  mealSearch.requestId++;
+  clearTimeout(mealSearch.timer);
+  mealSearch.timer = null;
+}
+
+// Nueva búsqueda desde la primera página; "Buscando…" al momento (C-14)
+function searchMeals(wait) {
+  cancelMealSearch();
+  Object.assign(mealSearch, {
+    typed: searchState.query, today: toISODate(getToday()), results: [], received: 0, more: false,
+    loading: searchKey(searchState.query) !== '', loadingMore: false, error: '', moreError: '',
+  });
+  renderSearchMeals();
+  if (!mealSearch.loading) return;
+  const id = mealSearch.requestId;
+  if (wait) mealSearch.timer = setTimeout(() => requestMeals(id), MEAL_SEARCH_DELAY);
+  else requestMeals(id);
+}
+
+// "Ver más": la página siguiente con el mismo texto y el mismo "hoy" (C-13, D-5)
+function loadMoreMeals() {
+  if (mealSearch.loading || mealSearch.loadingMore || !mealSearch.more) return;
+  cancelMealSearch();
+  Object.assign(mealSearch, { loadingMore: true, moreError: '' });
+  renderSearchMeals();
+  requestMeals(mealSearch.requestId);
+}
+
+// Pide 21 filas para saber si hay más (D-1); las que llegan se vuelven a pasar por mealResult
+// y una que la app no ve coincidir no se pinta (D-4). Error o 8 s sin respuesta: C-26
+async function requestMeals(id) {
+  const from = mealSearch.received;
+  const result = await timedQuery(client.rpc('buscar_comidas', {
+    p_texto: mealSearch.typed, p_hoy: mealSearch.today, p_desde: from, p_cuantas: SEARCH_PAGE_SIZE + 1,
+  }));
+  if (id !== mealSearch.requestId || !sessionActive) return; // C-16
+  const more = mealSearch.loadingMore;
+  Object.assign(mealSearch, { loading: false, loadingMore: false });
+  if (result.error) {
+    const text = searchErrorMessage(result.error, reachable(result));
+    if (more) mealSearch.moreError = text;
+    else mealSearch.error = text;
+    return renderSearchMeals();
+  }
+  const rows = result.data || [];
+  const page = rows.slice(0, SEARCH_PAGE_SIZE);
+  mealSearch.received = from + page.length;
+  mealSearch.more = rows.length > SEARCH_PAGE_SIZE;
+  const seen = new Set(mealSearch.results.map((found) => found.id));
+  for (const meal of page) {
+    if (seen.has(meal.id)) continue; // D-5: no se repite
+    const found = mealResult(meal, mealSearch.typed);
+    if (found) mealSearch.results.push(found);
+    else console.warn('buscar_comidas devuelve una comida que la app no ve coincidir:', meal.id); // D-4
+  }
+  renderSearchMeals({ focusFrom: more ? $('search-meals-list').children.length : -1 });
+}
+
+// Pinta el grupo Comidas con mealSearch; como texto (C-12, C-30). focusFrom: tras "Ver más",
+// si el botón tenía el foco y ya no está, pasa al primer resultado nuevo
+function renderSearchMeals({ focusFrom = -1 } = {}) {
+  const { results, loading, loadingMore, error, moreError, more } = mealSearch;
+  $('search-meals').hidden = searchKey(mealSearch.typed) === ''; // C-7, C-9
+  const list = $('search-meals-list');
+  list.replaceChildren(...(loading || error ? [] : results.map(buildSearchMeal)));
+  let text = '';
+  if (loading) text = SEARCH_LOADING_TEXT; // C-14
+  else if (error) text = error; // C-26
+  else if (results.length === 0 && !more) text = SEARCH_NO_MEALS_TEXT; // C-15
+  $('search-meals-state').textContent = text;
+  $('search-meals-state').hidden = !text;
+  $('search-meals-state').classList.toggle('search-error', !!error);
+  const moreButton = $('search-more');
+  const hadFocus = document.activeElement === moreButton;
+  moreButton.hidden = loading || !!error || !more; // C-13
+  moreButton.disabled = loadingMore;
+  $('search-more-error').textContent = moreError; // C-26: bajo los ya vistos, que se quedan
+  $('search-more-error').hidden = !moreError;
+  if (hadFocus && moreButton.hidden) (list.children[focusFrom]?.querySelector('button') || $('search-input')).focus();
+}
+
+// Resultado: platos que coinciden, fecha y tipo, y el motivo si lo hay (C-12)
+function buildSearchMeal(found) {
+  const row = el('li', 'search-meal');
+  const open = button('search-meal-open', undefined, () => openMealFromSearch(found)); // C-19
+  open.append(el('span', 'search-meal-names', found.names), el('span', 'search-meal-date', found.dateLine));
+  if (found.reason) open.append(el('span', 'search-meal-reason', found.reason));
+  row.append(open);
+  return row;
+}
+
+// Cierra el buscador, pasa a Comidas si hacía falta y abre la vista Día con la comida
+// desplegada, que vuelve a cargar el día (C-19, C-22, D-10)
+function openMealFromSearch(found) {
+  closeSearch({ restoreFocus: false });
+  if (currentScreen !== 'meals') showAppScreen('meals');
+  openDay(fromISODate(found.fecha), found.tipo);
 }
 
 // Al cerrarse "Editar artículo" o ↺ abiertos desde un resultado, el foco vuelve a él (D-16)
@@ -3414,6 +3529,7 @@ function bindEvents() {
   $('search-close').addEventListener('click', () => closeSearch()); // 023 C-3
   $('search-dialog').addEventListener('close', onSearchClosed); // 023 C-3, C-31, D-8
   $('search-input').addEventListener('input', onSearchInput); // 023 C-8
+  $('search-more').addEventListener('click', loadMoreMeals); // 023 C-13
   $('article-dialog').addEventListener('close', onSearchChildClosed); // 023 D-16
   $('recover-dialog').addEventListener('close', onSearchChildClosed); // 023 D-16
   // Al cruzar los 768 px cambia el diseño (CSS) y el menú se cierra (CL-8)
