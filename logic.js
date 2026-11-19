@@ -1642,6 +1642,120 @@ function needsQueueRetry(sent, pending) {
   return pending > 0 && sent !== 'empty' && sent !== 'sessionGone';
 }
 
+// ===== Buscador (023-buscador) =====
+
+const SEARCH_PAGE_SIZE = 20; // resultados de Comidas por página (C-13)
+const MAX_SEARCH_LENGTH = 200; // caracteres de lo escrito (C-29, D-13)
+const SEARCH_LOADING_TEXT = 'Buscando…'; // C-14, C-34
+const SEARCH_NO_ARTICLES_TEXT = 'Ningún artículo coincide.'; // C-11
+const SEARCH_NO_MEALS_TEXT = 'Ninguna comida coincide.'; // C-15
+const SEARCH_OFFLINE_TEXT = 'Sin red: solo se busca en las semanas guardadas'; // C-23
+const SEARCH_RECIPE_TEXT = 'En la receta'; // C-12
+// Caracteres que siguen una palabra: tras cualquier otro empieza una palabra (D-2, D-3)
+const WORD_CHAR = /[0-9a-zñ]/;
+
+// Texto normalizado para buscar, como articleKey (saltos a espacio, sin mayúsculas, sin
+// acentos salvo la ñ, espacios repetidos y de los extremos fuera); lo que no es texto ni
+// número, vacío (D-3)
+function searchKey(text) {
+  if (typeof text !== 'string' && typeof text !== 'number') return '';
+  return articleKey(String(text));
+}
+
+// "Coincide": lo escrito normalizado aparece al principio del texto o tras un carácter que no
+// está en [0-9a-zñ]; lo escrito vacío o solo con espacios no coincide con nada. La misma regla
+// que buscar_comidas en la base de datos (C-7, C-8, D-3)
+function matchesWord(text, typed) {
+  const key = searchKey(typed);
+  if (key === '') return false;
+  const target = searchKey(text);
+  for (let at = target.indexOf(key); at !== -1; at = target.indexOf(key, at + 1)) {
+    if (at === 0 || !WORD_CHAR.test(target[at - 1])) return true;
+  }
+  return false;
+}
+
+// Artículos que coinciden: Por comprar (tachados al final) y luego Guardados, en el orden de
+// las listas (C-10)
+function shoppingResults(items, typed) {
+  if (searchKey(typed) === '') return [];
+  const { pending, saved } = shoppingLists(items);
+  return [...pending, ...saved].filter((item) => matchesWord(item.nombre, typed));
+}
+
+// Fecha de un resultado: "mié. 18 nov. 2026" (D-17)
+function searchMealDate(isoDate) {
+  const date = fromISODate(isoDate);
+  return `${WEEKDAY_ABBR[date.getDay()].toLowerCase()} ${date.getDate()} ` +
+    `${MONTH_ABBR[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// Ingredientes objeto de un plato (los demás no cuentan, como en buscar_comidas, D-2)
+function dishIngredients(dish) {
+  return Array.isArray(dish.ingredientes) ? dish.ingredientes.filter(isObject) : [];
+}
+
+// Resultado de una comida, o null si no coincide (C-12, D-4): los nombres de los platos que
+// coinciden por cualquier motivo, la fecha con el tipo y el motivo (null si coincide un nombre;
+// si no, el primer ingrediente que coincide, del primer plato y luego del segundo; si no,
+// "En la receta")
+function mealResult(meal, typed) {
+  if (searchKey(typed) === '' || !Array.isArray(meal.platos)) return null;
+  const dishes = meal.platos.filter(isObject).map((dish) => {
+    const ingredient = dishIngredients(dish).find((item) => matchesWord(item.nombre, typed));
+    const byName = matchesWord(dish.nombre, typed);
+    return { dish, byName, ingredient, matches: byName || !!ingredient || matchesWord(dish.receta, typed) };
+  }).filter((entry) => entry.matches);
+  if (dishes.length === 0) return null;
+  const ingredient = dishes.find((entry) => entry.ingredient)?.ingredient;
+  let reason = SEARCH_RECIPE_TEXT;
+  if (dishes.some((entry) => entry.byName)) reason = null;
+  else if (ingredient) reason = 'Ingrediente: ' + formatIngredient(ingredient);
+  const type = MEAL_TYPES.find((item) => item.id === meal.tipo);
+  return {
+    id: meal.id, fecha: meal.fecha, tipo: meal.tipo,
+    names: dishes.map((entry) => String(entry.dish.nombre ?? '')).join(' · '),
+    dateLine: `${searchMealDate(meal.fecha)} · ${type ? type.name : meal.tipo}`,
+    reason,
+  };
+}
+
+// Día de una fecha 'aaaa-mm-dd' contado en UTC: días enteros aunque cambie la hora
+function isoDayNumber(isoDate) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000;
+}
+
+const MEAL_TYPE_ORDER = MEAL_TYPES.map((type) => type.id);
+
+// Orden "más cercana a hoy" (today: 'aaaa-mm-dd'): distancia en días, luego hoy y futuras
+// antes que pasadas, luego desayuno, comida, cena, luego id; como buscar_comidas (C-12, D-2)
+function compareNearToday(a, b, today) {
+  const now = isoDayNumber(today);
+  const dayA = isoDayNumber(a.fecha);
+  const dayB = isoDayNumber(b.fecha);
+  return Math.abs(dayA - now) - Math.abs(dayB - now) ||
+    Number(dayA < now) - Number(dayB < now) ||
+    MEAL_TYPE_ORDER.indexOf(a.tipo) - MEAL_TYPE_ORDER.indexOf(b.tipo) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+// Comidas de la copia que coinciden, ordenadas, hasta "limit" resultados, y si quedan más
+// ("Ver más") (C-13, C-23, D-11)
+function localMealResults(meals, typed, today, limit = SEARCH_PAGE_SIZE) {
+  if (searchKey(typed) === '') return { results: [], more: false };
+  const sorted = [...meals].sort((a, b) => compareNearToday(a, b, today))
+    .map((meal) => mealResult(meal, typed)).filter(Boolean);
+  return { results: sorted.slice(0, limit), more: sorted.length > limit };
+}
+
+// Error de la búsqueda de Comidas (C-26, D-17)
+function searchErrorMessage(error, online) {
+  return 'No se han podido buscar las comidas. ' + translateError(error, online);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1684,5 +1798,9 @@ if (typeof module !== 'undefined') {
     STRIKE_QUEUE_KEY, STRIKE_QUEUE_FORMAT, buildStrikeQueue, parseStrikeQueue,
     toggleQueuedStrike, removeQueuedStrike, applyStrikeQueue, withUnsentCount, conflictNoticeText,
     queuedStrikeOutcome, isStillQueued, settleStrikeQueue, strikeSendFailure, needsQueueRetry,
+    SEARCH_PAGE_SIZE, MAX_SEARCH_LENGTH, SEARCH_LOADING_TEXT, SEARCH_NO_ARTICLES_TEXT,
+    SEARCH_NO_MEALS_TEXT, SEARCH_OFFLINE_TEXT, SEARCH_RECIPE_TEXT, searchKey, matchesWord,
+    shoppingResults, searchMealDate, mealResult, compareNearToday, localMealResults,
+    searchErrorMessage,
   };
 }
