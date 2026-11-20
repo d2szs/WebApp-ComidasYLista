@@ -2747,7 +2747,7 @@ async function requestMeals(id) {
   const more = mealSearch.loadingMore;
   Object.assign(mealSearch, { loading: false, loadingMore: false });
   if (result.error) {
-    if (!reachable(result)) { // C-35: como al fallar una carga
+    if (isNetworkError(result.error, reachable(result))) { // C-35: como al fallar una carga
       goOffline();
       if (state.copyMode) return; // el recálculo de C-25 pinta la copia
       mealSearch.recalcPending = false; // sin copia: el error, sin volver a pedir
