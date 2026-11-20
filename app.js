@@ -715,6 +715,7 @@ function enterCopyMode() {
   copyState.copy = readSavedCopy();
   // RF-5; el ✕ u otro aviso lo quitan hasta la próxima entrada (RF-6, RF-20)
   showError(withUnsentCount(copyNoticeText(copyState.copy.savedAt, getToday()), readStrikeQueue().length), 'copy'); // 012 RF-4
+  scheduleSearchRecalc(); // 023 C-25
   loadMealsFromCopy();
   loadListFromCopy();
   setOffline(true);
@@ -764,6 +765,7 @@ function loadListFromCopy() {
 function setOffline(value) {
   if (state.offline === value) return;
   state.offline = value;
+  scheduleSearchRecalc(); // 023 C-25, D-11
   applyWriteControls(); // RF-10, CL-6
   renderShopping();
   onReviewNetworkChange(); // 009 CL-8, CL-9
@@ -859,6 +861,7 @@ async function retryConnection() {
 // Sale del modo copia con las dos cargas correctas (RF-12)
 function leaveCopyMode(meals, items) {
   state.copyMode = false; // 000-base D-19, 007 D-24: antes de pintar
+  scheduleSearchRecalc(); // 023 C-25
   stopRetry();
   copyState.copy = null;
   hideError('copy');
@@ -2688,9 +2691,11 @@ function focusSearchArticle(id, className = '') {
 // requestId: número de la última petición; la que llega con otro se descarta (C-16, D-6).
 // typed y today: los de la primera página, que "Ver más" repite (D-5). received: filas
 // recibidas, de las que sale p_desde (D-4)
+// local: sin red con copia, se busca en sus 7 semanas hasta "limit" resultados (C-23, D-11)
 const mealSearch = {
   requestId: 0, timer: null, typed: '', today: '', results: [], received: 0, more: false,
-  loading: false, loadingMore: false, error: '', moreError: '',
+  loading: false, loadingMore: false, error: '', moreError: '', local: false, limit: 0,
+  recalcPending: false,
 };
 const MEAL_SEARCH_DELAY = 300; // ms tras la última tecla (D-6)
 
@@ -2707,7 +2712,9 @@ function searchMeals(wait) {
   Object.assign(mealSearch, {
     typed: searchState.query, today: toISODate(getToday()), results: [], received: 0, more: false,
     loading: searchKey(searchState.query) !== '', loadingMore: false, error: '', moreError: '',
+    local: state.copyMode && copyState.copy !== null, limit: SEARCH_PAGE_SIZE,
   });
+  if (mealSearch.local) return searchCopyMeals(); // C-23: sin esperar ni "Buscando…"
   renderSearchMeals();
   if (!mealSearch.loading) return;
   const id = mealSearch.requestId;
@@ -2718,6 +2725,11 @@ function searchMeals(wait) {
 // "Ver más": la página siguiente con el mismo texto y el mismo "hoy" (C-13, D-5)
 function loadMoreMeals() {
   if (mealSearch.loading || mealSearch.loadingMore || !mealSearch.more) return;
+  if (mealSearch.local) { // C-23: 20 más de la copia
+    const focusFrom = $('search-meals-list').children.length;
+    mealSearch.limit += SEARCH_PAGE_SIZE;
+    return searchCopyMeals(focusFrom);
+  }
   cancelMealSearch();
   Object.assign(mealSearch, { loadingMore: true, moreError: '' });
   renderSearchMeals();
@@ -2735,6 +2747,11 @@ async function requestMeals(id) {
   const more = mealSearch.loadingMore;
   Object.assign(mealSearch, { loading: false, loadingMore: false });
   if (result.error) {
+    if (!reachable(result)) { // C-35: como al fallar una carga
+      goOffline();
+      if (state.copyMode) return; // el recálculo de C-25 pinta la copia
+      mealSearch.recalcPending = false; // sin copia: el error, sin volver a pedir
+    }
     const text = searchErrorMessage(result.error, reachable(result));
     if (more) mealSearch.moreError = text;
     else mealSearch.error = text;
@@ -2754,11 +2771,33 @@ async function requestMeals(id) {
   renderSearchMeals({ focusFrom: more ? $('search-meals-list').children.length : -1 });
 }
 
+// Comidas de la copia hasta mealSearch.limit (C-23, D-11)
+function searchCopyMeals(focusFrom = -1) {
+  const { results, more } = localMealResults(copyState.copy.meals, mealSearch.typed, mealSearch.today, mealSearch.limit);
+  Object.assign(mealSearch, { results, more, loading: false });
+  renderSearchMeals({ focusFrom });
+}
+
+// Al perder o recuperar la red, o entrar o salir del modo copia, con el buscador abierto: Comidas
+// otra vez desde los 20 primeros (C-25, D-11). Una sola vez aunque cambien varias cosas seguidas
+// (goOffline: setOffline y enterCopyMode), para no pedir a Supabase lo que la copia ya tiene
+function scheduleSearchRecalc() {
+  if (mealSearch.recalcPending) return;
+  mealSearch.recalcPending = true;
+  queueMicrotask(() => {
+    if (!mealSearch.recalcPending) return;
+    mealSearch.recalcPending = false;
+    if ($('search-dialog').open) searchMeals(false);
+  });
+}
+
 // Pinta el grupo Comidas con mealSearch; como texto (C-12, C-30). focusFrom: tras "Ver más",
 // si el botón tenía el foco y ya no está, pasa al primer resultado nuevo
 function renderSearchMeals({ focusFrom = -1 } = {}) {
   const { results, loading, loadingMore, error, moreError, more } = mealSearch;
   $('search-meals').hidden = searchKey(mealSearch.typed) === ''; // C-7, C-9
+  $('search-meals-offline').textContent = mealSearch.local ? SEARCH_OFFLINE_TEXT : ''; // C-23, C-33
+  $('search-meals-offline').hidden = !mealSearch.local;
   const list = $('search-meals-list');
   list.replaceChildren(...(loading || error ? [] : results.map(buildSearchMeal)));
   let text = '';
