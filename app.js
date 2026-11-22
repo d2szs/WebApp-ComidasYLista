@@ -1954,7 +1954,7 @@ function reviewLineElement(line, index, disabled) {
     row.append(reviewText('review-meta', LINE_TOO_LONG_MESSAGE));
     return row;
   }
-  if (line.detail) row.append(...reviewAmountElements(line, disabled)); // 017 C-1, C-7
+  row.append(...reviewAmountElements(line, disabled)); // 017 C-1, C-7; 024 C-1: en todas las líneas
   if (line.status === 'saved') row.append(reviewText('review-meta', SAVED_LINE_TEXT));
   if (line.status !== 'listed') return row;
   row.append(reviewText('review-meta', lineOptions(line).listed));
@@ -1988,10 +1988,12 @@ function reviewOptionsElement(line, index, disabled) {
   return group;
 }
 
-// "Comprar:" con su cantidad y unidad (como en "Añadir artículo") y, si tiene error, el mensaje
-// (017 C-1, C-7, D-2)
+// "Comprar:" con su cantidad y unidad (como en "Añadir artículo"), lo escrito o, sin nada escrito,
+// la calculada; si tiene error, el mensaje y, si las comidas piden otra cosa, el aviso
+// (017 C-1, C-7, D-2; 024 C-1, C-8)
 function reviewAmountElements(line, disabled) {
-  const entry = reviewState.typed.get(line.key) || { text: '', unit: '' };
+  const typed = reviewState.typed.get(line.key);
+  const entry = typed ?? amountFill(line);
   const hasError = reviewState.typedErrorKeys.includes(line.key);
   const invalid = hasError ? typedAmount(entry).invalid : [];
   const box = document.createElement('div');
@@ -2016,10 +2018,15 @@ function reviewAmountElements(line, disabled) {
     input.classList.toggle('invalid-field', invalid.includes(field === 'text' ? 'quantity' : 'unit'));
   }
   box.append(reviewText('review-amount-label', 'Comprar:'), quantity, unit);
-  if (!hasError) return [box];
-  const error = reviewText('review-error error-message', ARTICLE_QUANTITY_ERROR);
-  error.setAttribute('role', 'alert');
-  return [box, error];
+  const elements = [box];
+  if (hasError) {
+    const error = reviewText('review-error error-message', ARTICLE_QUANTITY_ERROR);
+    error.setAttribute('role', 'alert');
+    elements.push(error);
+  }
+  const notice = amountNotice(line, typed);
+  if (notice) elements.push(reviewText('review-meta review-notice', notice)); // 024 C-8
+  return elements;
 }
 
 function reviewText(className, text) {
@@ -2039,9 +2046,9 @@ function onReviewLineChange(event) {
   renderReview();
 }
 
-// Escribir en "Comprar": guarda lo escrito, marca la casilla o deja "Dejar" y quita el error de
-// la línea; pinta solo esa línea sin sustituir el campo, para no perder el foco ni el teclado
-// (017 C-5, C-6, C-9, D-1)
+// Escribir en "Comprar": guarda lo escrito (con lo que piden ahora las comidas), marca la casilla
+// o deja "Dejar" y quita el error y el aviso de la línea; pinta solo esa línea sin sustituir el
+// campo, para no perder el foco ni el teclado (017 C-5, C-6, C-9, D-1; 024 C-6, C-9, D-2)
 function onReviewAmountInput(event) {
   const input = event.target;
   const key = input.dataset.key;
@@ -2049,10 +2056,8 @@ function onReviewAmountInput(event) {
   const row = input.closest('.review-line');
   const line = reviewState.lines.find((l) => l.key === key);
   if (!line || !row) return;
-  const entry = {
-    text: row.querySelector('[data-field="text"]').value,
-    unit: row.querySelector('[data-field="unit"]').value,
-  };
+  const entry = typedEntry(line,
+    row.querySelector('[data-field="text"]').value, row.querySelector('[data-field="unit"]').value);
   reviewState.typed.set(key, entry);
   reviewState.choices.set(key, choiceAfterTyping(line, reviewState.choices.get(key), entry));
   reviewState.typedErrorKeys = reviewState.typedErrorKeys.filter((k) => k !== key);
@@ -2060,6 +2065,7 @@ function onReviewAmountInput(event) {
   const box = row.querySelector('input[type="checkbox"]');
   if (box) box.checked = reviewState.choices.get(key) === 'on';
   row.querySelector('.review-error')?.remove();
+  row.querySelector('.review-notice')?.remove(); // 024 C-9
   row.querySelectorAll('.review-amount .invalid-field').forEach((el) => el.classList.remove('invalid-field'));
   const oldGroup = row.querySelector('.review-options');
   if (line.status === 'listed') {
