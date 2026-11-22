@@ -1173,8 +1173,9 @@ function linesInView(review) {
 
 // Líneas, elecciones, noIngredients, lo escrito (typed) y sus errores (typedErrorKeys) tras
 // recalcular: nada cambia mientras se añade ni sin líneas a la vista; un periodo sin
-// ingredientes no pierde lo elegido; lo escrito y su error siguen solo en las líneas que
-// siguen mezcladas (RF-17, RF-20, RF-23, D-11; 017 C-10, C-11, D-1)
+// ingredientes no pierde lo elegido; lo escrito (y su error) sigue solo si estaba tocado y lo
+// sigue estando; si no, el campo pasa al relleno de lo nuevo (RF-17, RF-20, RF-23, D-11;
+// 017 C-10, D-1; 024 C-7 a C-9, C-11, D-2, D-3)
 function recalcReview(review, newLines) {
   const { lines, choices, noIngredients } = review;
   const typed = review.typed ?? new Map();
@@ -1183,14 +1184,18 @@ function recalcReview(review, newLines) {
     return { lines, choices, noIngredients, typed, typedErrorKeys };
   }
   if (newLines.length === 0) return { lines, choices, noIngredients: true, typed, typedErrorKeys };
-  const mixed = new Set(newLines.filter(isMixedLine).map((line) => line.key));
-  const newTyped = new Map([...typed].filter(([key]) => mixed.has(key)));
+  const keeps = ([key, entry]) => {
+    const line = newLines.find((l) => l.key === key);
+    const before = lines.find((l) => l.key === key);
+    return Boolean(line) && hasAmountField(line) && isTouched(line, entry) && (!before || isTouched(before, entry));
+  };
+  const newTyped = new Map([...typed].filter(keeps));
   return {
     lines: newLines,
     choices: mergeChoices(choices, lines, newLines, newTyped),
     noIngredients: false,
     typed: newTyped,
-    typedErrorKeys: typedErrorKeys.filter((key) => mixed.has(key)),
+    typedErrorKeys: typedErrorKeys.filter((key) => newTyped.has(key)),
   };
 }
 
@@ -1269,11 +1274,6 @@ function addChanges(lines, choices, items) {
 
 // ===== 017-cantidad-mezclada: cantidad escrita en las líneas con unidades mezcladas =====
 
-// ¿Lleva la línea el campo "Comprar"? Unidades mezcladas y nombre que cabe en la lista (C-1)
-function isMixedLine(line) {
-  return Boolean(line.detail) && !line.tooLong;
-}
-
 // Lo escrito ({ text, unit }, o nada) comprobado como en "Añadir artículo" (D-2); original: la
 // calculada de la línea, que se usa tal cual si su texto no cambia (024 D-1)
 function typedAmount(entry, original = null) {
@@ -1291,6 +1291,33 @@ function hasAmountField(line) {
 function amountFill(line) {
   if (line.cantidad === null || line.cantidad === undefined) return { text: '', unit: '' };
   return { text: amountFieldText(line.cantidad), unit: line.unidad };
+}
+
+// Lo que piden las comidas en una línea: la calculada ("750 gr.") o el detalle si mezcla (024 Definiciones)
+function demandOf(line) {
+  return { text: line.detail ?? formatQuantity(line.cantidad, line.unidad), mixed: Boolean(line.detail) };
+}
+
+// Lo escrito en el campo, con lo que pedían las comidas al escribirlo (D-2)
+function typedEntry(line, text, unit) {
+  return { text, unit, asked: demandOf(line) };
+}
+
+// ¿Distinto de lo que sale al abrir para lo que piden ahora? Vacío en una de una sola unidad,
+// también (024 Definiciones)
+function isTouched(line, entry) {
+  if (!entry) return false;
+  const fill = amountFill(line);
+  return (entry.text ?? '').trim() !== fill.text || (entry.unit ?? '') !== fill.unit;
+}
+
+// "Las comidas ahora piden 900 gr." si lo escrito está tocado y lo que piden cambió desde que se
+// escribió; null entre dos mezclas, sin cambios o sin campo (C-8, C-9)
+function amountNotice(line, entry) {
+  if (!hasAmountField(line) || !entry?.asked || !isTouched(line, entry)) return null;
+  const now = demandOf(line);
+  if (now.text === entry.asked.text || (now.mixed && entry.asked.mixed)) return null;
+  return `Las comidas ahora piden ${now.text}`;
 }
 
 // Líneas con la cantidad que usan: lo escrito o, sin nada escrito, el relleno; sin tocar, la
@@ -1803,7 +1830,7 @@ if (typeof module !== 'undefined') {
     periodLines, lineOptions, existingArticleChoice,
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
-    ingredientsErrorMessage, typedAmount, typedLines, hasAmountField, amountFill, typedErrors, choiceAfterTyping,
+    ingredientsErrorMessage, typedAmount, typedLines, hasAmountField, amountFill, typedEntry, isTouched, amountNotice, typedErrors, choiceAfterTyping,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     SAME_VERSION_SECONDS, missingFiles,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
