@@ -1274,17 +1274,32 @@ function isMixedLine(line) {
   return Boolean(line.detail) && !line.tooLong;
 }
 
-// Lo escrito ({ text, unit }, o nada) comprobado como en "Añadir artículo" (D-2)
-function typedAmount(entry) {
-  return checkAmount(entry?.text ?? '', null, entry?.unit ?? '', ARTICLE_UNITS);
+// Lo escrito ({ text, unit }, o nada) comprobado como en "Añadir artículo" (D-2); original: la
+// calculada de la línea, que se usa tal cual si su texto no cambia (024 D-1)
+function typedAmount(entry, original = null) {
+  return checkAmount(entry?.text ?? '', original, entry?.unit ?? '', ARTICLE_UNITS);
 }
 
-// Líneas con la cantidad escrita: solo las mezcladas con lo escrito válido; si no, como están (C-2, C-3, D-3)
+// ===== 024-cantidad-editable: el campo "Comprar" en todas las líneas =====
+
+// ¿Lleva la línea el campo "Comprar"? Todas, salvo las de nombre que no cabe en la lista (C-1)
+function hasAmountField(line) {
+  return !line.tooLong;
+}
+
+// Campo al abrir para lo que piden las comidas: la calculada ("750" y "gr."); vacío si mezcla (C-1, D-1)
+function amountFill(line) {
+  if (line.cantidad === null || line.cantidad === undefined) return { text: '', unit: '' };
+  return { text: amountFieldText(line.cantidad), unit: line.unidad };
+}
+
+// Líneas con la cantidad que usan: lo escrito o, sin nada escrito, el relleno; sin tocar, la
+// calculada exacta; vacío o no válido → sin cantidad (017 C-2 a C-5, D-3; 024 C-2 a C-4, D-1)
 function typedLines(lines, typed) {
   return lines.map((line) => {
-    if (!isMixedLine(line)) return line;
-    const amount = typedAmount(typed.get(line.key));
-    if (amount.invalid.length || amount.cantidad === null) return line;
+    if (!hasAmountField(line)) return line;
+    const amount = typedAmount(typed.get(line.key) ?? amountFill(line), line.cantidad);
+    if (amount.invalid.length || amount.cantidad === null) return { ...line, cantidad: null, unidad: null };
     return { ...line, cantidad: amount.cantidad, unidad: amount.unidad };
   });
 }
@@ -1293,8 +1308,8 @@ function typedLines(lines, typed) {
 // en el orden de las líneas; las desmarcadas y las ya en la lista no cuentan (C-7, C-8)
 function typedErrors(lines, choices, typed) {
   return lines
-    .filter((line) => isMixedLine(line) && line.status !== 'listed' && choices.get(line.key) === 'on')
-    .filter((line) => typedAmount(typed.get(line.key)).invalid.length > 0)
+    .filter((line) => hasAmountField(line) && line.status !== 'listed' && choices.get(line.key) === 'on')
+    .filter((line) => typedAmount(typed.get(line.key) ?? amountFill(line), line.cantidad).invalid.length > 0)
     .map((line) => line.key);
 }
 
@@ -1788,7 +1803,7 @@ if (typeof module !== 'undefined') {
     periodLines, lineOptions, existingArticleChoice,
     NO_INGREDIENTS_MESSAGE, LINE_TOO_LONG_MESSAGE, SAVED_LINE_TEXT, ADD_RETRIES,
     mergeChoices, linesInView, recalcReview, addCount, addButtonText, reviewView, addChanges,
-    ingredientsErrorMessage, typedAmount, typedLines, typedErrors, choiceAfterTyping,
+    ingredientsErrorMessage, typedAmount, typedLines, hasAmountField, amountFill, typedErrors, choiceAfterTyping,
     etagVersion, commonVersion, isSavedCurrent, isAppPage, CONNECTION_TIMEOUT, APP_FILES,
     SAME_VERSION_SECONDS, missingFiles,
     COPY_KEY, COPY_FORMAT, copyRange, buildCopy, parseCopy, isOutsideCopy, hasCopyGap,
