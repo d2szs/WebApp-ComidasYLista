@@ -918,7 +918,7 @@ function articleSaveErrorMessage(error, items, name, excludeId, online) {
 function openingScreen({ fromLogin, tabScreen, browserScreen }) {
   if (fromLogin) return 'meals';
   const stored = tabScreen ?? browserScreen;
-  return stored === 'list' ? 'list' : 'meals';
+  return stored === 'list' || stored === 'recipes' ? stored : 'meals'; // 026 C-3
 }
 
 // ===== Barra superior y barra lateral (008-barra-menu) =====
@@ -1885,6 +1885,94 @@ function moveErrorMessage(error, online, timedOut) {
   return 'No se ha podido mover la comida. ' + translateError(error, online);
 }
 
+// ===== Biblioteca de recetas (026-biblioteca-recetas) =====
+
+const RECIPE_ORDERS = ['stars', 'name', 'recent', 'time']; // "Ordenar"; la primera, por defecto (C-11, C-41)
+const RECIPE_TIME_LIMITS = [15, 30, 60]; // "Hasta n min" del filtro "Tiempo" (C-9)
+
+// Media de las estrellas puestas (1 o 2 personas); null si nadie ha puntuado (C-15)
+function recipeAverage(recipe) {
+  const given = (recipe.estrellas || []).map((s) => s.estrellas);
+  if (!given.length) return null;
+  return given.reduce((sum, n) => sum + n, 0) / given.length;
+}
+
+// "4,5": la media con un decimal (C-4)
+function averageText(average) {
+  return average.toFixed(1).replace('.', ',');
+}
+
+// Tarjeta de la lista: nombre; "★ 4,5" o "Sin puntuar", y " · 45 min" si tiene tiempo;
+// etiquetas unidas con " · " (C-4)
+function recipeLine(recipe) {
+  const average = recipeAverage(recipe);
+  const parts = [average === null ? 'Sin puntuar' : '★ ' + averageText(average)];
+  if (recipe.tiempo) parts.push(recipe.tiempo + ' min');
+  return { name: recipe.nombre, info: parts.join(' · '), tags: (recipe.etiquetas || []).join(' · ') };
+}
+
+// Etiquetas usadas en las recetas, una por equivalencia (la primera forma que aparece), en
+// orden alfabético español (C-8)
+function usedTags(recipes) {
+  const byKey = new Map();
+  recipes.forEach((recipe) => (recipe.etiquetas || []).forEach((tag) => {
+    const key = articleKey(tag);
+    if (!byKey.has(key)) byKey.set(key, tag);
+  }));
+  return [...byKey.values()].sort(ARTICLE_COLLATOR.compare);
+}
+
+// Recetas que cumplen a la vez la búsqueda (nombre o nombre de un ingrediente; vacía, todas),
+// alguna de las etiquetas marcadas (equivalentes) y el tiempo máximo (sin tiempo, fuera)
+// (C-7 a C-10; la búsqueda no mira etiquetas, D-20)
+function filterRecipes(recipes, { text = '', tags = [], maxTime = null } = {}) {
+  const searching = searchKey(text) !== '';
+  const marked = new Set(tags.map(articleKey));
+  return recipes.filter((recipe) => {
+    if (searching && !matchesWord(recipe.nombre, text)
+      && !(recipe.ingredientes || []).some((ing) => matchesWord(ing.nombre, text))) return false;
+    if (marked.size && !(recipe.etiquetas || []).some((tag) => marked.has(articleKey(tag)))) return false;
+    if (maxTime !== null && !(recipe.tiempo && recipe.tiempo <= maxTime)) return false;
+    return true;
+  });
+}
+
+// Etiquetas marcadas que siguen usándose en alguna receta, en su orden (C-51)
+function keptTags(marked, recipes) {
+  const used = new Set(usedTags(recipes).map(articleKey));
+  return marked.filter((tag) => used.has(articleKey(tag)));
+}
+
+// Copia ordenada: 'stars' (media de mayor a menor, sin puntuar al final), 'name' (A-Z en
+// español), 'recent' (la última añadida primero) o 'time' (de menor a mayor, sin tiempo al
+// final); a igualdad, por nombre (C-11)
+function sortRecipes(recipes, order) {
+  const byName = (a, b) => ARTICLE_COLLATOR.compare(a.nombre, b.nombre);
+  // Números de menor a mayor con los vacíos (null) al final
+  const nullsLast = (x, y) => (x === null) - (y === null) || (x === null ? 0 : x - y);
+  const compare = {
+    stars: (a, b) => {
+      const x = recipeAverage(a);
+      const y = recipeAverage(b);
+      return nullsLast(x === null ? null : -x, y === null ? null : -y);
+    },
+    name: () => 0,
+    recent: (a, b) => (a.creado_en < b.creado_en) - (a.creado_en > b.creado_en),
+    time: (a, b) => nullsLast(a.tiempo || null, b.tiempo || null),
+  }[order] || (() => 0);
+  return [...recipes].sort((a, b) => compare(a, b) || byName(a, b));
+}
+
+// Orden guardado en el navegador si es uno válido; si no, "Estrellas" (C-41, D-11)
+function storedRecipeOrder(value) {
+  return RECIPE_ORDERS.includes(value) ? value : RECIPE_ORDERS[0];
+}
+
+// Nombre de un usuario en estrellas y "Añadida por": su nombre corto o, sin él, su inicial (C-46)
+function userLabel(profile) {
+  return (profile && (profile.nombre_corto || profile.inicial)) || '?';
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1934,5 +2022,7 @@ if (typeof module !== 'undefined') {
     LONG_PRESS_MS, TOUCH_SLOP_PX, MOUSE_DRAG_PX, DRAG_VIBRATE_MS, EDGE_SCROLL_BAND_PX,
     EDGE_SCROLL_MIN_SPEED, EDGE_SCROLL_MAX_SPEED, MOVE_CHANGED_MESSAGE, MOVE_UNCONFIRMED_MESSAGE,
     mealGroup, canDropMeal, movesBeyond, edgeScrollStep, moveParams, moveOutcome, moveErrorMessage, moveUnconfirmed,
+    RECIPE_ORDERS, RECIPE_TIME_LIMITS, recipeAverage, averageText, recipeLine, usedTags, filterRecipes,
+    keptTags, sortRecipes, storedRecipeOrder, userLabel,
   };
 }
