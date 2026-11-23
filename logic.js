@@ -1798,6 +1798,87 @@ function searchErrorMessage(error, online) {
   return 'No se han podido buscar las comidas. ' + translateError(error, online);
 }
 
+// ===== Arrastrar comidas (025-arrastrar-comidas) =====
+// Casilla: { date: 'aaaa-mm-dd', type: 'desayuno' | 'comida' | 'cena' }
+
+const LONG_PRESS_MS = 500; // dedo: mantener pulsado para levantar (C-1, D-7)
+const TOUCH_SLOP_PX = 10; // dedo: si se mueve más antes de levantar, el navegador desplaza (C-4)
+const MOUSE_DRAG_PX = 5; // ratón: se levanta al pasar de esta distancia (C-2)
+const DRAG_VIBRATE_MS = 30; // vibración al levantar (C-1)
+const EDGE_SCROLL_BAND_PX = 60; // franja junto a cada borde de la zona visible (C-12, D-7)
+const EDGE_SCROLL_MIN_SPEED = 120; // px/s al entrar en la franja
+const EDGE_SCROLL_MAX_SPEED = 1080; // px/s en el borde o pasado
+const EDGE_SCROLL_MAX_FRAME_MS = 100; // un fotograma muy lento no da un salto grande
+const MOVE_CHANGED_MESSAGE = 'La otra persona ha cambiado estas comidas; revisa la semana.';
+const MOVE_UNCONFIRMED_MESSAGE = 'No se ha podido confirmar el movimiento; revisa la semana.';
+
+// Grupo de una comida: el desayuno va aparte; comida y cena, juntas (Definiciones)
+function mealGroup(type) {
+  if (type === 'desayuno') return 'breakfast';
+  if (type === 'comida' || type === 'cena') return 'main';
+  return null;
+}
+
+// true si la comida de la casilla "from" se puede soltar en "to": mismo grupo y otra casilla
+// (C-9, C-10, C-16, C-28)
+function canDropMeal(from, to) {
+  if (!from || !to) return false;
+  const group = mealGroup(from.type);
+  if (!group || group !== mealGroup(to.type)) return false;
+  return !(from.date === to.date && from.type === to.type);
+}
+
+// true si el puntero se ha alejado del inicio más de "limit" px (C-2, C-4)
+function movesBeyond(start, point, limit) {
+  return Math.hypot(point.x - start.x, point.y - start.y) > limit;
+}
+
+// px que se desplaza la página en un fotograma de "frameMs" con el puntero en "y", dentro de
+// la zona visible del calendario [top, bottom]: negativo hacia arriba, 0 fuera de las franjas;
+// más deprisa cuanto más cerca del borde, según el tiempo real (C-12, D-7)
+function edgeScrollStep(y, top, bottom, frameMs) {
+  if (!(frameMs > 0) || bottom <= top) return 0;
+  const toTop = y - top;
+  const toBottom = bottom - y;
+  const up = toTop < toBottom;
+  const distance = Math.max(0, up ? toTop : toBottom);
+  if (distance >= EDGE_SCROLL_BAND_PX) return 0;
+  const depth = 1 - distance / EDGE_SCROLL_BAND_PX;
+  const speed = EDGE_SCROLL_MIN_SPEED + (EDGE_SCROLL_MAX_SPEED - EDGE_SCROLL_MIN_SPEED) * depth;
+  const step = speed * Math.min(frameMs, EDGE_SCROLL_MAX_FRAME_MS) / 1000;
+  return up ? -step : step;
+}
+
+// Parámetros de mover_comidas: la comida levantada y la casilla de destino tal como se
+// veían; sin comida en el destino, id y platos nulos (D-1, C-14, C-15)
+function moveParams(meal, target, targetMeal) {
+  return {
+    p_origen_id: meal.id,
+    p_origen_fecha: meal.fecha,
+    p_origen_tipo: meal.tipo,
+    p_origen_platos: meal.platos,
+    p_destino_fecha: target.date,
+    p_destino_tipo: target.type,
+    p_destino_id: targetMeal ? targetMeal.id : null,
+    p_destino_platos: targetMeal ? targetMeal.platos : null,
+  };
+}
+
+// Qué hacer con lo que devuelve mover_comidas (C-14, C-15, C-20)
+function moveOutcome(result) {
+  if (result === 'movida') return 'moved';
+  if (result === 'intercambiada') return 'swapped';
+  if (result === 'cambiada') return 'changed';
+  return 'error';
+}
+
+// Aviso de un movimiento que falla: sin respuesta no se sabe si se guardó (C-31); con un
+// error del servidor, la causa de siempre (C-21)
+function moveErrorMessage(error, online, timedOut) {
+  if (timedOut || isNetworkError(error, online)) return MOVE_UNCONFIRMED_MESSAGE;
+  return 'No se ha podido mover la comida. ' + translateError(error, online);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -1844,5 +1925,8 @@ if (typeof module !== 'undefined') {
     SEARCH_NO_MEALS_TEXT, SEARCH_OFFLINE_TEXT, SEARCH_RECIPE_TEXT, searchKey, matchesWord,
     shoppingResults, searchMealDate, mealResult, compareNearToday, localMealResults,
     searchErrorMessage,
+    LONG_PRESS_MS, TOUCH_SLOP_PX, MOUSE_DRAG_PX, DRAG_VIBRATE_MS, EDGE_SCROLL_BAND_PX,
+    EDGE_SCROLL_MIN_SPEED, EDGE_SCROLL_MAX_SPEED, MOVE_CHANGED_MESSAGE, MOVE_UNCONFIRMED_MESSAGE,
+    mealGroup, canDropMeal, movesBeyond, edgeScrollStep, moveParams, moveOutcome, moveErrorMessage,
   };
 }
