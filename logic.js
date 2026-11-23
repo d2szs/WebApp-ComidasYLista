@@ -1449,10 +1449,15 @@ function copyRange(today) {
 }
 
 // Copia lista para guardar: fechas en 'aaaa-mm-dd' y savedAt en milisegundos (RF-2); con
-// mealNames, los nombres de comidas para sugerir, campo opcional del mismo formato (014 D-9)
-function buildCopy({ savedAt, from, to, meals, articles, mealNames }) {
+// mealNames, los nombres de comidas para sugerir, y con recipes y profiles, las recetas y los
+// perfiles: campos opcionales del mismo formato (014 D-9; 026 D-9)
+function buildCopy({ savedAt, from, to, meals, articles, mealNames, recipes, profiles }) {
   const copy = { format: COPY_FORMAT, savedAt, from: toISODate(from), to: toISODate(to), meals, articles };
-  return mealNames === undefined ? copy : { ...copy, mealNames };
+  const optional = { mealNames, recipes, profiles };
+  Object.keys(optional).forEach((key) => {
+    if (optional[key] !== undefined) copy[key] = optional[key];
+  });
+  return copy;
 }
 
 // Nombres de comidas de la respuesta de nombres_ingredientes: un array de textos, sin los
@@ -1973,6 +1978,133 @@ function userLabel(profile) {
   return (profile && (profile.nombre_corto || profile.inicial)) || '?';
 }
 
+// ----- Formulario, "Guardar como receta", buscador, copia y errores (T4) -----
+
+const MAX_TAG_LENGTH = 30; // caracteres de una etiqueta (C-42; etiquetas_validas)
+const MAX_TAGS = 10; // etiquetas de una receta (C-42)
+const TAGS_LIMIT_MESSAGE = 'Una receta puede tener 10 etiquetas como mucho.';
+const TIME_ERROR = 'Escribe el tiempo como un número entero de minutos, del 1 al 999.';
+const RECIPE_NAME_ERROR = 'Escribe el nombre de la receta.';
+const RECIPE_CHANGED_MESSAGE = 'Esta receta se ha cambiado desde otro sitio. Cancela y vuelve a abrirla para ver los cambios.'; // C-31
+const RECIPE_GONE_MESSAGE = 'Esta receta ya no existe; puede que la haya borrado la otra persona.'; // C-30, C-32
+const NO_COPY_RECIPES_TEXT = 'Sin recetas guardadas en este dispositivo.'; // C-33
+const SEARCH_NO_RECIPES_TEXT = 'Ninguna receta coincide.'; // C-27
+
+// Etiqueta en una línea, sin espacios repetidos ni en los extremos, y con 30 caracteres como
+// mucho (lo que sobra no entra); cuenta caracteres, como char_length (C-42)
+function cleanTag(text) {
+  return Array.from(cleanIngredientName(text)).slice(0, MAX_TAG_LENGTH).join('').trimEnd();
+}
+
+// Añade lo escrito a las etiquetas de la receta: { tags, error }. Con la forma de una ya usada
+// equivalente (used); vacía o repetida en la receta, no cambia nada; la undécima, error (C-20, C-42)
+function addTag(tags, text, used) {
+  const tag = cleanTag(text);
+  const key = articleKey(tag);
+  if (!tag || tags.some((t) => articleKey(t) === key)) return { tags, error: null };
+  if (tags.length >= MAX_TAGS) return { tags, error: TAGS_LIMIT_MESSAGE };
+  return { tags: [...tags, used.find((t) => articleKey(t) === key) ?? tag], error: null };
+}
+
+// Hasta 5 etiquetas usadas (en su orden) con alguna palabra que empieza por lo escrito, sin las
+// equivalentes a las que ya tiene la receta (C-20)
+function tagSuggestions(used, typed, tags) {
+  const taken = new Set(tags.map(articleKey));
+  return used.filter((tag) => matchesTyped(tag, typed) && !taken.has(articleKey(tag)))
+    .slice(0, MAX_SUGGESTIONS);
+}
+
+// "Tiempo (min)": { tiempo: n } de 1 a 999, { tiempo: null } si está vacío o { invalid: true } (C-19)
+function timeFromField(text) {
+  const clean = (text || '').trim();
+  if (!clean) return { tiempo: null };
+  const value = Number(clean);
+  if (!/^\d{1,3}$/.test(clean) || value < 1) return { invalid: true };
+  return { tiempo: value };
+}
+
+// Valida el formulario de receta en bruto (los campos de un plato, más time, notes y tags ya
+// limpias): { data } con las claves de la tabla, o { error, invalid }. Orden: nombre, personas,
+// tiempo, ingredientes y referencia (C-18, C-19; D-7)
+function validateRecipeForm(raw) {
+  const dish = validateDish(raw, 0, RECIPE_NAME_ERROR);
+  const time = timeFromField(raw.time);
+  if (!dish.error && !time.invalid) {
+    const { nombre, personas, ingredientes, receta, referencia } = dish.dish;
+    return { data: {
+      nombre, personas, tiempo: time.tiempo, ingredientes, preparacion: receta,
+      notas: raw.notes.trim(), referencia, etiquetas: raw.tags,
+    } };
+  }
+  const invalid = dish.invalid || [];
+  // Lo que va antes del tiempo: el nombre del plato (sin fila) y las personas
+  const before = invalid.filter((item) => item.row === undefined && (item.field === 'name' || item.field === 'persons'));
+  const after = invalid.slice(before.length);
+  if (!time.invalid) return dish;
+  return {
+    error: before.length ? dish.error : TIME_ERROR,
+    invalid: [...before, { dish: 0, field: 'time' }, ...after],
+  };
+}
+
+// Datos de "Añadir receta" desde un plato: nombre, personas, ingredientes, preparación (su
+// "Receta") y referencia; lo demás vacío. Una copia: la comida no cambia (C-26)
+function recipeFromDish(dish) {
+  const text = (value) => (typeof value === 'string' ? value : '');
+  return {
+    nombre: text(dish.nombre), personas: savedPersons(dish.personas), tiempo: null,
+    ingredientes: dishIngredients(dish).map((item) => ({ nombre: item.nombre, cantidad: item.cantidad, unidad: item.unidad })),
+    preparacion: text(dish.receta), notas: '', referencia: text(dish.referencia), etiquetas: [],
+  };
+}
+
+// Grupo "Recetas" del buscador: las que coinciden por nombre, ingrediente o etiqueta, en orden
+// alfabético, cada una con su motivo (null si coincide el nombre; si no, el primer ingrediente
+// y luego la primera etiqueta que coinciden) (C-27; preparación y notas no cuentan)
+function recipeSearchResults(recipes, typed) {
+  if (searchKey(typed) === '') return [];
+  return sortRecipes(recipes, 'name').map((item) => {
+    let reason = null;
+    if (!matchesWord(item.nombre, typed)) {
+      const ingredient = dishIngredients(item).find((ing) => matchesWord(ing.nombre, typed));
+      const tag = (item.etiquetas || []).find((t) => matchesWord(t, typed));
+      if (ingredient) reason = 'Ingrediente: ' + formatIngredient(ingredient);
+      else if (tag) reason = 'Etiqueta: ' + tag;
+      else return null;
+    }
+    return { id: item.id, name: item.nombre, reason };
+  }).filter(Boolean);
+}
+
+// Recetas y perfiles de la copia guardada; null si no hay copia, es de una versión anterior o
+// algún campo no es una lista de objetos (C-33, D-9)
+function copyRecipes(copy) {
+  const objects = (value) => Array.isArray(value) && value.every(isObject);
+  if (!objects(copy?.recipes) || !objects(copy?.profiles)) return null;
+  return { recipes: copy.recipes, profiles: copy.profiles };
+}
+
+// Qué hacer con lo que devuelven guardar_receta ({ resultado, … }) o puntuar_receta (texto):
+// 'saved', 'changed' (C-31), 'deleted' (C-32) o 'error'
+function recipeSaveOutcome(result) {
+  const value = isObject(result) ? result.resultado : result;
+  return { guardada: 'saved', puntuada: 'saved', cambiada: 'changed', borrada: 'deleted' }[value] ?? 'error';
+}
+
+const RECIPE_ERROR_PREFIXES = {
+  load: 'No se han podido cargar las recetas. ',
+  save: '', // en el formulario, solo la causa, como al guardar una comida
+  rate: 'No se ha podido guardar la puntuación. ',
+  delete: 'No se ha podido borrar la receta. ',
+};
+
+// Error de las recetas: prefijo de la acción ('load', 'save', 'rate', 'delete') y la causa de
+// siempre; al guardar, un nombre repetido (23505) nombra la receta (C-35, C-43, C-48)
+function recipeErrorMessage(action, error, online, name) {
+  if (action === 'save' && error?.code === '23505') return `Ya hay una receta «${name}».`;
+  return RECIPE_ERROR_PREFIXES[action] + translateError(error, online);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -2024,5 +2156,9 @@ if (typeof module !== 'undefined') {
     mealGroup, canDropMeal, movesBeyond, edgeScrollStep, moveParams, moveOutcome, moveErrorMessage, moveUnconfirmed,
     RECIPE_ORDERS, RECIPE_TIME_LIMITS, recipeAverage, averageText, recipeLine, usedTags, filterRecipes,
     keptTags, sortRecipes, storedRecipeOrder, userLabel,
+    MAX_TAG_LENGTH, MAX_TAGS, TAGS_LIMIT_MESSAGE, TIME_ERROR, RECIPE_NAME_ERROR,
+    RECIPE_CHANGED_MESSAGE, RECIPE_GONE_MESSAGE, NO_COPY_RECIPES_TEXT, SEARCH_NO_RECIPES_TEXT,
+    cleanTag, addTag, tagSuggestions, timeFromField, validateRecipeForm, recipeFromDish,
+    recipeSearchResults, copyRecipes, recipeSaveOutcome, recipeErrorMessage,
   };
 }
