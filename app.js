@@ -3582,6 +3582,7 @@ let drag = null;
 let tapHoldTimer = null;      // espera del clic de un toque corto (D-9)
 let renderPending = false;
 let swallowClick = false;     // el clic que sigue a un levantamiento no abre nada (C-16, D-8)
+let cancelledPointerId = null; // puntero de un arrastre cancelado aún sin soltar (C-16, C-30)
 let paintedMeals = new Map(); // comidas de la semana pintada ("como se veía")
 const TAP_CLICK_WAIT_MS = 500; // tras un toque corto, hasta aquí se espera su clic
 
@@ -3799,9 +3800,18 @@ function endMoving() {
 // La comida vuelve a su sitio, sin guardar ni abrir nada (C-16, C-23, C-30)
 function cancelDrag() {
   if (!drag) return;
-  const lifted = drag.lifted;
+  const { lifted, pointerId } = drag;
   endDrag();
-  if (lifted) ignoreNextClick();
+  if (!lifted) return;
+  ignoreNextClick();
+  cancelledPointerId = pointerId; // si el botón o el dedo siguen abajo, su clic llega al soltar
+}
+
+// Soltar tras cancelar: el clic que sigue tampoco abre nada (C-16, C-30)
+function onCancelledPointerUp(event) {
+  if (event.pointerId !== cancelledPointerId) return;
+  cancelledPointerId = null;
+  ignoreNextClick();
 }
 
 // Termina la pulsación o el arrastre y pinta lo pendiente; tap: espera antes el clic del toque
@@ -3844,6 +3854,9 @@ function setupMealDrag() {
   const calendar = $('calendar');
   calendar.addEventListener('pointerdown', onCalendarPointerDown);
   calendar.addEventListener('click', onCalendarClickCapture, true);
+  document.addEventListener('pointerup', onCancelledPointerUp, true);
+  // Una pulsación nueva olvida el puntero cancelado (pudo soltarse fuera de la ventana)
+  document.addEventListener('pointerdown', () => { cancelledPointerId = null; }, true);
   // C-6, D-11: sin menú del navegador al mantener una comida con el dedo
   calendar.addEventListener('contextmenu', (event) => {
     if (drag && !drag.mouse && drag.meal) event.preventDefault();
