@@ -1460,6 +1460,17 @@ async function saveRecipe(event) {
   const opened = recipeForm.opened;
   recipeForm.saving = true;
   refreshRecipeSave();
+  try {
+    await sendRecipe(data, opened);
+  } finally {
+    // T11: también si se cerró la sesión durante la espera, para que "Guardar" vuelva a servir
+    recipeForm.saving = false;
+    refreshRecipeSave();
+  }
+}
+
+// Envía el guardado y reparte el resultado (C-22, C-31, C-44, C-49)
+async function sendRecipe(data, opened) {
   const result = await timedQuery(client.rpc('guardar_receta', {
     p_id: recipeForm.id,
     p_version: recipeForm.version,
@@ -1493,8 +1504,6 @@ async function saveRecipe(event) {
       ? recipeErrorMessage('save', result.error, reachable(result), data.nombre)
       : recipeErrorMessage('save', new Error('Respuesta inesperada al guardar'), true));
   }
-  recipeForm.saving = false;
-  refreshRecipeSave();
 }
 
 // ----- Etiquetas del formulario de receta (C-20, C-42, C-52) -----
