@@ -451,6 +451,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 #screen-app:not([data-screen="meals"]) #add-button,
 #screen-app:not([data-screen="list"]) #shopping,
 #screen-app:not([data-screen="list"]) #add-article-button,
+#screen-app:not([data-screen="recipes"]) #add-recipe-button,
 #screen-app:not([data-screen="recipes"]) #recipes { display: none; } /* 026 C-2 */
 
 .view-selector, .type-selector { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
@@ -924,6 +925,10 @@ body.dragging, body.dragging * { cursor: grabbing; }
 .dish { margin: 0 0 var(--space); padding: var(--space); border: 1px solid var(--color-border); border-radius: var(--radius); }
 .dish-title { padding: 0 0.3rem; font-weight: 600; }
 .dish-persons { width: 4rem; } /* 018 C-1: sin estirarse como los demás campos */
+/* 026 D-18: el plato del formulario de receta, sin leyenda ni marco */
+.recipe-dish { margin: 0; padding: 0; border: none; min-width: 0; }
+.recipe-dish .dish-title { display: none; }
+.recipe-form-time { width: 4rem; }
 .ingredient {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -448,6 +448,7 @@ function closeDialogs() {
   closeExists(); // 021 C-14
   closeRecover(); // 022 C-12
   closeArticleForm(); // 007 CL-8
+  if ($('recipe-dialog').open) $('recipe-dialog').close(); // 026 C-37
   if (reviewState.open) closeReview(); // 009 CL-5
   searchState.query = ''; // 023 C-28, D-9: se olvida la búsqueda guardada
   closeSearch({ restoreFocus: false }); // 023 C-28: abierto en una sección oculta, dejaría la página inerte
@@ -987,12 +988,13 @@ function resumeSyncNotice() {
 // "Cerrar sesión", "Editar" y los campos de los formularios no cambian (RF-11, RF-19, CL-6)
 function applyWriteControls() {
   // 021 C-13: en el campo rápido se sigue escribiendo; solo [+] se desactiva
-  for (const id of ['add-button', 'add-article-button', 'quick-add-button', 'article-delete']) {
+  for (const id of ['add-button', 'add-article-button', 'add-recipe-button', 'quick-add-button', 'article-delete']) {
     $(id).disabled = state.offline;
   }
   refreshExistsButtons(); // 021 C-13
   refreshRecoverButtons(); // 022 C-11
   $('article-save').disabled = state.offline || articleForm.saving;
+  refreshRecipeSave(); // 026 C-22, C-34
   $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
   if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
@@ -1267,9 +1269,11 @@ function renderRecipeDetail() {
   }
   box.append(el('p', 'recipe-detail-author', 'Añadida por ' + recipe.autor_nombre)); // C-25
   const buttons = el('div', 'detail-buttons');
+  const edit = button('btn', 'Editar', () => openRecipeForm(recipe));
   const remove = button('btn btn-danger', 'Borrar', () => deleteRecipe(recipe));
-  remove.disabled = state.offline; // C-34
-  buttons.append(remove);
+  edit.disabled = state.offline; // C-34
+  remove.disabled = state.offline;
+  buttons.append(edit, remove);
   box.append(buttons);
 }
 
@@ -1333,6 +1337,140 @@ async function deleteRecipe(recipe) {
   }
   await loadRecipes();
   recipeState.deletingId = null;
+}
+
+// ----- Formulario de receta (026 C-17 a C-23, C-31, C-32, C-43; D-18) -----
+// id y version: la receta que se edita (null al añadir); tags: sus etiquetas, que se guardan tal
+// cual hasta que el formulario tenga su campo (T9); opened: sube con cada apertura
+const recipeForm = { dish: null, id: null, version: null, tags: [], saving: false, opened: 0 };
+
+// El plato de dish-template, sin leyenda, con "Tiempo (min)" tras "Personas" y "Notas o
+// variaciones" tras "Preparación" (spec § Cómo se verá; D-18)
+function buildRecipeDish() {
+  const dish = buildFormDish($('recipe-form-dish'));
+  dish.node.classList.add('recipe-dish');
+  dish.nameLabel.textContent = 'Nombre de receta *';
+  dish.recipe.previousElementSibling.textContent = 'Preparación';
+  dish.persons.closest('.field').after($('recipe-form-time-field'));
+  dish.recipe.closest('.field').after($('recipe-form-notes-field'));
+  dish.time = $('recipe-form-time'); // markRecipeInvalid lo busca como 'time'
+  return dish;
+}
+
+// "Guardar", desactivado sin red y mientras se guarda (C-22, C-34)
+function refreshRecipeSave() {
+  $('recipe-save').disabled = state.offline || recipeForm.saving;
+}
+
+function showRecipeFormError(text) {
+  $('recipe-form-error').textContent = text;
+  $('recipe-form-error').hidden = !text;
+}
+
+function clearRecipeMarks() {
+  document.querySelectorAll('#recipe-form .invalid-field').forEach((n) => n.classList.remove('invalid-field'));
+}
+
+// Marca los campos que devuelve validateRecipeForm: { field } o { field, row } del único plato
+function markRecipeInvalid(invalid) {
+  const { dish } = recipeForm;
+  for (const { field, row } of invalid) {
+    const node = row !== undefined ? readRows(dish)[row][field] : dish[field];
+    node.classList.add('invalid-field');
+  }
+}
+
+// Rellena el formulario: vacío para añadir o con la receta guardada (C-17)
+function fillRecipeForm(recipe = null) {
+  recipeForm.id = recipe?.id ?? null;
+  recipeForm.version = recipe?.version ?? null;
+  recipeForm.tags = recipe?.etiquetas ?? [];
+  $('recipe-form-title').textContent = recipe ? 'Editar receta' : 'Añadir receta';
+  fillDish(recipeForm.dish, recipe && {
+    nombre: recipe.nombre, personas: recipe.personas, ingredientes: recipe.ingredientes,
+    receta: recipe.preparacion, referencia: recipe.referencia,
+  });
+  $('recipe-form-time').value = recipe?.tiempo ?? '';
+  $('recipe-form-notes').value = recipe?.notas || '';
+  clearRecipeMarks();
+  showRecipeFormError('');
+}
+
+// "+ Añadir receta" (vacío) o "Editar" (con lo guardado) (C-17); sin red, nada (C-34)
+function openRecipeForm(recipe = null) {
+  if (state.offline) return;
+  fillRecipeForm(recipe);
+  recipeForm.opened++;
+  $('recipe-dialog').showModal();
+}
+
+// El formulario en bruto, para validateRecipeForm
+function readRecipeForm() {
+  return {
+    ...readDish(recipeForm.dish),
+    time: $('recipe-form-time').value,
+    notes: $('recipe-form-notes').value,
+    tags: recipeForm.tags,
+  };
+}
+
+// Guarda con guardar_receta (D-5): válido y sin otra receta de nombre equivalente (C-23), se
+// guarda, se espera a la carga y se abre su detalle (C-22, D-19). Los errores, dentro del
+// formulario sin perder lo escrito (C-31, C-32, C-35, C-43)
+async function saveRecipe(event) {
+  event.preventDefault();
+  if (state.offline || recipeForm.saving) return; // C-34
+  showRecipeFormError('');
+  clearRecipeMarks();
+  const { data, error, invalid } = validateRecipeForm(readRecipeForm());
+  if (error) {
+    markRecipeInvalid(invalid);
+    return showRecipeFormError(error);
+  }
+  const same = sameNameRecipe(recipeState.items, data.nombre, recipeForm.id);
+  if (same) return askEditExisting(same);
+
+  const opened = recipeForm.opened;
+  recipeForm.saving = true;
+  refreshRecipeSave();
+  const result = await timedQuery(client.rpc('guardar_receta', {
+    p_id: recipeForm.id,
+    p_version: recipeForm.version,
+    p_receta: data,
+    p_estrellas_tocadas: false, // las estrellas del formulario llegan en T9 (C-21)
+    p_estrellas: null,
+    p_inicial: userInitial($('user-menu-email').textContent),
+  }));
+  if (!sessionActive) return; // I-13
+  const outcome = result.error ? null : recipeSaveOutcome(result.data);
+  if (outcome === 'saved') {
+    await loadRecipes(); // D-19: el detalle se abre con la receta ya cargada
+    if (!sessionActive) return;
+    if (opened === recipeForm.opened && $('recipe-dialog').open) {
+      $('recipe-dialog').close();
+      openRecipe(result.data.id);
+    }
+  } else if (opened === recipeForm.opened) {
+    // Cambiada o borrada: se recarga, para que al volver a abrirla se vea como está (C-31)
+    if (outcome === 'changed' || outcome === 'deleted') loadRecipes();
+    if (outcome === 'changed') showRecipeFormError(RECIPE_CHANGED_MESSAGE);
+    else if (outcome === 'deleted') showRecipeFormError(RECIPE_GONE_MESSAGE);
+    else showRecipeFormError(result.error
+      ? recipeErrorMessage('save', result.error, reachable(result), data.nombre)
+      : recipeErrorMessage('save', new Error('Respuesta inesperada al guardar'), true));
+  }
+  recipeForm.saving = false;
+  refreshRecipeSave();
+}
+
+// C-23: "Cancelar" conserva lo escrito; "Editar la existente" la carga tal como está ahora
+async function askEditExisting(same) {
+  const opened = recipeForm.opened;
+  const load = await askConfirm(recipeExistsText(same.nombre), 'Editar la existente');
+  if (!load || !sessionActive || opened !== recipeForm.opened || !$('recipe-dialog').open) return;
+  const current = recipeState.items.find((r) => r.id === same.id);
+  if (current) fillRecipeForm(current);
+  else showRecipeFormError(RECIPE_GONE_MESSAGE);
 }
 
 // Pinta la pantalla Compra con lo que hay en listState (RF-6 a RF-12); todo con textContent (RNF-6)
@@ -3515,10 +3653,12 @@ const nameObserver = new ResizeObserver((entries) => {
   }
 });
 
-// Igual que el envío implícito de un campo de una línea: solo con "Guardar" activo
-function submitFromName() {
-  const save = $('form-save');
-  if (!save.disabled) $('meal-form').requestSubmit(save);
+// Igual que el envío implícito de un campo de una línea: solo con "Guardar" activo. Envía el
+// formulario de la fila: el de comida o el de receta (026 D-18)
+function submitFromName(row) {
+  const form = row.closest('form');
+  const save = form.querySelector('button[type="submit"]');
+  if (!save.disabled) form.requestSubmit(save);
 }
 
 // Con la lista visible, ↑/↓ marcan, Intro con marcada elige y Esc solo cierra la lista; si
@@ -3552,7 +3692,7 @@ function onNameBeforeInput(event) {
 function enterFromName(row) {
   const marked = row.querySelector('.ingredient-suggestions [aria-selected="true"]');
   if (marked) pickIngredientSuggestion(row, marked.textContent);
-  else submitFromName();
+  else submitFromName(row);
 }
 
 // Un salto pegado, o uno que no se pudo anular, pasa a espacio sin mover el cursor (CL-1)
@@ -3564,8 +3704,8 @@ function onNameInput(name, event) {
     name.setSelectionRange(selectionStart, selectionEnd);
   }
   fitNameHeight(name);
-  if (TYPED_BREAKS.includes(event.inputType)) return submitFromName();
   const row = name.closest('.ingredient');
+  if (TYPED_BREAKS.includes(event.inputType)) return submitFromName(row);
   row.typedName = true; // desde aquí, las cargas recalculan su lista (014 C-8, C-22)
   renderIngredientSuggestions(row); // 014 C-1, C-2
 }
@@ -3652,7 +3792,7 @@ function moveIngredientMark(row, key) {
 // tiene el cursor: si no, ninguna lista (014 C-8, C-9, C-17, C-19, C-22, D-13)
 function refreshOpenIngredientSuggestions() {
   const name = document.activeElement;
-  if (!name?.matches('#meal-dialog[open] .ingredient-name')) return;
+  if (!name?.matches('#meal-dialog[open] .ingredient-name, #recipe-dialog[open] .ingredient-name')) return;
   const row = name.closest('.ingredient');
   if (!row.typedName) return;
   const before = rowOptions(row);
@@ -4276,6 +4416,10 @@ function bindEvents() {
   $('recipe-search').addEventListener('input', onRecipeSearch); // 026 C-7
   $('recipe-time').addEventListener('change', onRecipeTime); // C-9
   $('recipe-order').addEventListener('change', onRecipeOrder); // C-11, C-41
+  $('add-recipe-button').addEventListener('click', () => openRecipeForm()); // C-17
+  recipeForm.dish = buildRecipeDish();
+  $('recipe-cancel').addEventListener('click', () => $('recipe-dialog').close()); // C-22
+  $('recipe-form').addEventListener('submit', saveRecipe);
   $('add-article-button').addEventListener('click', () => { if (!state.offline) openArticleForm(); }); // 011 RF-10
   $('finish-button').addEventListener('click', finishShopping);
   $('article-cancel').addEventListener('click', closeArticleForm);

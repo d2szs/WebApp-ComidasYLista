@@ -2145,6 +2145,17 @@ function recipeDeleteText(recipe) {
   return `¿Borrar la receta «${recipe.nombre}»?`;
 }
 
+// Otra receta cargada con nombre equivalente, sin contar la que se edita (id); o null (C-23, D-23)
+function sameNameRecipe(recipes, name, id) {
+  const key = articleKey(name);
+  return recipes.find((r) => r.id !== id && articleKey(r.nombre) === key) || null;
+}
+
+// Confirmación antes de guardar con el nombre de una receta que ya existe (C-23)
+function recipeExistsText(name) {
+  return `Ya hay una receta «${name}». ¿Quieres editarla? Se perderá lo que has escrito.`;
+}
+
 // Id del usuario de la sesión que guardó supabase-js, o null; para "Tus estrellas" también en
 // modo copia, sin red (C-12, C-34). Misma validez que storedSessionEmail
 function storedSessionUserId(text) {
@@ -2209,5 +2220,6 @@ if (typeof module !== 'undefined') {
     cleanTag, addTag, tagSuggestions, timeFromField, validateRecipeForm, recipeFromDish,
     recipeSearchResults, copyRecipes, recipeSaveOutcome, recipeErrorMessage,
     recipeFacts, starsText, ratingsText, myStars, nextStars, recipeDeleteText, storedSessionUserId,
+    sameNameRecipe, recipeExistsText,
   };
 }

@@ -278,7 +278,30 @@
 
     <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>
     <button type="button" id="add-article-button" class="btn btn-primary btn-floating">+ Añadir artículo</button>
+    <button type="button" id="add-recipe-button" class="btn btn-primary btn-floating">+ Añadir receta</button>
   </section>
+
+  <!-- Formulario de receta (026 C-17 a C-23, D-18): el plato sale de dish-template; tiempo y
+       notas se colocan dentro de él al construirlo -->
+  <dialog id="recipe-dialog" class="dialog">
+    <form id="recipe-form" novalidate>
+      <h2 id="recipe-form-title">Añadir receta</h2>
+      <div id="recipe-form-dish"></div>
+      <label class="field" id="recipe-form-time-field">
+        <span>Tiempo (min)</span>
+        <input type="text" id="recipe-form-time" class="recipe-form-time" inputmode="numeric" maxlength="3" autocomplete="off">
+      </label>
+      <label class="field" id="recipe-form-notes-field">
+        <span>Notas o variaciones</span>
+        <textarea id="recipe-form-notes" rows="3"></textarea>
+      </label>
+      <p id="recipe-form-error" class="error-message" role="alert" hidden></p>
+      <div class="dialog-buttons">
+        <button type="button" id="recipe-cancel" class="btn">Cancelar</button>
+        <button type="submit" id="recipe-save" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Formulario de comida -->
   <dialog id="meal-dialog" class="dialog">
