@@ -36,6 +36,7 @@
   --space: 1rem;
   --radius: 10px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-drag: 0 6px 18px rgba(0, 0, 0, 0.25); /* 025 C-1, C-8: comida levantada */
   --max-width: 1100px;
   --screen-bar-height: 4rem;
   --top-bar-height: 2.75rem;
@@ -720,11 +721,30 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   background: var(--color-bg);
   text-align: left;
   cursor: pointer;
+  -webkit-touch-callout: none; /* 025 C-6, D-11: sin menú ni selección al mantener pulsado */
+  -webkit-user-select: none;
+  user-select: none;
 }
 .week-meal-type { display: block; font-size: 0.7rem; color: var(--color-text-muted); }
 .week-meal.empty .week-meal-name { color: var(--color-text-muted); }
 /* Filas vacías (abren el formulario), ↺ ✕ de Guardados y sugerencias, sin red (011 RF-10, D-7) */
 .week-meal:disabled, .article-action:disabled, .suggestion:disabled { opacity: var(--opacity-disabled); cursor: default; }
+/* 025 C-8: la casilla de la comida levantada queda como hueco punteado; la copia sigue al
+   puntero, un poco más grande y con sombra (C-1), del ancho de su casilla (C-27) */
+.week-meal.drag-origin { background: transparent; border-left-color: transparent; outline: 2px dashed var(--color-text-muted); outline-offset: -2px; }
+.week-meal.drag-origin > * { visibility: hidden; }
+.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  margin: 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-drag);
+  pointer-events: none;
+  will-change: transform;
+}
+body.dragging, body.dragging * { cursor: grabbing; }
 
 /* Vista diaria */
 .block {

@@ -402,6 +402,7 @@ function applySession(session, { pageLoad = false } = {}) {
 
 // CL-13: cierra la confirmación (askConfirm resuelve "no") y el formulario, sin guardar
 function closeDialogs() {
+  cancelDrag(); // 025 C-23
   const confirmDialog = $('confirm-dialog');
   if (confirmDialog.open) confirmDialog.close();
   closeExists(); // 021 C-14
@@ -765,6 +766,7 @@ function loadListFromCopy() {
 function setOffline(value) {
   if (state.offline === value) return;
   state.offline = value;
+  if (value) cancelDrag(); // 025 C-23
   scheduleSearchRecalc(); // 023 C-25, D-11
   applyWriteControls(); // RF-10, CL-6
   renderShopping();
@@ -2886,6 +2888,12 @@ function placeMonthPanel() {
 
 // ===== Render =====
 function render() {
+  if (isRenderHeld()) { // 025 C-22, D-9: se pinta al soltar, cancelar o tras el clic del toque
+    renderPending = true;
+    return;
+  }
+  renderPending = false;
+  paintedMeals = state.meals; // 025: "como se veía" al levantar
   updateHeader();
   const { from, to } = currentRange();
   $('copy-gap').hidden = !(state.copyMode && hasCopyGap(from, to, copyState.copy)); // 011 RF-15
@@ -2957,6 +2965,8 @@ function buildWeekView() {
         : () => { if (!state.offline) openForm({ date, type: type.id }); }; // 011 RF-10
       const row = button('week-meal type-' + type.id + (meal ? '' : ' empty'), undefined, onClick);
       if (!meal) row.disabled = state.offline; // abre el formulario para crear (011 D-7)
+      row.dataset.date = toISODate(date); // 025: qué casilla es al arrastrar
+      row.dataset.type = type.id;
       row.append(
         el('span', 'week-meal-type', type.name),
         el('span', 'week-meal-name', meal ? dishNames(meal) : '—'),
@@ -3557,6 +3567,195 @@ async function deleteMeal(meal) {
 }
 
 // ===== Eventos =====
+// ===== Arrastrar comidas (025-arrastrar-comidas) =====
+// drag: la pulsación o el arrastre en curso, sobre una casilla de la semana (null: ninguno).
+// Mientras hay uno, y tras un toque corto hasta que llega su clic, render() queda pendiente:
+// la casilla pulsada sigue en la página y lo que llega se pinta después (C-22, D-9)
+let drag = null;
+let tapHoldTimer = null;      // espera del clic de un toque corto (D-9)
+let renderPending = false;
+let swallowClick = false;     // el clic que sigue a un levantamiento no abre nada (C-16, D-8)
+let paintedMeals = new Map(); // comidas de la semana pintada ("como se veía")
+const TAP_CLICK_WAIT_MS = 500; // tras un toque corto, hasta aquí se espera su clic
+
+function isRenderHeld() {
+  return drag !== null || tapHoldTimer !== null;
+}
+
+function flushRender() {
+  if (renderPending && !isRenderHeld()) render();
+}
+
+function releaseTapHold() {
+  clearTimeout(tapHoldTimer);
+  tapHoldTimer = null;
+  flushRender();
+}
+
+// Pulsación sobre una casilla de la semana (C-1, C-2, C-5, C-7)
+function onCalendarPointerDown(event) {
+  if (drag) { // C-30: otro dedo u otro puntero
+    if (event.pointerId !== drag.pointerId) cancelDrag();
+    return;
+  }
+  const row = event.target.closest('.week-meal');
+  if (!row || row.disabled || state.offline || state.view !== 'week') return; // C-7
+  const mouse = event.pointerType === 'mouse';
+  if (mouse && event.button !== 0) return; // D-11: el clic derecho, como hoy
+  const slot = { date: row.dataset.date, type: row.dataset.type };
+  const meal = paintedMeals.get(mealKey(slot.date, slot.type)) || null;
+  if (!meal && mouse) return; // vacía con ratón: solo el clic de siempre
+  const point = { x: event.clientX, y: event.clientY };
+  drag = {
+    pointerId: event.pointerId, mouse, row, slot, meal, start: point, point,
+    downAt: event.timeStamp, width: window.innerWidth, lifted: false,
+    timer: null, ghost: null, offset: null, frame: null,
+  };
+  if (!mouse && meal) drag.timer = setTimeout(liftMeal, LONG_PRESS_MS); // C-1
+  document.addEventListener('pointermove', onDragPointerMove);
+  document.addEventListener('pointerup', onDragPointerUp);
+  document.addEventListener('pointercancel', onDragPointerCancel);
+}
+
+function onDragPointerMove(event) {
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  drag.point = { x: event.clientX, y: event.clientY };
+  if (drag.lifted) return; // la copia la mueve dragFrame
+  if (!movesBeyond(drag.start, drag.point, drag.mouse ? MOUSE_DRAG_PX : TOUCH_SLOP_PX)) return;
+  if (drag.mouse) liftMeal(); // C-2
+  else endDrag(); // C-4: el navegador desplaza la página y nada se levanta
+}
+
+// Levanta la comida: copia que sigue al puntero y hueco en su casilla (C-1, C-2, C-8)
+function liftMeal() {
+  clearTimeout(drag.timer);
+  drag.lifted = true;
+  const { row } = drag;
+  const rect = row.getBoundingClientRect();
+  drag.offset = { x: drag.start.x - rect.left, y: drag.start.y - rect.top };
+  const ghost = row.cloneNode(true); // pintada con textContent (principio 7)
+  ghost.classList.add('drag-ghost');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.tabIndex = -1;
+  ghost.style.width = rect.width + 'px'; // C-27: ni más ancha que su casilla
+  ghost.style.transformOrigin = drag.offset.x + 'px ' + drag.offset.y + 'px';
+  document.body.append(ghost);
+  drag.ghost = ghost;
+  row.classList.add('drag-origin');
+  document.body.classList.add('dragging');
+  if (drag.mouse) {
+    try { row.setPointerCapture(drag.pointerId); } catch { /* el puntero ya no está */ } // D-8
+  } else if (navigator.vibrate) navigator.vibrate(DRAG_VIBRATE_MS); // C-1
+  placeGhost();
+  drag.frame = requestAnimationFrame(dragFrame);
+}
+
+function placeGhost() {
+  const x = drag.point.x - drag.offset.x;
+  const y = drag.point.y - drag.offset.y;
+  drag.ghost.style.transform = `translate(${x}px, ${y}px) scale(1.04)`;
+}
+
+// Un fotograma del arrastre: la copia sigue al dedo o al ratón (C-8)
+function dragFrame() {
+  if (!drag?.lifted) return;
+  placeGhost();
+  drag.frame = requestAnimationFrame(dragFrame);
+}
+
+function onDragPointerUp(event) {
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  if (drag.lifted) {
+    dropMeal();
+    return;
+  }
+  // C-5: un dedo que mantiene una casilla vacía y suelta hace lo mismo que un toque; tras una
+  // pulsación larga el navegador no manda el clic, así que se pulsa aquí
+  const longEmpty = !drag.mouse && !drag.meal && event.timeStamp - drag.downAt >= LONG_PRESS_MS;
+  const { row } = drag;
+  endDrag({ tap: !longEmpty });
+  if (longEmpty) {
+    row.click();
+    ignoreNextClick(); // por si el navegador también lo manda
+  }
+}
+
+function onDragPointerCancel(event) {
+  if (drag && event.pointerId === drag.pointerId) cancelDrag(); // C-4, C-30
+}
+
+// Soltar (C-16; D-12: hasta T5, soltar siempre cancela)
+function dropMeal() {
+  cancelDrag();
+}
+
+// La comida vuelve a su sitio, sin guardar ni abrir nada (C-16, C-23, C-30)
+function cancelDrag() {
+  if (!drag) return;
+  const lifted = drag.lifted;
+  endDrag();
+  if (lifted) ignoreNextClick();
+}
+
+// Termina la pulsación o el arrastre y pinta lo pendiente; tap: espera antes el clic del toque
+function endDrag({ tap = false } = {}) {
+  clearTimeout(drag.timer);
+  cancelAnimationFrame(drag.frame);
+  drag.ghost?.remove();
+  drag.row.classList.remove('drag-origin');
+  document.body.classList.remove('dragging');
+  document.removeEventListener('pointermove', onDragPointerMove);
+  document.removeEventListener('pointerup', onDragPointerUp);
+  document.removeEventListener('pointercancel', onDragPointerCancel);
+  drag = null;
+  if (tap) {
+    clearTimeout(tapHoldTimer);
+    tapHoldTimer = setTimeout(releaseTapHold, TAP_CLICK_WAIT_MS);
+  } else flushRender();
+}
+
+// D-8: se ignora solo el clic que sigue; si no llega, la guarda se quita en la siguiente vuelta
+function ignoreNextClick() {
+  swallowClick = true;
+  setTimeout(() => { swallowClick = false; });
+}
+
+// Clic en el calendario, antes que el de la casilla: el que sigue a un levantamiento no abre
+// nada (C-16); el de un toque corto pinta antes lo pendiente (el clic ya tiene su casilla)
+function onCalendarClickCapture(event) {
+  if (swallowClick) {
+    swallowClick = false;
+    event.stopPropagation();
+    event.preventDefault();
+    return;
+  }
+  if (tapHoldTimer !== null) releaseTapHold();
+}
+
+function setupMealDrag() {
+  const calendar = $('calendar');
+  calendar.addEventListener('pointerdown', onCalendarPointerDown);
+  calendar.addEventListener('click', onCalendarClickCapture, true);
+  // C-6, D-11: sin menú del navegador al mantener una comida con el dedo
+  calendar.addEventListener('contextmenu', (event) => {
+    if (drag && !drag.mouse && drag.meal) event.preventDefault();
+  });
+  // C-13, D-7: siempre puesto y no pasivo; solo frena el desplazamiento con una comida levantada
+  calendar.addEventListener('touchmove', (event) => {
+    if (drag?.lifted) event.preventDefault();
+  }, { passive: false });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && drag?.lifted) cancelDrag(); // C-16
+  });
+  window.addEventListener('resize', () => { // C-30: girar o cambiar el ancho, no el alto
+    if (drag && window.innerWidth !== drag.width) cancelDrag();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') cancelDrag(); // C-30
+  });
+  window.addEventListener('blur', cancelDrag); // C-30
+}
+
 function bindEvents() {
   $('config-retry').addEventListener('click', connect);
   $('form-login').addEventListener('submit', submitLogin);
@@ -3582,6 +3781,7 @@ function bindEvents() {
   $('sidebar-toggle').addEventListener('click', toggleSidebar);
   readSidebar();
   calendarObserver.observe($('calendar')); // 008 RF-15
+  setupMealDrag(); // 025
 
   document.querySelectorAll('.view-button').forEach((b) => b.addEventListener('click', () => changeView(b.dataset.view)));
   $('prev-button').addEventListener('click', () => shiftPeriod(-1));
