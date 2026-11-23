@@ -1100,6 +1100,7 @@ async function loadRecipes() {
   }
   renderRecipes();
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
+  refreshRecipeTagSuggestions(); // C-20: con las etiquetas usadas ahora
 }
 
 // Orden guardado en el navegador; sin poder leerlo, el de por defecto (C-41, D-11)
@@ -1340,9 +1341,13 @@ async function deleteRecipe(recipe) {
 }
 
 // ----- Formulario de receta (026 C-17 a C-23, C-31, C-32, C-43; D-18) -----
-// id y version: la receta que se edita (null al añadir); tags: sus etiquetas, que se guardan tal
-// cual hasta que el formulario tenga su campo (T9); opened: sube con cada apertura
-const recipeForm = { dish: null, id: null, version: null, tags: [], saving: false, opened: 0 };
+// id y version: la receta que se edita (null al añadir); tags: sus etiquetas (pastillas);
+// tagTyped: se ha escrito en "Etiquetas" desde que tiene el cursor; stars y starsTouched: "Tus
+// estrellas", que solo se mandan si se tocaron (C-21, D-5); opened: sube con cada apertura
+const recipeForm = {
+  dish: null, id: null, version: null, tags: [], tagTyped: false,
+  stars: null, starsTouched: false, saving: false, opened: 0,
+};
 
 // El plato de dish-template, sin leyenda, con "Tiempo (min)" tras "Personas" y "Notas o
 // variaciones" tras "Preparación" (spec § Cómo se verá; D-18)
@@ -1384,7 +1389,15 @@ function markRecipeInvalid(invalid) {
 function fillRecipeForm(recipe = null) {
   recipeForm.id = recipe?.id ?? null;
   recipeForm.version = recipe?.version ?? null;
-  recipeForm.tags = recipe?.etiquetas ?? [];
+  recipeForm.tags = [...(recipe?.etiquetas ?? [])];
+  recipeForm.stars = recipe ? myStars(recipe, currentUserId) : null;
+  recipeForm.starsTouched = false;
+  $('recipe-form-tag').value = '';
+  recipeForm.tagTyped = false;
+  closeRecipeTagSuggestions();
+  showRecipeTagError('');
+  renderRecipeFormTags();
+  renderRecipeFormStars();
   $('recipe-form-title').textContent = recipe ? 'Editar receta' : 'Añadir receta';
   fillDish(recipeForm.dish, recipe && {
     nombre: recipe.nombre, personas: recipe.personas, ingredientes: recipe.ingredientes,
@@ -1427,6 +1440,12 @@ async function saveRecipe(event) {
     markRecipeInvalid(invalid);
     return showRecipeFormError(error);
   }
+  // C-52: lo escrito en "Etiquetas" sin añadir entra como una más; la undécima no guarda
+  if (!addRecipeTag($('recipe-form-tag').value)) {
+    $('recipe-form-tag').classList.add('invalid-field');
+    return $('recipe-form-tag').focus();
+  }
+  data.etiquetas = recipeForm.tags;
   const same = sameNameRecipe(recipeState.items, data.nombre, recipeForm.id);
   if (same) return askEditExisting(same);
 
@@ -1437,8 +1456,8 @@ async function saveRecipe(event) {
     p_id: recipeForm.id,
     p_version: recipeForm.version,
     p_receta: data,
-    p_estrellas_tocadas: false, // las estrellas del formulario llegan en T9 (C-21)
-    p_estrellas: null,
+    p_estrellas_tocadas: recipeForm.starsTouched, // C-21, D-5: si no, no pisa las del detalle
+    p_estrellas: recipeForm.stars,
     p_inicial: userInitial($('user-menu-email').textContent),
   }));
   if (!sessionActive) return; // I-13
@@ -1461,6 +1480,176 @@ async function saveRecipe(event) {
   }
   recipeForm.saving = false;
   refreshRecipeSave();
+}
+
+// ----- Etiquetas del formulario de receta (C-20, C-42, C-52) -----
+// Cada etiqueta, una pastilla que se quita con un toque; como texto (I-9)
+function renderRecipeFormTags() {
+  const list = $('recipe-form-tags');
+  list.replaceChildren(...recipeForm.tags.map((tag) => {
+    const pill = button('recipe-tag recipe-form-tag', undefined, () => removeRecipeTag(tag));
+    pill.append(el('span', null, tag), el('span', 'recipe-form-tag-x', '✕'));
+    pill.setAttribute('aria-label', `Quitar la etiqueta ${tag}`);
+    const item = el('li');
+    item.append(pill);
+    return item;
+  }));
+  list.hidden = recipeForm.tags.length === 0;
+}
+
+function showRecipeTagError(text) {
+  $('recipe-tag-error').textContent = text;
+  $('recipe-tag-error').hidden = !text;
+}
+
+// Añade lo escrito con la forma de una ya usada equivalente; vacía o repetida, no añade nada
+// pero vacía el campo. false solo si sería la undécima: el aviso, y lo escrito se queda (C-42)
+function addRecipeTag(text) {
+  const { tags, error } = addTag(recipeForm.tags, text, usedTags(recipeState.items));
+  showRecipeTagError(error || '');
+  if (error) return false;
+  if (!cleanTag(text)) return true;
+  recipeForm.tags = tags;
+  $('recipe-form-tag').value = '';
+  recipeForm.tagTyped = false;
+  closeRecipeTagSuggestions();
+  renderRecipeFormTags();
+  return true;
+}
+
+function removeRecipeTag(tag) {
+  recipeForm.tags = recipeForm.tags.filter((t) => t !== tag);
+  showRecipeTagError('');
+  renderRecipeFormTags();
+  $('recipe-form-tag').focus();
+}
+
+// Hasta 5 usadas que coinciden con lo escrito, sin las que ya tiene (C-20)
+function renderRecipeTagSuggestions() {
+  const list = $('recipe-tag-suggestions');
+  const found = tagSuggestions(usedTags(recipeState.items), $('recipe-form-tag').value, recipeForm.tags);
+  list.replaceChildren(...found.map((tag, index) => {
+    const option = el('li', 'suggestion', tag);
+    option.id = `recipe-tag-suggestion-${index}`;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', 'false');
+    return option;
+  }));
+  list.hidden = found.length === 0;
+  $('recipe-form-tag').setAttribute('aria-expanded', String(!list.hidden));
+  $('recipe-form-tag').removeAttribute('aria-activedescendant');
+}
+
+function recipeTagOptions() {
+  return [...$('recipe-tag-suggestions').querySelectorAll('[role="option"]')];
+}
+
+function setRecipeTagMark(index) {
+  const options = recipeTagOptions();
+  options.forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+  if (index < 0) return $('recipe-form-tag').removeAttribute('aria-activedescendant');
+  $('recipe-form-tag').setAttribute('aria-activedescendant', options[index].id);
+  options[index].scrollIntoView({ block: 'nearest' });
+}
+
+// Tras una carga, la lista abierta se recalcula con lo escrito; la marcada sigue si sigue
+function refreshRecipeTagSuggestions() {
+  if (!$('recipe-dialog').open || !recipeForm.tagTyped) return;
+  const before = recipeTagOptions();
+  const oldNames = before.map((option) => option.textContent);
+  const oldIndex = markedIndex(before);
+  renderRecipeTagSuggestions();
+  setRecipeTagMark(keptMark(oldNames, oldIndex, recipeTagOptions().map((option) => option.textContent)));
+}
+
+function closeRecipeTagSuggestions() {
+  $('recipe-tag-suggestions').hidden = true;
+  $('recipe-tag-suggestions').replaceChildren();
+  $('recipe-form-tag').setAttribute('aria-expanded', 'false');
+  $('recipe-form-tag').removeAttribute('aria-activedescendant');
+}
+
+// La coma añade lo escrito antes de ella (también pegada o desde teclados que no avisan de la
+// tecla); si no, sugerencias para lo escrito (C-20)
+function onRecipeTagInput() {
+  const input = $('recipe-form-tag');
+  showRecipeTagError('');
+  input.classList.remove('invalid-field');
+  if (input.value.includes(',')) {
+    const parts = input.value.split(',');
+    const rest = parts.pop();
+    const full = parts.find((part) => !addRecipeTag(part));
+    if (full !== undefined) { // la undécima: se queda escrita, con el aviso (C-42)
+      input.value = full.trim();
+      return;
+    }
+    input.value = rest.trimStart();
+  }
+  recipeForm.tagTyped = true;
+  renderRecipeTagSuggestions();
+}
+
+// ↑/↓ marcan, Esc solo cierra la lista; Intro elige la marcada o añade lo escrito. Con el
+// campo vacío, Intro guarda, como en los demás campos. Componiendo, nada (C-20)
+function onRecipeTagKeydown(event) {
+  if (event.isComposing) return;
+  const open = !$('recipe-tag-suggestions').hidden;
+  if (open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    event.preventDefault();
+    const options = recipeTagOptions();
+    setRecipeTagMark(moveMark(markedIndex(options), options.length, event.key === 'ArrowDown' ? 'down' : 'up'));
+  } else if (open && event.key === 'Escape') {
+    event.preventDefault(); // anula el cierre del diálogo: la siguiente Esc sí lo cierra
+    recipeForm.tagTyped = false;
+    closeRecipeTagSuggestions();
+  } else if (event.key === 'Enter') {
+    const marked = $('recipe-tag-suggestions').querySelector('[aria-selected="true"]');
+    const text = marked ? marked.textContent : $('recipe-form-tag').value;
+    if (!cleanTag(text)) return;
+    event.preventDefault();
+    addRecipeTag(text);
+  }
+}
+
+function setupRecipeTags() {
+  const input = $('recipe-form-tag');
+  const list = $('recipe-tag-suggestions');
+  input.addEventListener('input', onRecipeTagInput);
+  input.addEventListener('keydown', onRecipeTagKeydown);
+  input.addEventListener('blur', () => {
+    recipeForm.tagTyped = false;
+    closeRecipeTagSuggestions();
+  });
+  list.addEventListener('mousedown', (event) => event.preventDefault()); // el foco no sale del campo
+  list.addEventListener('click', (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option) addRecipeTag(option.textContent);
+  });
+}
+
+// ----- "Tus estrellas" del formulario (C-21): como en el detalle, pero solo se guardan con
+// "Guardar"; tocar la que ya tengo las quita -----
+function setupRecipeFormStars() {
+  const row = $('recipe-form-stars');
+  for (let n = 1; n <= 5; n++) {
+    const star = button('recipe-star', '☆', () => {
+      recipeForm.stars = nextStars(recipeForm.stars, n);
+      recipeForm.starsTouched = true;
+      renderRecipeFormStars();
+    });
+    star.dataset.stars = String(n);
+    star.setAttribute('aria-label', n === 1 ? '1 estrella' : `${n} estrellas`);
+    row.append(star);
+  }
+}
+
+// Solo cambia textos y estado: el foco se queda en la estrella tocada
+function renderRecipeFormStars() {
+  $('recipe-form-stars').querySelectorAll('.recipe-star').forEach((star) => {
+    const n = Number(star.dataset.stars);
+    star.textContent = n <= (recipeForm.stars || 0) ? '★' : '☆';
+    star.setAttribute('aria-pressed', String(n === recipeForm.stars));
+  });
 }
 
 // C-23: "Cancelar" conserva lo escrito; "Editar la existente" la carga tal como está ahora
@@ -4418,6 +4607,8 @@ function bindEvents() {
   $('recipe-order').addEventListener('change', onRecipeOrder); // C-11, C-41
   $('add-recipe-button').addEventListener('click', () => openRecipeForm()); // C-17
   recipeForm.dish = buildRecipeDish();
+  setupRecipeTags(); // C-20
+  setupRecipeFormStars(); // C-21
   $('recipe-cancel').addEventListener('click', () => $('recipe-dialog').close()); // C-22
   $('recipe-form').addEventListener('submit', saveRecipe);
   $('add-article-button').addEventListener('click', () => { if (!state.offline) openArticleForm(); }); // 011 RF-10

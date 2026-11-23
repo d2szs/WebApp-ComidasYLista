@@ -630,6 +630,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .recipe-my-stars-label { margin-right: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
 .recipe-star { min-width: 2.5rem; min-height: 2.5rem; padding: 0; border: none; background: none; font-size: 1.5rem; line-height: 1; color: var(--color-olive); cursor: pointer; }
 .recipe-star:disabled { color: var(--color-text-muted); cursor: default; }
+/* Formulario de receta: etiquetas como pastillas con ✕ sobre su campo (C-20) y estrellas (C-21) */
+.recipe-form-tags-field > label { display: block; margin-bottom: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
+.recipe-form-tags { list-style: none; margin: 0 0 0.4rem; padding: 0; }
+.recipe-form-tag { display: inline-flex; align-items: center; gap: 0.4rem; }
+.recipe-form-tag-x { color: var(--color-text-muted); }
+.recipe-tag-error { margin: 0.4rem 0 0; font-size: var(--text-small); }
+.recipe-tag-suggestions { margin-top: 0.25rem; }
+.recipe-tag-suggestions .suggestion + .suggestion { border-top: 1px solid var(--color-border); }
+.recipe-tag-suggestions [aria-selected="true"] { background: var(--color-marked); }
+.recipe-form-stars { margin: 0; }
 .recipe-detail-author { margin: var(--space) 0 0.5rem; font-size: var(--text-small); color: var(--color-text-muted); }
 /* Pc ancho: lista y detalle a la vez (C-14); solo CSS, no cierra nada al cruzar 1024 px (D-10) */
 @media (max-width: 1023.98px) {

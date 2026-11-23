@@ -295,6 +295,19 @@
         <span>Notas o variaciones</span>
         <textarea id="recipe-form-notes" rows="3"></textarea>
       </label>
+      <!-- Etiquetas: pastillas con ✕ y campo con sugerencias (C-20, C-42, C-52) -->
+      <div class="field recipe-form-tags-field">
+        <label for="recipe-form-tag">Etiquetas</label>
+        <ul id="recipe-form-tags" class="recipe-tags recipe-form-tags" aria-label="Etiquetas de la receta" hidden></ul>
+        <input type="text" id="recipe-form-tag" maxlength="30" autocomplete="off" enterkeyhint="enter" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="recipe-tag-suggestions">
+        <ul id="recipe-tag-suggestions" class="suggestions recipe-tag-suggestions" role="listbox" aria-label="Sugerencias de etiqueta" hidden></ul>
+        <p id="recipe-tag-error" class="error-message recipe-tag-error" role="alert" hidden></p>
+      </div>
+      <!-- Tus estrellas: como en el detalle; se guardan con "Guardar" (C-21) -->
+      <div class="field">
+        <span id="recipe-form-stars-label">Tus estrellas</span>
+        <div id="recipe-form-stars" class="recipe-my-stars recipe-form-stars" role="group" aria-labelledby="recipe-form-stars-label"></div>
+      </div>
       <p id="recipe-form-error" class="error-message" role="alert" hidden></p>
       <div class="dialog-buttons">
         <button type="button" id="recipe-cancel" class="btn">Cancelar</button>
