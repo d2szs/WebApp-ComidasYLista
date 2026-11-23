@@ -745,6 +745,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   will-change: transform;
 }
 body.dragging, body.dragging * { cursor: grabbing; }
+/* 025 C-9 a C-11: casillas válidas con contorno discreto, las demás atenuadas; la válida bajo
+   la copia, con contorno berenjena grueso y el fondo de "hoy" */
+.week-meal.drag-valid { outline: 1px solid var(--color-text-muted); outline-offset: -1px; }
+.week-meal.drag-dimmed { opacity: 0.35; }
+.week-meal.drag-over { background: var(--color-today); outline: 3px solid var(--color-primary); outline-offset: -3px; }
 
 /* Vista diaria */
 .block {

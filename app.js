@@ -3609,7 +3609,7 @@ function onCalendarPointerDown(event) {
   drag = {
     pointerId: event.pointerId, mouse, row, slot, meal, start: point, point,
     downAt: event.timeStamp, width: window.innerWidth, lifted: false,
-    timer: null, ghost: null, offset: null, frame: null,
+    timer: null, ghost: null, offset: null, frame: null, frameAt: null, target: null,
   };
   if (!mouse && meal) drag.timer = setTimeout(liftMeal, LONG_PRESS_MS); // C-1
   document.addEventListener('pointermove', onDragPointerMove);
@@ -3643,10 +3643,12 @@ function liftMeal() {
   drag.ghost = ghost;
   row.classList.add('drag-origin');
   document.body.classList.add('dragging');
+  markDropSlots();
   if (drag.mouse) {
     try { row.setPointerCapture(drag.pointerId); } catch { /* el puntero ya no está */ } // D-8
   } else if (navigator.vibrate) navigator.vibrate(DRAG_VIBRATE_MS); // C-1
   placeGhost();
+  markDropTarget();
   drag.frame = requestAnimationFrame(dragFrame);
 }
 
@@ -3656,10 +3658,66 @@ function placeGhost() {
   drag.ghost.style.transform = `translate(${x}px, ${y}px) scale(1.04)`;
 }
 
-// Un fotograma del arrastre: la copia sigue al dedo o al ratón (C-8)
-function dragFrame() {
+// Casillas de la semana pintada: válidas con contorno, las demás atenuadas (C-9, C-10)
+function weekSlotRows() {
+  return $('calendar').querySelectorAll('.week-meal');
+}
+
+function slotOf(row) {
+  return { date: row.dataset.date, type: row.dataset.type };
+}
+
+function markDropSlots() {
+  for (const row of weekSlotRows()) {
+    if (row === drag.row) continue;
+    row.classList.add(canDropMeal(drag.slot, slotOf(row)) ? 'drag-valid' : 'drag-dimmed');
+  }
+}
+
+function clearDropSlots() {
+  for (const row of weekSlotRows()) row.classList.remove('drag-valid', 'drag-dimmed', 'drag-over');
+}
+
+// La casilla válida que está bajo el puntero, o null (la copia no recibe el puntero) (C-11)
+function dropTargetAt(point) {
+  const row = document.elementFromPoint(point.x, point.y)?.closest('.week-meal');
+  if (!row || !$('calendar').contains(row)) return null;
+  return canDropMeal(drag.slot, slotOf(row)) ? row : null;
+}
+
+function markDropTarget() {
+  const target = dropTargetAt(drag.point);
+  if (target === drag.target) return;
+  drag.target?.classList.remove('drag-over');
+  target?.classList.add('drag-over');
+  drag.target = target;
+}
+
+// Zona visible del calendario: bajo la cabecera fija y, en el móvil, sobre la barra de
+// pantallas de abajo (C-12, D-7)
+function calendarViewport() {
+  const top = document.querySelector('.header').getBoundingClientRect().bottom;
+  const bar = $('screen-bar').getBoundingClientRect();
+  const atBottom = bar.width > window.innerWidth / 2 && bar.bottom >= window.innerHeight - 1;
+  return { top, bottom: atBottom ? bar.top : window.innerHeight };
+}
+
+// Cerca de un borde, la página se desplaza sola; window.scrollBy no pasa del final (C-12)
+function edgeScroll(frameMs) {
+  const { top, bottom } = calendarViewport();
+  const step = edgeScrollStep(drag.point.y, top, bottom, frameMs);
+  if (step) window.scrollBy(0, step);
+}
+
+// Un fotograma del arrastre: la copia sigue al dedo o al ratón, la página se desplaza cerca
+// de los bordes y se marca la casilla de debajo, que cambia también al desplazarse (C-8, C-11, C-12)
+function dragFrame(time) {
   if (!drag?.lifted) return;
+  const frameMs = drag.frameAt === null ? 0 : time - drag.frameAt;
+  drag.frameAt = time;
   placeGhost();
+  edgeScroll(frameMs);
+  markDropTarget();
   drag.frame = requestAnimationFrame(dragFrame);
 }
 
@@ -3703,6 +3761,7 @@ function endDrag({ tap = false } = {}) {
   cancelAnimationFrame(drag.frame);
   drag.ghost?.remove();
   drag.row.classList.remove('drag-origin');
+  if (drag.lifted) clearDropSlots();
   document.body.classList.remove('dragging');
   document.removeEventListener('pointermove', onDragPointerMove);
   document.removeEventListener('pointerup', onDragPointerUp);
