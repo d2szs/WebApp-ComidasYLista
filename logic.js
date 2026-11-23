@@ -2105,6 +2105,54 @@ function recipeErrorMessage(action, error, online, name) {
   return RECIPE_ERROR_PREFIXES[action] + translateError(error, online);
 }
 
+// ----- Detalle de receta (T7, D-22) -----
+
+// "Para 4 personas · 45 min": solo lo que la receta tiene; sin nada, '' (C-12)
+function recipeFacts(recipe) {
+  const parts = [personsText(recipe.personas), recipe.tiempo ? recipe.tiempo + ' min' : null];
+  return parts.filter(Boolean).join(' · ');
+}
+
+// "★★★★☆": n estrellas llenas de 5
+function starsText(n) {
+  return '★'.repeat(n) + '☆'.repeat(5 - n);
+}
+
+// "Diego ★★★★★ · Laura ★★★★☆": quien ha puntuado, con su nombre corto o inicial, por nombre;
+// sin nadie, '' (C-12, C-46)
+function ratingsText(recipe, profiles) {
+  const byUser = new Map((profiles || []).map((p) => [p.usuario, p]));
+  return (recipe.estrellas || [])
+    .map((s) => ({ label: userLabel(byUser.get(s.usuario)), stars: s.estrellas }))
+    .sort((a, b) => ARTICLE_COLLATOR.compare(a.label, b.label))
+    .map((r) => `${r.label} ${starsText(r.stars)}`)
+    .join(' · ');
+}
+
+// Mis estrellas en la receta (1-5), o null si no la he puntuado (C-15)
+function myStars(recipe, userId) {
+  const mine = (recipe.estrellas || []).find((s) => s.usuario === userId);
+  return mine ? mine.estrellas : null;
+}
+
+// Estrellas tras tocar una: la que ya tengo las quita (null) (C-15)
+function nextStars(current, tapped) {
+  return tapped === current ? null : tapped;
+}
+
+// Confirmación de borrar una receta (C-24)
+function recipeDeleteText(recipe) {
+  return `¿Borrar la receta «${recipe.nombre}»?`;
+}
+
+// Id del usuario de la sesión que guardó supabase-js, o null; para "Tus estrellas" también en
+// modo copia, sin red (C-12, C-34). Misma validez que storedSessionEmail
+function storedSessionUserId(text) {
+  if (!storedSessionEmail(text)) return null;
+  const id = JSON.parse(text).user.id;
+  return typeof id === 'string' && id !== '' ? id : null;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -2160,5 +2208,6 @@ if (typeof module !== 'undefined') {
     RECIPE_CHANGED_MESSAGE, RECIPE_GONE_MESSAGE, NO_COPY_RECIPES_TEXT, SEARCH_NO_RECIPES_TEXT,
     cleanTag, addTag, tagSuggestions, timeFromField, validateRecipeForm, recipeFromDish,
     recipeSearchResults, copyRecipes, recipeSaveOutcome, recipeErrorMessage,
+    recipeFacts, starsText, ratingsText, myStars, nextStars, recipeDeleteText, storedSessionUserId,
   };
 }

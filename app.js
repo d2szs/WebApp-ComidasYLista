@@ -62,14 +62,21 @@ let listState = initialListState();
 
 // Recetas (026 D-8, D-10): todas, con sus estrellas, y los perfiles; loaded = primera carga hecha
 // (C-47); noCopy = en modo copia, copia de una versión anterior sin recetas (C-33). Búsqueda,
-// etiquetas y tiempo solo en memoria; el orden, también en el navegador (C-41, D-11)
+// etiquetas y tiempo solo en memoria; el orden, también en el navegador (C-41, D-11).
+// openId: receta del detalle (D-10); listScroll: posición de la lista al abrirla (C-13);
+// rating: puntuación en curso (D-14); deletingId: borrado propio en curso (D-19)
 function initialRecipeState(requestId = 0) {
-  return { items: [], profiles: [], loaded: false, noCopy: false, requestId, ...initialRecipeFilters() };
+  return {
+    items: [], profiles: [], loaded: false, noCopy: false, requestId, ...initialRecipeFilters(),
+    openId: null, listScroll: 0, rating: false, deletingId: null,
+  };
 }
 function initialRecipeFilters(order = storedRecipeOrder(null)) {
   return { text: '', tags: [], maxTime: null, order };
 }
 let recipeState = initialRecipeState();
+let currentUserId = null; // id del usuario de la sesión, para "Tus estrellas" (026 C-12, D-22)
+const WIDE_RECIPES = window.matchMedia('(min-width: 1024px)'); // pc ancho: lista y detalle (C-14)
 let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
@@ -291,6 +298,15 @@ function readStoredSessionEmail() {
   }
 }
 
+// Id del usuario de la sesión guardada, o null (026 D-22); sin localStorage, null
+function readStoredSessionUserId() {
+  try {
+    return storedSessionUserId(localStorage.getItem(authStorageKey(SUPABASE_URL)));
+  } catch {
+    return null;
+  }
+}
+
 // Abre sin red con la sesión y la copia guardadas (011 RF-4, D-4). El cliente se crea para
 // Realtime, la salida y "Cerrar sesión", sin esperar a initialize(), que sin red no acaba
 function openInCopyMode(email) {
@@ -377,6 +393,7 @@ function applySession(session, { pageLoad = false } = {}) {
   if (session && !sessionActive) {
     sessionActive = true;
     showUser(session.user.email); // 008 CL-4: la cuenta con que acaba de entrar
+    currentUserId = session.user.id || readStoredSessionUserId(); // 026 D-22: en modo copia, la guardada
     resetView(); // RF-54: semana de hoy al entrar, también si se abre Compra (007 RF-46)
     // 007 RF-4, RF-46: desde el login, Comidas; al cargar, la recordada. Antes de enseñar la app
     showAppScreen(openingScreen({
@@ -393,6 +410,7 @@ function applySession(session, { pageLoad = false } = {}) {
     scheduleCopySave(); // 011 RF-1
   } else if (!session) {
     sessionActive = false;
+    currentUserId = null;
     if (state.copyMode) {
       // 011 CL-3: sale del modo copia; la copia guardada se queda en el dispositivo
       state.copyMode = false;
@@ -978,6 +996,7 @@ function applyWriteControls() {
   $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
   if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
+  if (sessionActive) renderRecipeDetail(); // 026 C-34: estrellas y "Borrar" de la receta
 }
 
 async function loadData() {
@@ -1070,7 +1089,15 @@ async function loadRecipes() {
   recipeState.noCopy = false;
   recipeState.loaded = true;
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
+  // C-30, D-19: la abierta ya no está (y no es un borrado propio): a la lista, con aviso
+  const gone = recipeState.openId && recipeState.openId !== recipeState.deletingId
+    && !recipeState.items.some((r) => r.id === recipeState.openId);
+  if (gone) {
+    closeRecipe();
+    showError(RECIPE_GONE_MESSAGE);
+  }
   renderRecipes();
+  if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
 }
 
 // Orden guardado en el navegador; sin poder leerlo, el de por defecto (C-41, D-11)
@@ -1085,6 +1112,7 @@ function readRecipeOrder() {
 // Búsqueda vacía, sin etiquetas, "Cualquiera" y el orden guardado (C-41); los campos, igual
 function resetRecipeFilters() {
   Object.assign(recipeState, initialRecipeFilters(readRecipeOrder()));
+  recipeState.openId = null; // al entrar desde otra pantalla, la lista (como al recargar, C-3)
   $('recipe-search').value = '';
   $('recipe-time').value = '';
   $('recipe-order').value = recipeState.order;
@@ -1144,6 +1172,7 @@ function renderRecipeTags() {
 function renderRecipes() {
   $('recipes-loading').hidden = recipeState.loaded;
   const list = $('recipe-list');
+  const focusedId = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;
   list.replaceChildren();
   const any = recipeState.loaded && recipeState.items.length > 0;
   $('recipe-filters').hidden = !any;
@@ -1155,11 +1184,155 @@ function renderRecipes() {
   if (any) renderRecipeTags();
   for (const recipe of shown) {
     const line = recipeLine(recipe);
-    const card = el('li', 'recipe-card');
-    card.append(el('p', 'recipe-card-name', line.name), el('p', 'recipe-card-info', line.info));
-    if (line.tags) card.append(el('p', 'recipe-card-tags', line.tags));
-    list.append(card);
+    const card = button('recipe-card', undefined, () => openRecipe(recipe.id));
+    card.dataset.id = recipe.id;
+    if (recipe.id === recipeState.openId) card.setAttribute('aria-current', 'true'); // C-14, C-50
+    card.append(el('span', 'recipe-card-name', line.name), el('span', 'recipe-card-info', line.info));
+    if (line.tags) card.append(el('span', 'recipe-card-tags', line.tags));
+    const item = el('li');
+    item.append(card);
+    list.append(item);
+    if (recipe.id === focusedId) card.focus({ preventScroll: true });
   }
+  renderRecipeDetail();
+}
+
+// La receta abierta, si sigue en las cargadas (o en la copia)
+function openedRecipe() {
+  return recipeState.items.find((r) => r.id === recipeState.openId) || null;
+}
+
+// Abre el detalle (C-12). Por debajo de 1024 px sustituye a la lista: se guarda su posición y
+// se sube arriba (C-13); en pc ancho, la lista se queda como está (C-14)
+function openRecipe(id) {
+  const wasList = !recipeState.openId;
+  if (wasList && !WIDE_RECIPES.matches) recipeState.listScroll = window.scrollY;
+  recipeState.openId = id;
+  renderRecipes();
+  if (!WIDE_RECIPES.matches) {
+    window.scrollTo(0, 0);
+    $('recipe-detail').querySelector('.recipe-back')?.focus();
+  }
+}
+
+// Cierra el detalle sin repintar
+function closeRecipe() {
+  recipeState.openId = null;
+}
+
+// "‹ Recetas": vuelve a la lista con la misma búsqueda, filtros, orden y posición (C-13)
+function backToRecipes() {
+  const id = recipeState.openId;
+  closeRecipe();
+  renderRecipes();
+  window.scrollTo(0, recipeState.listScroll);
+  $('recipe-list').querySelector(`.recipe-card[data-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+}
+
+// Pinta el detalle de la receta abierta (C-12); partes vacías ocultas; todo con textContent (I-9).
+// Estrellas y "Borrar", desactivados sin red y mientras se puntúa (C-34, D-14)
+function renderRecipeDetail() {
+  const box = $('recipe-detail');
+  const focusedStar = box.contains(document.activeElement) ? document.activeElement.dataset.stars : null;
+  box.replaceChildren();
+  const recipe = openedRecipe();
+  $('recipes').classList.toggle('recipe-open', Boolean(recipe));
+  if (!recipe) {
+    if (recipeState.loaded) box.append(el('p', 'recipe-detail-empty', 'Elige una receta para ver su detalle.'));
+    return;
+  }
+  box.append(button('recipe-back', '‹ Recetas', backToRecipes), el('h2', null, recipe.nombre));
+  const facts = recipeFacts(recipe);
+  if (facts) box.append(el('p', 'recipe-detail-facts', facts));
+  if (recipe.etiquetas?.length) box.append(el('p', 'recipe-detail-tags', recipe.etiquetas.join(' · ')));
+  const ratings = ratingsText(recipe, recipeState.profiles);
+  if (ratings) box.append(el('p', 'recipe-detail-ratings', ratings));
+  box.append(buildMyStars(recipe));
+  if (focusedStar) box.querySelector(`.recipe-star[data-stars="${focusedStar}"]`)?.focus();
+
+  if (recipe.ingredientes?.length) {
+    const list = el('ul');
+    for (const ingredient of recipe.ingredientes) list.append(el('li', null, formatIngredient(ingredient)));
+    box.append(el('p', 'detail-subtitle', 'Ingredientes'), list);
+  }
+  if (recipe.preparacion) box.append(el('p', 'detail-subtitle', 'Preparación'), el('p', 'detail-recipe', recipe.preparacion));
+  if (recipe.notas) box.append(el('p', 'detail-subtitle', 'Notas o variaciones'), el('p', 'detail-recipe', recipe.notas));
+  const link = safeLink(recipe.referencia);
+  if (link) {
+    const a = el('a', null, link);
+    a.href = link;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    box.append(el('p', 'detail-subtitle', 'Referencia'), a);
+  }
+  box.append(el('p', 'recipe-detail-author', 'Añadida por ' + recipe.autor_nombre)); // C-25
+  const buttons = el('div', 'detail-buttons');
+  const remove = button('btn btn-danger', 'Borrar', () => deleteRecipe(recipe));
+  remove.disabled = state.offline; // C-34
+  buttons.append(remove);
+  box.append(buttons);
+}
+
+// "Tus estrellas": cinco botones; tocar la que ya tengo las quita (C-15); solo las mías (C-16)
+function buildMyStars(recipe) {
+  const mine = myStars(recipe, currentUserId);
+  const row = el('div', 'recipe-my-stars');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', 'Tus estrellas');
+  row.append(el('span', 'recipe-my-stars-label', 'Tus estrellas:'));
+  for (let n = 1; n <= 5; n++) {
+    const star = button('recipe-star', n <= (mine || 0) ? '★' : '☆', () => rateRecipe(recipe, n));
+    star.dataset.stars = String(n);
+    star.setAttribute('aria-label', n === 1 ? '1 estrella' : `${n} estrellas`);
+    star.setAttribute('aria-pressed', String(n === mine));
+    star.disabled = state.offline || recipeState.rating; // C-34, D-14
+    row.append(star);
+  }
+  return row;
+}
+
+// Guarda mis estrellas (o las quita) con puntuar_receta (C-15, D-6); sin respuesta en 8 s, el
+// error de siempre (C-35, D-14). Si ya no existe, la carga lo dice (C-30)
+async function rateRecipe(recipe, tapped) {
+  if (state.offline || recipeState.rating) return;
+  recipeState.rating = true;
+  renderRecipeDetail();
+  const result = await timedQuery(client.rpc('puntuar_receta', {
+    p_receta: recipe.id,
+    p_estrellas: nextStars(myStars(recipe, currentUserId), tapped),
+    p_inicial: userInitial($('user-menu-email').textContent),
+  }));
+  if (!sessionActive) return; // I-13
+  if (result.error || recipeSaveOutcome(result.data) === 'error') {
+    showError(recipeErrorMessage('rate', result.error, reachable(result)));
+  } else {
+    await loadRecipes();
+  }
+  recipeState.rating = false;
+  renderRecipeDetail();
+}
+
+// Borra la receta tras confirmar (C-24): sus estrellas, en cascada; si ya no estaba, sin error.
+// Un borrado propio vuelve a la lista sin aviso (D-19)
+async function deleteRecipe(recipe) {
+  if (state.offline) return; // C-34
+  if (!(await askConfirm(recipeDeleteText(recipe), 'Borrar'))) return;
+  if (!sessionActive || state.offline) return;
+  recipeState.deletingId = recipe.id;
+  const result = await timedQuery(client.from('recetas').delete().eq('id', recipe.id));
+  if (!sessionActive) return; // I-13
+  if (result.error) {
+    recipeState.deletingId = null;
+    showError(recipeErrorMessage('delete', result.error, reachable(result)));
+    return;
+  }
+  if (recipeState.openId === recipe.id) {
+    closeRecipe();
+    renderRecipes();
+    window.scrollTo(0, recipeState.listScroll);
+  }
+  await loadRecipes();
+  recipeState.deletingId = null;
 }
 
 // Pinta la pantalla Compra con lo que hay en listState (RF-6 a RF-12); todo con textContent (RNF-6)

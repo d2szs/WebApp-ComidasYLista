@@ -239,8 +239,9 @@
       </div>
     </main>
 
-    <!-- Pantalla Recetas (026 C-1 a C-5, D-10): lista (y detalle, T7) -->
+    <!-- Pantalla Recetas (026 C-1 a C-5, D-10): lista y detalle (C-12 a C-14) -->
     <main id="recipes" class="recipes">
+      <div id="recipe-browse" class="recipe-browse">
       <!-- 026 C-7 a C-11: buscar, etiquetas, tiempo y orden; solo con alguna receta -->
       <div id="recipe-filters" class="recipe-filters" hidden>
         <input type="text" id="recipe-search" maxlength="200" placeholder="Buscar por nombre o ingrediente" aria-label="Buscar por nombre o ingrediente" autocomplete="off" enterkeyhint="search">
@@ -270,6 +271,9 @@
       <p id="recipes-loading" class="list-loading">Cargando…</p>
       <p id="recipes-empty" class="list-empty" hidden></p>
       <ul id="recipe-list" class="recipe-list"></ul>
+      </div>
+      <!-- 026 C-12: lo pinta app.js; en pc ancho, junto a la lista (C-14) -->
+      <section id="recipe-detail" class="recipe-detail" aria-label="Detalle de la receta"></section>
     </main>
 
     <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>
