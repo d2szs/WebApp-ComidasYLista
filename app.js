@@ -3786,7 +3786,7 @@ async function saveMove(meal, to, targetMeal) {
   // C-31, D-6: sin respuesta, la base de datos puede haberla movido: pasa a sin red, que
   // recarga la semana al volver; con el dispositivo conectado, el reintento se lanza ya (con
   // copia, loadData solo leería la copia)
-  const unconfirmed = result.timedOut || isNetworkError(result.error, reachable(result));
+  const unconfirmed = moveUnconfirmed(result.error, reachable(result), result.timedOut);
   if (unconfirmed) goOffline();
   showError(moveErrorMessage(result.error, navigator.onLine, result.timedOut)); // C-21, C-31
   if (unconfirmed && navigator.onLine) retryConnection();

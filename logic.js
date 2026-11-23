@@ -1872,10 +1872,16 @@ function moveOutcome(result) {
   return 'error';
 }
 
-// Aviso de un movimiento que falla: sin respuesta no se sabe si se guardó (C-31); con un
-// error del servidor, la causa de siempre (C-21)
+// Movimiento sin confirmar: sin respuesta en plazo o sin red, la base de datos pudo
+// guardarlo o no (C-31); con un error del servidor, seguro que no se guardó (C-21)
+function moveUnconfirmed(error, online, timedOut) {
+  return Boolean(timedOut) || isNetworkError(error, online);
+}
+
+// Aviso de un movimiento que falla: sin confirmar, que no se sabe si se guardó (C-31); con
+// un error del servidor, la causa de siempre (C-21)
 function moveErrorMessage(error, online, timedOut) {
-  if (timedOut || isNetworkError(error, online)) return MOVE_UNCONFIRMED_MESSAGE;
+  if (moveUnconfirmed(error, online, timedOut)) return MOVE_UNCONFIRMED_MESSAGE;
   return 'No se ha podido mover la comida. ' + translateError(error, online);
 }
 
@@ -1927,6 +1933,6 @@ if (typeof module !== 'undefined') {
     searchErrorMessage,
     LONG_PRESS_MS, TOUCH_SLOP_PX, MOUSE_DRAG_PX, DRAG_VIBRATE_MS, EDGE_SCROLL_BAND_PX,
     EDGE_SCROLL_MIN_SPEED, EDGE_SCROLL_MAX_SPEED, MOVE_CHANGED_MESSAGE, MOVE_UNCONFIRMED_MESSAGE,
-    mealGroup, canDropMeal, movesBeyond, edgeScrollStep, moveParams, moveOutcome, moveErrorMessage,
+    mealGroup, canDropMeal, movesBeyond, edgeScrollStep, moveParams, moveOutcome, moveErrorMessage, moveUnconfirmed,
   };
 }
