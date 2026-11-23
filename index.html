@@ -158,6 +158,11 @@
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 3h3l2.6 12.2a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L21 7H6"/><circle cx="9.5" cy="20" r="1.5"/><circle cx="17.5" cy="20" r="1.5"/></svg>
           <span class="screen-label">Compra</span>
         </button>
+        <!-- 026 C-1, D-12: libro abierto -->
+        <button type="button" class="screen-button" data-screen="recipes">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+          <span class="screen-label">Recetas</span>
+        </button>
       </nav>
     </header>
 
@@ -232,6 +237,13 @@
           </div>
         </section>
       </div>
+    </main>
+
+    <!-- Pantalla Recetas (026 C-1 a C-5, D-10): lista (y detalle, T7) -->
+    <main id="recipes" class="recipes">
+      <p id="recipes-loading" class="list-loading">Cargando…</p>
+      <p id="recipes-empty" class="list-empty" hidden></p>
+      <ul id="recipe-list" class="recipe-list"></ul>
     </main>
 
     <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>

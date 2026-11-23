@@ -19,6 +19,8 @@
   --color-tomato: #bf2f2e;                      /* Comidas activa (019 C-7) */
   --color-mackerel-text: #3d7591;               /* caballa oscura: texto e iconos (019 D-1) */
   --color-mackerel-light: #f0f6f9;              /* caballa muy clara: Compra activa (019 C-7) */
+  --color-olive: #5b6b2e;                       /* aceituna oscura: Recetas activa (026 D-12) */
+  --color-olive-light: #f2f4ea;                 /* aceituna muy clara: Recetas activa (026 D-12) */
   --color-marked: #f1e6d8;                      /* 014 C-11: sugerencia marcada con ↑/↓ */
   --color-no-copy-bg: var(--color-border);      /* 011 RF-15: días fuera de la copia */
   --color-no-copy-text: var(--color-text-muted);
@@ -411,7 +413,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .header > * { max-width: var(--max-width); margin-left: auto; margin-right: auto; }
 .header > .view-selector { margin-top: 0; }
 /* En Compra la cabecera no tiene nada que ocupe sitio */
-#screen-app[data-screen="list"] .header { padding: 0; border-bottom: none; }
+#screen-app[data-screen="list"] .header,
+#screen-app[data-screen="recipes"] .header { padding: 0; border-bottom: none; }
 
 /* Barra de pantallas (007 RF-1, D-7): fija en los dos diseños; el icono toma el color del botón.
    La pantalla actual, en su color sobre ese color muy claro; la otra, en gris y sin fondo */
@@ -437,16 +440,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 /* 019 C-7: Comidas activa en tomate, Compra en caballa oscura, sobre su color muy claro */
 .screen-button.active { background: var(--color-tomato-light); color: var(--color-tomato); }
 .screen-button.active[data-screen="list"] { background: var(--color-mackerel-light); color: var(--color-mackerel-text); }
+.screen-button.active[data-screen="recipes"] { background: var(--color-olive-light); color: var(--color-olive); } /* 026 C-1 */
 
 /* Cada pantalla oculta lo de la otra (007 RF-2, RF-3, D-7) */
-#screen-app[data-screen="list"] .view-selector,
-#screen-app[data-screen="list"] .navigation,
-#screen-app[data-screen="list"] #calendar,
-#screen-app[data-screen="list"] #loading-indicator,
-#screen-app[data-screen="list"] #copy-gap,
-#screen-app[data-screen="list"] #add-button,
-#screen-app[data-screen="meals"] #shopping,
-#screen-app[data-screen="meals"] #add-article-button { display: none; }
+#screen-app:not([data-screen="meals"]) .view-selector,
+#screen-app:not([data-screen="meals"]) .navigation,
+#screen-app:not([data-screen="meals"]) #calendar,
+#screen-app:not([data-screen="meals"]) #loading-indicator,
+#screen-app:not([data-screen="meals"]) #copy-gap,
+#screen-app:not([data-screen="meals"]) #add-button,
+#screen-app:not([data-screen="list"]) #shopping,
+#screen-app:not([data-screen="list"]) #add-article-button,
+#screen-app:not([data-screen="recipes"]) #recipes { display: none; } /* 026 C-2 */
 
 .view-selector, .type-selector { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
 .view-button, .type-button {
@@ -564,6 +569,22 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .suggestions li + li .suggestion { border-top: 1px solid var(--color-border); }
 .suggestion.marked { background: var(--color-marked); } /* 015 C-1: marcada con ↑/↓ */
 .list-loading { margin-top: var(--space); color: var(--color-text-muted); }
+
+/* ===== Recetas (026) ===== */
+.recipes { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
+.recipe-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+/* Tarjeta (C-4); los textos largos se parten sin salirse (C-36) */
+.recipe-card {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+.recipe-card-name { margin: 0; font-size: var(--text-normal); font-weight: 600; }
+.recipe-card-info { margin: 0.2rem 0 0; font-size: var(--text-small); color: var(--color-text-muted); }
+.recipe-card-tags { margin: 0.2rem 0 0; font-size: var(--text-small); color: var(--color-olive); }
 .ingredients-button { width: 100%; margin-top: 0.5rem; } /* 009 RF-1 */
 .list-section { margin-top: calc(var(--space) * 1.25); }
 .list-title { margin: 0 0 0.4rem; font-size: var(--text-large); }
@@ -665,7 +686,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   .screen-button { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 0.1rem; padding: 0.2rem; }
   .screen-label { font-size: var(--text-small); }
   #screen-app .btn-floating { bottom: calc(var(--screen-bar-height) + var(--space)); }
-  .calendar, .shopping { padding-bottom: calc(var(--screen-bar-height) + 6rem); }
+  .calendar, .shopping, .recipes { padding-bottom: calc(var(--screen-bar-height) + 6rem); }
 }
 
 /* Colores por tipo de comida */

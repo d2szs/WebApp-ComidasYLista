@@ -11,7 +11,7 @@ const state = {
   meals: new Map(),     // 'aaaa-mm-dd|tipo' → fila
   openType: null,       // tipo desplegado en la vista diaria
   requestId: 0,         // para descartar respuestas antiguas
-  noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'sync' | 'copy' | 'action'
+  noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'recipesLoad' | 'sync' | 'copy' | 'action'
   copyMode: false,      // 011: mostrando la copia guardada (000-base D-19)
   offline: false,       // 011: sin red, con o sin copia (009 D-14)
   channelStatus: null,  // último estado del canal de tiempo real (000-base CL-15)
@@ -51,7 +51,7 @@ let ready = false;          // connect() ya eligió la pantalla de arranque (D-2
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
 let onNewPassword = false;  // en la pantalla de nueva contraseña
 let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
-let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' (007 RF-1)
+let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' | 'recipes' (007 RF-1; 026 C-1)
 
 // Lista de la compra (007): artículos como llegan de la base de datos; loaded = primera carga
 // hecha (RF-11). requestId sigue subiendo al cerrar sesión, para descartar respuestas viejas (CL-10)
@@ -59,6 +59,14 @@ function initialListState(requestId = 0) {
   return { items: [], loaded: false, requestId, savedOpen: false, quickPending: false, quickClosed: false, finishing: false };
 }
 let listState = initialListState();
+
+// Recetas (026 D-8, D-10): todas, con sus estrellas, y los perfiles; loaded = primera carga hecha
+// (C-47); noCopy = en modo copia, copia de una versión anterior sin recetas (C-33)
+function initialRecipeState(requestId = 0) {
+  return { items: [], profiles: [], loaded: false, noCopy: false, requestId };
+}
+let recipeState = initialRecipeState();
+let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
 const existsState = { article: null, choice: null, saving: false };
@@ -99,7 +107,9 @@ let authLink = readAuthLink(location.hash, location.search);
 
 const PENDING_KEY = 'pending-recovery';
 const SIDEBAR_KEY = 'sidebar'; // 'collapsed' o 'expanded' (008 RF-11)
-const SCREEN_KEY = 'screen'; // 'meals' o 'list', en la pestaña y en el navegador (007 D-19)
+const SCREEN_KEY = 'screen'; // 'meals', 'list' o 'recipes', en la pestaña y en el navegador (007 D-19; 026 C-3)
+const RECIPE_ORDER_KEY = 'recipe-order'; // orden elegido de la lista de recetas (026 D-11)
+const SCREEN_TITLES = { meals: 'Comidas', list: 'Compra', recipes: 'Recetas' }; // 026 C-2
 
 const $ = (id) => document.getElementById(id);
 
@@ -134,7 +144,7 @@ function showScreen(name) {
 function showAppScreen(name) {
   currentScreen = name;
   $('screen-app').dataset.screen = name;
-  $('app-title').textContent = name === 'list' ? 'Compra' : 'Comidas';
+  $('app-title').textContent = SCREEN_TITLES[name];
   document.querySelectorAll('.screen-button').forEach((b) => {
     const active = b.dataset.screen === name;
     b.classList.toggle('active', active);
@@ -145,6 +155,7 @@ function showAppScreen(name) {
     listState.savedOpen = false; // RF-6: Guardados plegado al abrir Compra
     renderShopping();
   }
+  if (name === 'recipes') renderRecipes();
   rememberScreen(name); // 007 RF-46: la "pantalla abierta" (barra, carga o entrada)
 }
 
@@ -373,6 +384,7 @@ function applySession(session, { pageLoad = false } = {}) {
     subscribeChanges();
     loadData();
     loadListWithQueue(); // 007 RF-44: la lista se carga aunque se vea Comidas; 012 RF-9, RF-15, CL-5
+    loadRecipes(); // 026 D-8: también aunque se vea otra pantalla
     scheduleCopySave(); // 011 RF-1
   } else if (!session) {
     sessionActive = false;
@@ -395,6 +407,9 @@ function applySession(session, { pageLoad = false } = {}) {
     state.moving = null; // 025: la respuesta de un movimiento en curso ya no se pinta
     listState = initialListState(listState.requestId + 1); // 007 RF-11: "Cargando…" al volver a entrar
     renderShopping();
+    clearTimeout(recipeReloadTimer);
+    recipeState = initialRecipeState(recipeState.requestId + 1); // 026 C-47: "Cargando…" al volver a entrar
+    renderRecipes();
     hideError();
     closeMonthPanel(); // 006 CL-6
     closeUserMenu(); // 008 CL-3: abierto en una sección oculta, dejaría la página inerte
@@ -642,6 +657,15 @@ function listQuery() {
   return client.from('articulos').select('id, nombre, cantidad, unidad, lista, tachado');
 }
 
+// Recetas con sus estrellas embebidas, y los perfiles (nombres cortos e iniciales) (026 D-8)
+function recipesQuery() {
+  return client.from('recetas').select('*, estrellas(usuario, estrellas)');
+}
+
+function profilesQuery() {
+  return client.from('perfiles').select('usuario, nombre_corto, inicial');
+}
+
 // Nombres de comidas para sugerir: un text[] de la base de datos (014 D-2, D-6)
 function mealNamesQuery() {
   return client.rpc('nombres_ingredientes');
@@ -667,8 +691,9 @@ async function saveCopy() {
   const id = ++copyState.saveId;
   const { from, to } = copyRange(getToday());
   const savedAt = Date.now(); // D-2: justo antes de las descargas
-  const [meals, list, names] = await Promise.all([
-    timedQuery(mealsQuery(from, to)), timedQuery(listQuery()), timedQuery(mealNamesQuery())]);
+  const [meals, list, names, recipes, profiles] = await Promise.all([
+    timedQuery(mealsQuery(from, to)), timedQuery(listQuery()), timedQuery(mealNamesQuery()),
+    timedQuery(recipesQuery()), timedQuery(profilesQuery())]);
   if (id !== copyState.saveId || !sessionActive) return;
   const mealNames = names.error ? null : cleanMealNames(names.data);
   if (mealNames) {
@@ -678,7 +703,11 @@ async function saveCopy() {
   if (meals.error || list.error) return; // CL-1: se queda la anterior, sin aviso
   // 014 C-21: sin nombres nuevos, los de memoria o los de la copia anterior, nunca []
   const keptNames = copyState.mealNames ?? cleanMealNames(readSavedCopy()?.mealNames) ?? undefined;
-  writeCopy(buildCopy({ savedAt, from, to, meals: meals.data, articles: list.data, mealNames: keptNames }));
+  // 026 D-9: sin recetas o perfiles nuevos, los de la copia anterior (si los tiene)
+  const keptRecipes = recipes.error || profiles.error
+    ? copyRecipes(readSavedCopy()) : { recipes: recipes.data, profiles: profiles.data };
+  writeCopy(buildCopy({ savedAt, from, to, meals: meals.data, articles: list.data, mealNames: keptNames,
+    recipes: keptRecipes?.recipes, profiles: keptRecipes?.profiles }));
 }
 
 // Nombres de comidas para sugerir (014 D-8): en modo copia, los de la copia en pantalla; fuera,
@@ -721,6 +750,7 @@ function enterCopyMode() {
   scheduleSearchRecalc(); // 023 C-25
   loadMealsFromCopy();
   loadListFromCopy();
+  loadRecipesFromCopy(); // 026 C-33
   setOffline(true);
   startRetry(); // RF-16
 }
@@ -762,6 +792,17 @@ function loadListFromCopy() {
   listState.loaded = true;
   renderShopping();
   if (reviewState.open) recalcLines();
+}
+
+// Recetas y perfiles de la copia, con loaded en true: sin "Cargando…"; de una versión anterior,
+// ninguna y el texto de C-33
+function loadRecipesFromCopy() {
+  const saved = copyRecipes(copyState.copy);
+  recipeState.items = saved ? saved.recipes : [];
+  recipeState.profiles = saved ? saved.profiles : [];
+  recipeState.noCopy = !saved;
+  recipeState.loaded = true;
+  renderRecipes();
 }
 
 // Sin red, con o sin copia (009 D-14)
@@ -881,6 +922,7 @@ function leaveCopyMode(meals, items) {
   setOffline(false); // 009 D-14: solo tras la recarga correcta
   resumeSyncNotice(); // 000-base CL-15
   scheduleCopySave(); // RF-12: renueva la copia (RF-2)
+  loadRecipes(); // 026 D-8: las recetas de la copia se sustituyen con la carga
   checkSessionAlive(); // RF-13 con el token aún válido
 }
 
@@ -907,6 +949,7 @@ function applyRetryLoads(meals, list) {
   renderShopping();
   if (!list.error && reviewState.open) recalcLines();
   if (!meals.error && !list.error) scheduleCopySave(); // RF-1
+  loadRecipes(); // 026 D-8
 }
 
 // Al salir del modo copia, el aviso de tiempo real si el canal sigue caído (000-base CL-15)
@@ -997,6 +1040,57 @@ async function loadList() {
   renderShopping();
   if (reviewState.open) recalcLines(); // 009 RF-25 (D-8); mientras se añade no cambia nada (D-11)
   return null;
+}
+
+// ===== Recetas (026) =====
+
+// Carga todas las recetas y los perfiles; solo vale la última respuesta (D-8). No cambia el estado
+// de red de la app: un fallo solo muestra su aviso y lo ya cargado sigue (C-48); en modo copia,
+// las de la copia
+async function loadRecipes() {
+  if (!sessionActive) return;
+  const requestId = ++recipeState.requestId;
+  if (state.copyMode) return loadRecipesFromCopy();
+  const [recipes, profiles] = await Promise.all([timedQuery(recipesQuery()), timedQuery(profilesQuery())]);
+  if (requestId !== recipeState.requestId || !sessionActive || state.copyMode) return;
+  const failed = recipes.error ? recipes : profiles.error ? profiles : null;
+  if (failed) {
+    showError(recipeErrorMessage('load', failed.error, reachable(failed)), 'recipesLoad');
+    return;
+  }
+  hideError('recipesLoad');
+  recipeState.items = recipes.data;
+  recipeState.profiles = profiles.data;
+  recipeState.noCopy = false;
+  recipeState.loaded = true;
+  renderRecipes();
+}
+
+// Orden guardado en el navegador; sin poder leerlo, el de por defecto (C-41, D-11)
+function readRecipeOrder() {
+  try {
+    return storedRecipeOrder(localStorage.getItem(RECIPE_ORDER_KEY));
+  } catch {
+    return storedRecipeOrder(null);
+  }
+}
+
+// Pinta la lista de recetas (C-4, C-5, C-33, C-47); todo con textContent (I-9)
+function renderRecipes() {
+  $('recipes-loading').hidden = recipeState.loaded;
+  const list = $('recipe-list');
+  list.replaceChildren();
+  const empty = $('recipes-empty');
+  empty.hidden = !recipeState.loaded || recipeState.items.length > 0;
+  empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : 'Todavía no hay recetas.';
+  if (!recipeState.loaded) return;
+  for (const recipe of sortRecipes(recipeState.items, readRecipeOrder())) {
+    const line = recipeLine(recipe);
+    const card = el('li', 'recipe-card');
+    card.append(el('p', 'recipe-card-name', line.name), el('p', 'recipe-card-info', line.info));
+    if (line.tags) card.append(el('p', 'recipe-card-tags', line.tags));
+    list.append(card);
+  }
 }
 
 // Pinta la pantalla Compra con lo que hay en listState (RF-6 a RF-12); todo con textContent (RNF-6)
@@ -2277,6 +2371,17 @@ function onArticlesChange() {
   scheduleCopySave();
 }
 
+// Un cambio de recetas o estrellas las recarga y renueva la copia (026 C-29, D-8)
+function onRecipesChange() {
+  scheduleRecipeReload();
+  scheduleCopySave();
+}
+
+function scheduleRecipeReload() {
+  clearTimeout(recipeReloadTimer);
+  recipeReloadTimer = setTimeout(loadRecipes, 300);
+}
+
 // ===== Sincronización en tiempo real =====
 function subscribeChanges() {
   unsubscribeChanges();
@@ -2284,6 +2389,8 @@ function subscribeChanges() {
   channel = client.channel('meal-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comidas' }, onMealsChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'articulos' }, onArticlesChange) // 007 RF-33 (D-4)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'recetas' }, onRecipesChange) // 026 C-29
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'estrellas' }, onRecipesChange)
     .subscribe((channelStatus) => {
       state.channelStatus = channelStatus; // 000-base CL-15
       const action = syncStatusAction(channelStatus, state.noticeKind, state.copyMode); // 011 RF-21
@@ -2291,6 +2398,7 @@ function subscribeChanges() {
         hideError('sync');
         scheduleReload();
         scheduleListReload(); // 007 RF-35
+        scheduleRecipeReload(); // 026 D-8
         scheduleReviewReload(); // 009 RF-24, RF-25
         scheduleCopySave(); // 011 RF-1
       } else if (action === 'show') {
@@ -3990,6 +4098,7 @@ function bindEvents() {
     } else {
       loadData();
       loadListWithQueue(); // 007 RF-34; 012 RF-9, RF-17
+      loadRecipes(); // 026 D-8
       scheduleCopySave(); // 011 RF-1
     }
     checkSessionAlive();
@@ -4000,6 +4109,7 @@ function bindEvents() {
     } else if (sessionActive) {
       loadData();
       loadListWithQueue(); // 007 RF-34; 012 RF-9, RF-17
+      loadRecipes(); // 026 D-8
       scheduleCopySave(); // 011 RF-1
     } else if (!$('screen-config').hidden) connect();
     announceForm({ hello: true }); // CL-3 (si el socket aún no ha vuelto, lo hace SUBSCRIBED)
