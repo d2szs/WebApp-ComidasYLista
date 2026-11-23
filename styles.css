@@ -867,6 +867,7 @@ body.dragging, body.dragging * { cursor: grabbing; }
 .detail-recipe { margin: 0; white-space: pre-wrap; }
 .detail-dish a { color: var(--color-primary); text-decoration: underline; word-break: break-all; } /* 019 D-3 */
 .detail-buttons { display: flex; gap: 0.5rem; }
+.dish-save-recipe { display: block; margin-top: 0.5rem; } /* 026 D-13: bajo los datos de su plato */
 
 /* Días fuera de la copia, en modo copia: vacíos y en gris (011 RF-15) */
 .month-day.no-copy, .week-day.no-copy, .block.no-copy { background: var(--color-no-copy-bg); color: var(--color-no-copy-text); }

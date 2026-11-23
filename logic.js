@@ -2156,6 +2156,11 @@ function recipeExistsText(name) {
   return `Ya hay una receta «${name}». ¿Quieres editarla? Se perderá lo que has escrito.`;
 }
 
+// Aviso tras guardar desde "Guardar como receta", que sigue en Comidas (C-44, C-49)
+function recipeSavedText(name) {
+  return `Receta «${name}» guardada.`;
+}
+
 // Id del usuario de la sesión que guardó supabase-js, o null; para "Tus estrellas" también en
 // modo copia, sin red (C-12, C-34). Misma validez que storedSessionEmail
 function storedSessionUserId(text) {
@@ -2220,6 +2225,6 @@ if (typeof module !== 'undefined') {
     cleanTag, addTag, tagSuggestions, timeFromField, validateRecipeForm, recipeFromDish,
     recipeSearchResults, copyRecipes, recipeSaveOutcome, recipeErrorMessage,
     recipeFacts, starsText, ratingsText, myStars, nextStars, recipeDeleteText, storedSessionUserId,
-    sameNameRecipe, recipeExistsText,
+    sameNameRecipe, recipeExistsText, recipeSavedText,
   };
 }

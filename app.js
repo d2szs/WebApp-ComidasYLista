@@ -1198,6 +1198,7 @@ function renderRecipes() {
     if (recipe.id === focusedId) card.focus({ preventScroll: true });
   }
   renderRecipeDetail();
+  if ($('search-dialog').open) renderSearchRecipes(); // C-27, C-47: cargas y cambios del otro
 }
 
 // La receta abierta, si sigue en las cargadas (o en la copia)
@@ -1343,10 +1344,11 @@ async function deleteRecipe(recipe) {
 // ----- Formulario de receta (026 C-17 a C-23, C-31, C-32, C-43; D-18) -----
 // id y version: la receta que se edita (null al añadir); tags: sus etiquetas (pastillas);
 // tagTyped: se ha escrito en "Etiquetas" desde que tiene el cursor; stars y starsTouched: "Tus
-// estrellas", que solo se mandan si se tocaron (C-21, D-5); opened: sube con cada apertura
+// estrellas", que solo se mandan si se tocaron (C-21, D-5); opened: sube con cada apertura;
+// fromMeal: abierto con "Guardar como receta", termina en Comidas (C-44, C-49)
 const recipeForm = {
   dish: null, id: null, version: null, tags: [], tagTyped: false,
-  stars: null, starsTouched: false, saving: false, opened: 0,
+  stars: null, starsTouched: false, saving: false, opened: 0, fromMeal: false,
 };
 
 // El plato de dish-template, sin leyenda, con "Tiempo (min)" tras "Personas" y "Notas o
@@ -1409,10 +1411,16 @@ function fillRecipeForm(recipe = null) {
   showRecipeFormError('');
 }
 
-// "+ Añadir receta" (vacío) o "Editar" (con lo guardado) (C-17); sin red, nada (C-34)
-function openRecipeForm(recipe = null) {
+// "+ Añadir receta" (vacío), "Editar" (con lo guardado) (C-17) o "Guardar como receta" de un
+// plato (dish: una copia de sus datos; la comida no cambia, C-26); sin red, nada (C-34, D-13)
+function openRecipeForm(recipe = null, dish = null) {
   if (state.offline) return;
   fillRecipeForm(recipe);
+  if (dish) {
+    const data = recipeFromDish(dish);
+    fillDish(recipeForm.dish, { ...data, receta: data.preparacion });
+  }
+  recipeForm.fromMeal = dish !== null;
   recipeForm.opened++;
   $('recipe-dialog').showModal();
 }
@@ -1462,7 +1470,14 @@ async function saveRecipe(event) {
   }));
   if (!sessionActive) return; // I-13
   const outcome = result.error ? null : recipeSaveOutcome(result.data);
-  if (outcome === 'saved') {
+  if (outcome === 'saved' && recipeForm.fromMeal) {
+    // C-44, C-49: se cierra y se sigue en Comidas como estaba, con el aviso
+    if (opened === recipeForm.opened && $('recipe-dialog').open) {
+      $('recipe-dialog').close();
+      showError(recipeSavedText(data.nombre));
+    }
+    loadRecipes();
+  } else if (outcome === 'saved') {
     await loadRecipes(); // D-19: el detalle se abre con la receta ya cargada
     if (!sessionActive) return;
     if (opened === recipeForm.opened && $('recipe-dialog').open) {
@@ -3305,6 +3320,7 @@ function onSearchInput() {
 function renderSearch({ wait = false } = {}) {
   renderSearchShopping();
   searchMeals(wait);
+  renderSearchRecipes();
 }
 
 // Grupo Compra con los artículos tal como se pintan en la lista, cola de tachados incluida;
@@ -3519,6 +3535,50 @@ function openMealFromSearch(found) {
   closeSearch({ restoreFocus: false });
   if (currentScreen !== 'meals') showAppScreen('meals');
   openDay(fromISODate(found.fecha), found.tipo);
+}
+
+// ===== Grupo Recetas del buscador (026 C-27, C-28, C-45, C-47) =====
+// Con las recetas cargadas (o las de la copia, C-45); "Buscando…" hasta la primera carga
+// (C-47). Lo llama también renderRecipes, así llegan las cargas y los cambios del otro
+function renderSearchRecipes() {
+  const group = $('search-recipes');
+  const list = $('search-recipes-list');
+  group.hidden = searchKey(searchState.query) === '';
+  if (group.hidden) {
+    list.replaceChildren();
+    return;
+  }
+  const focusedId = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;
+  const found = recipeState.loaded ? recipeSearchResults(recipeState.items, searchState.query) : [];
+  let text = '';
+  if (!recipeState.loaded) text = SEARCH_LOADING_TEXT;
+  else if (found.length === 0) text = SEARCH_NO_RECIPES_TEXT;
+  list.replaceChildren(...found.map(buildSearchRecipe));
+  $('search-recipes-state').textContent = text;
+  $('search-recipes-state').hidden = !text;
+  if (focusedId) {
+    const again = list.querySelector(`.search-meal-open[data-id="${CSS.escape(focusedId)}"]`);
+    (again || $('search-input')).focus();
+  }
+}
+
+// Resultado: nombre y, si no coincide por él, "Ingrediente: …" o "Etiqueta: …"; como texto (C-27)
+function buildSearchRecipe(found) {
+  const row = el('li', 'search-meal search-recipe');
+  const open = button('search-meal-open', undefined, () => openRecipeFromSearch(found.id)); // C-28
+  open.dataset.id = found.id;
+  open.append(el('span', 'search-meal-names', found.name));
+  if (found.reason) open.append(el('span', 'search-meal-reason', found.reason));
+  row.append(open);
+  return row;
+}
+
+// Cierra el buscador, va a Recetas y abre su detalle (C-28). Desde otra pantalla, la lista
+// empieza sin búsqueda ni filtros (C-41); ya en Recetas, se quedan como estaban (C-50)
+function openRecipeFromSearch(id) {
+  closeSearch({ restoreFocus: false });
+  if (currentScreen !== 'recipes') showAppScreen('recipes');
+  openRecipe(id);
 }
 
 // Al cerrarse "Editar artículo" o ↺ abiertos desde un resultado, el foco vuelve a él (D-16)
@@ -3762,6 +3822,10 @@ function buildDishDetail(dish, title) {
     a.rel = 'noopener noreferrer';
     box.append(el('p', 'detail-subtitle', 'Referencia'), a);
   }
+  // 026 C-26, D-13: uno por plato, bajo sus datos; desactivado sin red (C-34, I-6)
+  const save = button('btn dish-save-recipe', 'Guardar como receta', () => openRecipeForm(null, dish));
+  save.disabled = state.offline;
+  box.append(save);
   return box;
 }
 

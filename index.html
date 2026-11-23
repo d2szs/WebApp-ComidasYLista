@@ -110,7 +110,7 @@
       <div class="search-head">
         <label class="search-field">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-          <input type="text" id="search-input" maxlength="200" placeholder="Buscar" aria-label="Buscar en Compra y Comidas" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" autofocus>
+          <input type="text" id="search-input" maxlength="200" placeholder="Buscar" aria-label="Buscar en Compra, Comidas y Recetas" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" autofocus>
         </label>
         <button type="button" id="search-close" class="search-close" aria-label="Cerrar el buscador">✕</button>
       </div>
@@ -129,6 +129,12 @@
           <p id="search-meals-state" class="search-state" hidden></p>
           <button type="button" id="search-more" class="btn btn-centered" hidden>Ver más</button>
           <p id="search-more-error" class="search-state search-error" hidden></p>
+        </section>
+        <!-- Grupo Recetas (026 C-27, C-45, C-47): de la A a la Z, con red y en modo copia -->
+        <section id="search-recipes" class="search-group" aria-labelledby="search-recipes-title" hidden>
+          <h2 id="search-recipes-title" class="search-group-title">Recetas</h2>
+          <ul id="search-recipes-list" class="search-list"></ul>
+          <p id="search-recipes-state" class="search-state" hidden></p>
         </section>
       </div>
     </dialog>
