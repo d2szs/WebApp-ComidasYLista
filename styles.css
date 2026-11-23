@@ -572,6 +572,27 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 /* ===== Recetas (026) ===== */
 .recipes { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
+.recipe-filters { display: grid; gap: 0.5rem; margin-bottom: var(--space); }
+.recipe-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.recipe-filter-label { font-size: var(--text-small); color: var(--color-text-muted); }
+.recipe-select { width: auto; min-height: 2.5rem; }
+.recipe-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; min-width: 0; }
+/* Pastilla de etiqueta (C-8): marcada, en aceituna; zona de toque de 36 px y textos largos partidos (C-36) */
+.recipe-tag {
+  min-height: 2.25rem;
+  max-width: 100%;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font: inherit;
+  font-size: var(--text-small);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: pointer;
+}
+.recipe-tag[aria-pressed="true"] { border-color: var(--color-olive); background: var(--color-olive); color: #fff; }
 .recipe-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 /* Tarjeta (C-4); los textos largos se parten sin salirse (C-36) */
 .recipe-card {

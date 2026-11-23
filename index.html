@@ -241,6 +241,32 @@
 
     <!-- Pantalla Recetas (026 C-1 a C-5, D-10): lista (y detalle, T7) -->
     <main id="recipes" class="recipes">
+      <!-- 026 C-7 a C-11: buscar, etiquetas, tiempo y orden; solo con alguna receta -->
+      <div id="recipe-filters" class="recipe-filters" hidden>
+        <input type="text" id="recipe-search" maxlength="200" placeholder="Buscar por nombre o ingrediente" aria-label="Buscar por nombre o ingrediente" autocomplete="off" enterkeyhint="search">
+        <div id="recipe-tags-row" class="recipe-filter-row">
+          <span id="recipe-tags-label" class="recipe-filter-label">Etiquetas:</span>
+          <div id="recipe-tags" class="recipe-tags" role="group" aria-labelledby="recipe-tags-label"></div>
+        </div>
+        <label class="recipe-filter-row">
+          <span class="recipe-filter-label">Tiempo:</span>
+          <select id="recipe-time" class="recipe-select">
+            <option value="">Cualquiera</option>
+            <option value="15">Hasta 15 min</option>
+            <option value="30">Hasta 30 min</option>
+            <option value="60">Hasta 60 min</option>
+          </select>
+        </label>
+        <label class="recipe-filter-row">
+          <span class="recipe-filter-label">Ordenar:</span>
+          <select id="recipe-order" class="recipe-select">
+            <option value="stars">Estrellas</option>
+            <option value="name">Nombre</option>
+            <option value="recent">Recientes</option>
+            <option value="time">Tiempo</option>
+          </select>
+        </label>
+      </div>
       <p id="recipes-loading" class="list-loading">Cargando…</p>
       <p id="recipes-empty" class="list-empty" hidden></p>
       <ul id="recipe-list" class="recipe-list"></ul>

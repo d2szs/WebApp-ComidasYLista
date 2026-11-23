@@ -61,9 +61,13 @@ function initialListState(requestId = 0) {
 let listState = initialListState();
 
 // Recetas (026 D-8, D-10): todas, con sus estrellas, y los perfiles; loaded = primera carga hecha
-// (C-47); noCopy = en modo copia, copia de una versión anterior sin recetas (C-33)
+// (C-47); noCopy = en modo copia, copia de una versión anterior sin recetas (C-33). Búsqueda,
+// etiquetas y tiempo solo en memoria; el orden, también en el navegador (C-41, D-11)
 function initialRecipeState(requestId = 0) {
-  return { items: [], profiles: [], loaded: false, noCopy: false, requestId };
+  return { items: [], profiles: [], loaded: false, noCopy: false, requestId, ...initialRecipeFilters() };
+}
+function initialRecipeFilters(order = storedRecipeOrder(null)) {
+  return { text: '', tags: [], maxTime: null, order };
 }
 let recipeState = initialRecipeState();
 let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
@@ -142,6 +146,7 @@ function showScreen(name) {
 
 // Cambia entre Comidas y Compra sin tocar el calendario (007 RF-2, RF-3, D-7)
 function showAppScreen(name) {
+  if (name === 'recipes' && currentScreen !== 'recipes') resetRecipeFilters(); // 026 C-41, D-11
   currentScreen = name;
   $('screen-app').dataset.screen = name;
   $('app-title').textContent = SCREEN_TITLES[name];
@@ -802,6 +807,7 @@ function loadRecipesFromCopy() {
   recipeState.profiles = saved ? saved.profiles : [];
   recipeState.noCopy = !saved;
   recipeState.loaded = true;
+  recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   renderRecipes();
 }
 
@@ -1063,6 +1069,7 @@ async function loadRecipes() {
   recipeState.profiles = profiles.data;
   recipeState.noCopy = false;
   recipeState.loaded = true;
+  recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   renderRecipes();
 }
 
@@ -1075,16 +1082,78 @@ function readRecipeOrder() {
   }
 }
 
-// Pinta la lista de recetas (C-4, C-5, C-33, C-47); todo con textContent (I-9)
+// Búsqueda vacía, sin etiquetas, "Cualquiera" y el orden guardado (C-41); los campos, igual
+function resetRecipeFilters() {
+  Object.assign(recipeState, initialRecipeFilters(readRecipeOrder()));
+  $('recipe-search').value = '';
+  $('recipe-time').value = '';
+  $('recipe-order').value = recipeState.order;
+}
+
+// Lo escrito y elegido en los filtros; cada cambio repinta la lista al momento (C-7 a C-11)
+function onRecipeSearch() {
+  recipeState.text = $('recipe-search').value;
+  renderRecipes();
+}
+
+function onRecipeTime() {
+  const value = $('recipe-time').value;
+  recipeState.maxTime = value === '' ? null : Number(value);
+  renderRecipes();
+}
+
+// El orden elegido se recuerda en el navegador; sin poder guardarlo, vale para esta visita (D-11)
+function onRecipeOrder() {
+  recipeState.order = storedRecipeOrder($('recipe-order').value);
+  try {
+    localStorage.setItem(RECIPE_ORDER_KEY, recipeState.order);
+  } catch {
+    // Sin localStorage, el orden no se recuerda
+  }
+  renderRecipes();
+}
+
+// Marca o desmarca una etiqueta (C-8)
+function toggleRecipeTag(tag) {
+  const key = articleKey(tag);
+  const marked = recipeState.tags.some((t) => articleKey(t) === key);
+  recipeState.tags = marked ? recipeState.tags.filter((t) => articleKey(t) !== key) : [...recipeState.tags, tag];
+  renderRecipes();
+}
+
+// Pastillas de las etiquetas usadas, en orden alfabético (C-8); el foco se queda en la pulsada
+function renderRecipeTags() {
+  const tags = usedTags(recipeState.items);
+  const box = $('recipe-tags');
+  const focusedKey = box.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  box.replaceChildren();
+  $('recipe-tags-row').hidden = tags.length === 0;
+  const marked = new Set(recipeState.tags.map(articleKey));
+  for (const tag of tags) {
+    const key = articleKey(tag);
+    const chip = button('recipe-tag', tag, () => toggleRecipeTag(tag));
+    chip.dataset.key = key;
+    chip.setAttribute('aria-pressed', String(marked.has(key)));
+    box.append(chip);
+    if (key === focusedKey) chip.focus();
+  }
+}
+
+// Pinta la lista de recetas (C-4 a C-11, C-33, C-47); todo con textContent (I-9). No toca lo
+// escrito ni lo elegido en los filtros (C-29)
 function renderRecipes() {
   $('recipes-loading').hidden = recipeState.loaded;
   const list = $('recipe-list');
   list.replaceChildren();
+  const any = recipeState.loaded && recipeState.items.length > 0;
+  $('recipe-filters').hidden = !any;
+  const shown = any ? sortRecipes(filterRecipes(recipeState.items, recipeState), recipeState.order) : [];
   const empty = $('recipes-empty');
-  empty.hidden = !recipeState.loaded || recipeState.items.length > 0;
-  empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : 'Todavía no hay recetas.';
-  if (!recipeState.loaded) return;
-  for (const recipe of sortRecipes(recipeState.items, readRecipeOrder())) {
+  empty.hidden = !recipeState.loaded || shown.length > 0;
+  if (any) empty.textContent = 'Ninguna receta coincide.'; // C-6
+  else empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : 'Todavía no hay recetas.';
+  if (any) renderRecipeTags();
+  for (const recipe of shown) {
     const line = recipeLine(recipe);
     const card = el('li', 'recipe-card');
     card.append(el('p', 'recipe-card-name', line.name), el('p', 'recipe-card-info', line.info));
@@ -4031,6 +4100,9 @@ function bindEvents() {
     showAppScreen(b.dataset.screen);
   }));
   $('saved-toggle').addEventListener('click', toggleSaved);
+  $('recipe-search').addEventListener('input', onRecipeSearch); // 026 C-7
+  $('recipe-time').addEventListener('change', onRecipeTime); // C-9
+  $('recipe-order').addEventListener('change', onRecipeOrder); // C-11, C-41
   $('add-article-button').addEventListener('click', () => { if (!state.offline) openArticleForm(); }); // 011 RF-10
   $('finish-button').addEventListener('click', finishShopping);
   $('article-cancel').addEventListener('click', closeArticleForm);
