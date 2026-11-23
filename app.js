@@ -15,6 +15,7 @@ const state = {
   copyMode: false,      // 011: mostrando la copia guardada (000-base D-19)
   offline: false,       // 011: sin red, con o sin copia (009 D-14)
   channelStatus: null,  // último estado del canal de tiempo real (000-base CL-15)
+  moving: null,         // 025: claves de las casillas en "Moviendo…" (null: ninguna) (C-14, D-13)
 };
 // 011: copia para ver sin red; saveId descarta guardados adelantados por otro (D-3);
 // retryTimer y probing, el reintento de cada 30 s (RF-16, D-6)
@@ -391,6 +392,7 @@ function applySession(session, { pageLoad = false } = {}) {
     closeDialogs(); // CL-13: antes de quitar el canal, para anunciar el formulario cerrado
     unsubscribeChanges();
     state.meals.clear();
+    state.moving = null; // 025: la respuesta de un movimiento en curso ya no se pinta
     listState = initialListState(listState.requestId + 1); // 007 RF-11: "Cargando…" al volver a entrar
     renderShopping();
     hideError();
@@ -2960,16 +2962,21 @@ function buildWeekView() {
 
     for (const type of MEAL_TYPES) {
       const meal = mealAt(date, type.id);
+      const moving = state.moving?.has(mealKey(toISODate(date), type.id)); // 025 C-14, C-17
       const onClick = meal
         ? () => openDay(date, type.id)
         : () => { if (!state.offline) openForm({ date, type: type.id }); }; // 011 RF-10
       const row = button('week-meal type-' + type.id + (meal ? '' : ' empty'), undefined, onClick);
       if (!meal) row.disabled = state.offline; // abre el formulario para crear (011 D-7)
+      if (moving) {
+        row.disabled = true;
+        row.classList.add('moving');
+      }
       row.dataset.date = toISODate(date); // 025: qué casilla es al arrastrar
       row.dataset.type = type.id;
       row.append(
         el('span', 'week-meal-type', type.name),
-        el('span', 'week-meal-name', meal ? dishNames(meal) : '—'),
+        el('span', 'week-meal-name', moving ? 'Moviendo…' : meal ? dishNames(meal) : '—'),
       );
       card.append(row);
     }
@@ -3600,6 +3607,7 @@ function onCalendarPointerDown(event) {
   }
   const row = event.target.closest('.week-meal');
   if (!row || row.disabled || state.offline || state.view !== 'week') return; // C-7
+  if (state.moving) return; // C-17: el toque abre el día o el formulario como siempre
   const mouse = event.pointerType === 'mouse';
   if (mouse && event.button !== 0) return; // D-11: el clic derecho, como hoy
   const slot = { date: row.dataset.date, type: row.dataset.type };
@@ -3724,6 +3732,7 @@ function dragFrame(time) {
 function onDragPointerUp(event) {
   if (!drag || event.pointerId !== drag.pointerId) return;
   if (drag.lifted) {
+    drag.point = { x: event.clientX, y: event.clientY };
     dropMeal();
     return;
   }
@@ -3742,9 +3751,43 @@ function onDragPointerCancel(event) {
   if (drag && event.pointerId === drag.pointerId) cancelDrag(); // C-4, C-30
 }
 
-// Soltar (C-16; D-12: hasta T5, soltar siempre cancela)
+// Soltar: sobre una casilla válida, "Moviendo…" en las dos y se guarda; en otro sitio, nada
+// (C-14, C-15, C-16)
 function dropMeal() {
+  // Antes de cancelDrag, que pinta lo pendiente: el destino, tal como se veía (C-20)
+  const target = dropTargetAt(drag.point);
+  const to = target && slotOf(target);
+  const targetMeal = target ? paintedMeals.get(mealKey(to.date, to.type)) || null : null;
+  const { meal, slot } = drag;
   cancelDrag();
+  if (!target || !sessionActive || state.offline) return;
+  state.moving = new Set([mealKey(slot.date, slot.type), mealKey(to.date, to.type)]);
+  render();
+  saveMove(meal, to, targetMeal);
+}
+
+// Una sola llamada mueve o intercambia, solo si todo sigue como se veía (D-1, D-6, D-13)
+async function saveMove(meal, to, targetMeal) {
+  const result = await timedQuery(client.rpc('mover_comidas', moveParams(meal, to, targetMeal)));
+  if (!sessionActive || !state.moving) return; // respuesta llegada tras el cierre de sesión
+  const outcome = result.error ? 'error' : moveOutcome(result.data);
+  if (outcome === 'moved' || outcome === 'swapped') {
+    await loadData(); // sin parpadeo: "Moviendo…" hasta que llega la semana nueva
+    endMoving();
+    return;
+  }
+  endMoving();
+  if (outcome === 'changed') {
+    showError(MOVE_CHANGED_MESSAGE); // C-20
+    loadData();
+    return;
+  }
+  showError(moveErrorMessage(result.error, navigator.onLine, result.timedOut)); // C-21
+}
+
+function endMoving() {
+  state.moving = null;
+  render();
 }
 
 // La comida vuelve a su sitio, sin guardar ni abrir nada (C-16, C-23, C-30)
