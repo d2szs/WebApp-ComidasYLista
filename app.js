@@ -53,7 +53,9 @@ let ready = false;          // connect() ya eligió la pantalla de arranque (D-2
 let signingOut = false;     // la app está cerrando la sesión ella misma (no es RF-15)
 let onNewPassword = false;  // en la pantalla de nueva contraseña
 let recoveryUserId = null;  // id de la cuenta del enlace de recuperación (D-4)
-let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' | 'recipes' (007 RF-1; 026 C-1)
+let currentScreen = 'meals'; // pantalla de la app: 'meals' | 'list' | 'recipes' | 'settings' (007 RF-1; 026 C-1; 028 D-7)
+// Configuración (028 D-7): 'index' o 'tags', solo en memoria; entrar desde el menú abre el índice
+let settingsView = 'index';
 
 // Lista de la compra (007): artículos como llegan de la base de datos; loaded = primera carga
 // hecha (RF-11). requestId sigue subiendo al cerrar sesión, para descartar respuestas viejas (CL-10)
@@ -122,7 +124,7 @@ const PENDING_KEY = 'pending-recovery';
 const SIDEBAR_KEY = 'sidebar'; // 'collapsed' o 'expanded' (008 RF-11)
 const SCREEN_KEY = 'screen'; // 'meals', 'list' o 'recipes', en la pestaña y en el navegador (007 D-19; 026 C-3)
 const RECIPE_ORDER_KEY = 'recipe-order'; // orden elegido de la lista de recetas (026 D-11)
-const SCREEN_TITLES = { meals: 'Comidas', list: 'Compra', recipes: 'Recetas' }; // 026 C-2
+const SCREEN_TITLES = { meals: 'Comidas', list: 'Compra', recipes: 'Recetas', settings: 'Configuración' }; // 026 C-2; 028 C-2
 
 const $ = (id) => document.getElementById(id);
 
@@ -153,7 +155,8 @@ function showScreen(name) {
   }
 }
 
-// Cambia entre Comidas y Compra sin tocar el calendario (007 RF-2, RF-3, D-7)
+// Cambia de pantalla sin tocar el calendario (007 RF-2, RF-3, D-7). Configuración no marca ningún
+// botón de la barra ni se recuerda (028 C-2, C-5, D-7)
 function showAppScreen(name) {
   if (name === 'recipes' && currentScreen !== 'recipes') resetRecipeFilters(); // 026 C-41, D-11
   currentScreen = name;
@@ -170,7 +173,8 @@ function showAppScreen(name) {
     renderShopping();
   }
   if (name === 'recipes') renderRecipes();
-  rememberScreen(name); // 007 RF-46: la "pantalla abierta" (barra, carga o entrada)
+  if (name === 'settings') renderSettings();
+  else rememberScreen(name); // 007 RF-46: la "pantalla abierta" (barra, carga o entrada)
 }
 
 // Recuerda la pantalla en esta pestaña y como la última del navegador (007 D-19).
@@ -451,6 +455,7 @@ function applySession(session, { pageLoad = false } = {}) {
     clearTimeout(recipeReloadTimer);
     recipeState = initialRecipeState(recipeState.requestId + 1); // 026 C-47: "Cargando…" al volver a entrar
     renderRecipes();
+    renderTagSettings(); // 028 C-9
     hideError();
     closeMonthPanel(); // 006 CL-6
     closeUserMenu(); // 008 CL-3: abierto en una sección oculta, dejaría la página inerte
@@ -846,6 +851,7 @@ function loadRecipesFromCopy() {
   recipeState.loaded = true;
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   renderRecipes();
+  renderTagSettings(); // 028 C-35, C-42, D-8
 }
 
 // Sin red, con o sin copia (009 D-14)
@@ -856,6 +862,7 @@ function setOffline(value) {
   scheduleSearchRecalc(); // 023 C-25, D-11
   applyWriteControls(); // RF-10, CL-6
   renderShopping();
+  renderTagSettings(); // 028 C-35: sin red, las etiquetas no abren el diálogo
   onReviewNetworkChange(); // 009 CL-8, CL-9
   // D-6: el reintento corre también sin copia; en modo copia solo lo para la salida
   if (value) startRetry();
@@ -1119,6 +1126,7 @@ async function loadRecipes() {
   renderRecipes();
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
   refreshRecipeTagSuggestions(); // C-20: con las etiquetas usadas ahora
+  renderTagSettings(); // 028 C-11, D-8
 }
 
 // Orden guardado en el navegador; sin poder leerlo, el de por defecto (C-41, D-11)
@@ -3270,6 +3278,44 @@ function closeMonthPanel() {
   if ($('month-panel').open) $('month-panel').close();
 }
 
+// ===== Configuración (028) =====
+
+// Índice o Etiquetas, según settingsView (C-2, C-3)
+function renderSettings() {
+  $('settings-index').hidden = settingsView !== 'index';
+  $('settings-tags').hidden = settingsView !== 'tags';
+  renderTagSettings();
+}
+
+// Cambia entre el índice y Etiquetas, arriba de la página (C-3)
+function showSettingsView(view) {
+  settingsView = view;
+  renderSettings();
+  window.scrollTo(0, 0);
+}
+
+// Lista de etiquetas en uso desde las recetas cargadas (o las de la copia), sin consulta propia
+// (C-7 a C-10, C-42, D-8); como texto (I-9). Sin red, las filas no se pueden pulsar (C-35)
+function renderTagSettings() {
+  const list = $('tag-list');
+  const focusedKey = list.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  const groups = recipeState.loaded ? tagGroups(recipeState.items) : [];
+  $('tags-loading').hidden = recipeState.loaded; // C-9
+  const empty = $('tags-empty');
+  empty.hidden = !recipeState.loaded || groups.length > 0;
+  empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : TAGS_EMPTY_TEXT; // C-42, C-8
+  list.replaceChildren(...groups.map((group) => {
+    const row = el('button', 'settings-row', tagRowText(group));
+    row.type = 'button';
+    row.dataset.key = group.key;
+    row.disabled = state.offline;
+    const item = el('li');
+    item.append(row);
+    return item;
+  }));
+  if (focusedKey) list.querySelector(`[data-key="${CSS.escape(focusedKey)}"]`)?.focus();
+}
+
 // ===== Menú del usuario (008) =====
 // Inicial en el círculo y email en el menú, siempre como texto (RF-4, RNF-4)
 function showUser(email) {
@@ -3292,6 +3338,13 @@ function closeUserMenu() {
 function onUserMenuClick(event) {
   if (menuPressedOutside && isOutsideDialog($('user-menu'), event)) closeUserMenu();
   menuPressedOutside = false;
+}
+
+// "Configuración" del menú: cierra el menú y abre el índice (028 C-2, D-7)
+function openSettingsFromMenu() {
+  closeUserMenu();
+  settingsView = 'index';
+  showAppScreen('settings');
 }
 
 // "Cerrar sesión" del menú: sin confirmación, como el botón de antes (RF-8)
@@ -4660,6 +4713,9 @@ function bindEvents() {
   $('user-menu').addEventListener('click', onUserMenuClick);
   $('user-menu').addEventListener('close', () => $('user-button').setAttribute('aria-expanded', 'false'));
   $('user-menu-logout').addEventListener('click', logOutFromMenu);
+  $('user-menu-settings').addEventListener('click', openSettingsFromMenu); // 028 C-1, C-2
+  $('settings-tags-button').addEventListener('click', () => showSettingsView('tags')); // 028 C-3
+  $('settings-back').addEventListener('click', () => showSettingsView('index'));
   $('search-button').addEventListener('click', openSearch); // 023 C-2
   $('search-close').addEventListener('click', () => closeSearch()); // 023 C-3
   $('search-dialog').addEventListener('close', onSearchClosed); // 023 C-3, C-31, D-8

@@ -102,6 +102,8 @@
     <!-- Menú del usuario (008 RF-5 a RF-8) -->
     <dialog id="user-menu" class="user-menu" aria-label="Menú del usuario">
       <p id="user-menu-email" class="user-menu-email" tabindex="-1" autofocus></p>
+      <!-- 028 C-1: también sin red -->
+      <button type="button" id="user-menu-settings" class="user-menu-item">Configuración</button>
       <button type="button" id="user-menu-logout" class="user-menu-item">Cerrar sesión</button>
     </dialog>
 
@@ -280,6 +282,23 @@
       </div>
       <!-- 026 C-12: lo pinta app.js; en pc ancho, junto a la lista (C-14) -->
       <section id="recipe-detail" class="recipe-detail" aria-label="Detalle de la receta"></section>
+    </main>
+
+    <!-- Pantalla Configuración (028 C-2, C-3, D-7): índice de apartados y Etiquetas -->
+    <main id="settings" class="settings">
+      <div id="settings-index">
+        <h2 class="settings-title">Configuración</h2>
+        <ul class="settings-list">
+          <li><button type="button" id="settings-tags-button" class="settings-row settings-row-next">Etiquetas</button></li>
+        </ul>
+      </div>
+      <div id="settings-tags" hidden>
+        <button type="button" id="settings-back" class="btn-text settings-back">‹ Configuración</button>
+        <h2 class="settings-title">Etiquetas</h2>
+        <p id="tags-loading" class="list-loading">Cargando…</p>
+        <p id="tags-empty" class="list-empty" hidden></p>
+        <ul id="tag-list" class="settings-list"></ul>
+      </div>
     </main>
 
     <button type="button" id="add-button" class="btn btn-primary btn-floating">+ Añadir comida</button>

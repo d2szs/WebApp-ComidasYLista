@@ -274,6 +274,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   cursor: pointer;
 }
 .user-menu-item:hover, .user-menu-item:focus-visible { background: var(--color-bg); }
+#user-menu-settings { border-radius: 0; } /* 028 C-1: en medio, sin esquinas redondeadas */
 
 /* Móvil: logo y nombre de la pantalla; pc: logo, y el nombre solo para el lector de pantalla (D-7) */
 @media (max-width: 767.98px) {
@@ -414,7 +415,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .header > .view-selector { margin-top: 0; }
 /* En Compra la cabecera no tiene nada que ocupe sitio */
 #screen-app[data-screen="list"] .header,
-#screen-app[data-screen="recipes"] .header { padding: 0; border-bottom: none; }
+#screen-app[data-screen="recipes"] .header,
+#screen-app[data-screen="settings"] .header { padding: 0; border-bottom: none; }
 
 /* Barra de pantallas (007 RF-1, D-7): fija en los dos diseños; el icono toma el color del botón.
    La pantalla actual, en su color sobre ese color muy claro; la otra, en gris y sin fondo */
@@ -452,7 +454,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 #screen-app:not([data-screen="list"]) #shopping,
 #screen-app:not([data-screen="list"]) #add-article-button,
 #screen-app:not([data-screen="recipes"]) #add-recipe-button,
-#screen-app:not([data-screen="recipes"]) #recipes { display: none; } /* 026 C-2 */
+#screen-app:not([data-screen="recipes"]) #recipes,
+#screen-app:not([data-screen="settings"]) #settings { display: none; } /* 026 C-2; 028 C-2 */
 
 .view-selector, .type-selector { display: flex; gap: 0.25rem; margin: 0.6rem auto; }
 .view-button, .type-button {
@@ -620,6 +623,30 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .recipe-card-name { margin: 0; font-size: var(--text-normal); font-weight: 600; }
 .recipe-card-info { margin: 0.2rem 0 0; font-size: var(--text-small); color: var(--color-text-muted); }
 .recipe-card-tags { margin: 0.2rem 0 0; font-size: var(--text-small); color: var(--color-olive); }
+/* ===== Configuración (028) ===== */
+.settings { max-width: var(--max-width); margin: 0 auto; padding: var(--space) var(--space) 6rem; }
+.settings-title { margin: 0 0 0.6rem; font-size: var(--text-large); }
+.settings-back { margin: 0 0 0.4rem -0.5rem; font: inherit; }
+.settings-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+/* Fila pulsable: zona de toque de 44 px; etiquetas largas partidas (C-12) */
+.settings-row {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.settings-row-next { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.settings-row-next::after { content: "›"; color: var(--color-text-muted); font-size: var(--text-large); line-height: 1; }
+.settings-row:disabled { cursor: default; } /* C-35: sin red, a la vista pero sin abrir */
+
 /* Detalle (C-12): móvil y pc estrecho, sustituye a la lista (C-13, D-10) */
 .recipes.recipe-open .recipe-browse { display: none; }
 .recipes:not(.recipe-open) .recipe-detail { display: none; }
@@ -763,7 +790,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   .screen-button { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 0.1rem; padding: 0.2rem; }
   .screen-label { font-size: var(--text-small); }
   #screen-app .btn-floating { bottom: calc(var(--screen-bar-height) + var(--space)); }
-  .calendar, .shopping, .recipes { padding-bottom: calc(var(--screen-bar-height) + 6rem); }
+  .calendar, .shopping, .recipes, .settings { padding-bottom: calc(var(--screen-bar-height) + 6rem); }
 }
 
 /* Colores por tipo de comida */
