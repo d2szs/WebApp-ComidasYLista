@@ -12,6 +12,8 @@ const state = {
   openType: null,       // tipo desplegado en la vista diaria
   requestId: 0,         // para descartar respuestas antiguas
   noticeKind: null,     // origen del aviso visible: 'load' | 'offline' | 'listLoad' | 'recipesLoad' | 'sync' | 'copy' | 'action'
+  noticeId: 0,          // 027: número del último aviso mostrado (sube con cada uno)
+  visibleNoticeId: null, // 027: número del aviso a la vista (null: ninguno)
   copyMode: false,      // 011: mostrando la copia guardada (000-base D-19)
   offline: false,       // 011: sin red, con o sin copia (009 D-14)
   channelStatus: null,  // último estado del canal de tiempo real (000-base CL-15)
@@ -197,10 +199,25 @@ function readStoredScreen(storageName) {
 }
 
 // ===== Avisos y errores =====
-function showError(text, kind = 'action') {
+// type (027 D-1): 'error' (rojo), 'info' (berenjena) o 'confirmation' (caballa, se va sola)
+function showError(text, kind = 'action', type = 'error') {
+  const notice = $('error-notice');
   $('error-notice-text').textContent = text;
-  $('error-notice').hidden = false;
+  notice.classList.toggle('notice-info', type === 'info');
+  notice.classList.toggle('notice-confirmation', type === 'confirmation');
+  notice.hidden = false;
   state.noticeKind = kind;
+  const id = ++state.noticeId;
+  state.visibleNoticeId = id;
+  const duration = noticeDuration(type);
+  if (duration !== null) { // 027 C-1, C-3: solo quita su propio aviso
+    setTimeout(() => { if (timerMayHide(id, state.visibleNoticeId)) hideError(); }, duration);
+  }
+}
+
+// Aviso informativo (027 C-4): en berenjena y fijo hasta ✕ u otro aviso
+function showInfo(text) {
+  showError(text, 'action', 'info');
 }
 
 // Oculta el aviso (si se indica kind, solo cuando el aviso es de ese origen)
@@ -208,6 +225,7 @@ function hideError(kind) {
   if (kind && state.noticeKind !== kind) return;
   $('error-notice').hidden = true;
   state.noticeKind = null;
+  state.visibleNoticeId = null;
 }
 
 // ===== Arranque y conexión =====
@@ -1096,7 +1114,7 @@ async function loadRecipes() {
     && !recipeState.items.some((r) => r.id === recipeState.openId);
   if (gone) {
     closeRecipe();
-    showError(RECIPE_GONE_MESSAGE);
+    showInfo(RECIPE_GONE_MESSAGE); // 027 C-4
   }
   renderRecipes();
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
@@ -1485,7 +1503,7 @@ async function sendRecipe(data, opened) {
     // C-44, C-49: se cierra y se sigue en Comidas como estaba, con el aviso
     if (opened === recipeForm.opened && $('recipe-dialog').open) {
       $('recipe-dialog').close();
-      showError(recipeSavedText(data.nombre));
+      showError(recipeSavedText(data.nombre), 'action', 'confirmation'); // 027 C-1
     }
     loadRecipes();
   } else if (outcome === 'saved') {
@@ -1829,7 +1847,7 @@ function pickSuggestion(item) {
 // fromForm: los mensajes van dentro del formulario de artículo (llega en T9).
 // askIfListed: si ya está en Por comprar, sin aviso y devuelve 'listed' (021 C-8)
 async function addArticle({ nombre, cantidad, unidad }, fromForm = false, askIfListed = false) {
-  const report = (text) => (fromForm ? showArticleFormError(text) : showError(text));
+  const report = (text, type) => (fromForm ? showArticleFormError(text) : showError(text, 'action', type));
   let result;
   try {
     result = await client.rpc('anadir_articulo', { p_nombre: nombre, p_cantidad: cantidad, p_unidad: unidad });
@@ -1844,7 +1862,7 @@ async function addArticle({ nombre, cantidad, unidad }, fromForm = false, askIfL
   const outcome = addOutcome(result.data);
   if (outcome.kind === 'exists' && askIfListed && outcome.list === 'por_comprar') return 'listed';
   if (outcome.kind === 'exists') { // RF-19, CL-4, RF-45
-    report(articleExistsMessage(outcome.name, outcome.list));
+    report(articleExistsMessage(outcome.name, outcome.list), 'info'); // 027 C-4
     loadList();
     return false;
   }
@@ -1907,7 +1925,7 @@ async function askExisting(written) {
   const listError = await loadList();
   if (!sessionActive || listError) return; // el error de carga ya se ve; los campos se quedan
   const article = findEquivalent(listState.items, written.nombre);
-  if (!article || article.lista !== 'por_comprar') return showError(ARTICLE_CHANGED_MESSAGE); // C-11
+  if (!article || article.lista !== 'por_comprar') return showInfo(ARTICLE_CHANGED_MESSAGE); // C-11, 027 C-4
   const choice = existingArticleChoice(article, written);
   Object.assign(existsState, { article, choice, saving: false });
   $('exists-text').textContent = choice.text;
@@ -1963,7 +1981,7 @@ async function applyExisting(option) {
   closeExists();
   const outcome = result.data?.resultado;
   if (result.error) showError(articleErrorMessage('save', result.error, navigator.onLine)); // C-12
-  else if (outcome === 'cambiado') showError(ARTICLE_CHANGED_MESSAGE); // C-11
+  else if (outcome === 'cambiado') showInfo(ARTICLE_CHANGED_MESSAGE); // C-11, 027 C-4
   else if (outcome !== 'hecho') showError(ARTICLE_UNEXPECTED_MESSAGE);
   else clearQuickFields(); // C-9
   loadList();
@@ -2254,7 +2272,7 @@ function finishSend(settled, failure, error) {
   renderShopping(); // quita las marcas de lo enviado (RF-9)
   refreshCopyNotice();
   const names = settled.filter((s) => s.result === 'conflict').map((s) => s.change.name);
-  if (names.length) showError(conflictNoticeText(names)); // otro aviso lo sustituye (CL-9)
+  if (names.length) showInfo(conflictNoticeText(names)); // otro aviso lo sustituye (CL-9); 027 C-4
   if (failure === 'error' && !strikeQueueState.errorShown) {
     showError(articleErrorMessage('save', error, true)); // RF-17: una vez, no en cada reintento
     strikeQueueState.errorShown = true;
@@ -2302,7 +2320,7 @@ async function finishShopping() {
     showError(articleErrorMessage('finish', error, navigator.onLine));
     return;
   }
-  if (rows.length === 0) showError(NO_STRUCK_MESSAGE); // CL-11
+  if (rows.length === 0) showInfo(NO_STRUCK_MESSAGE); // CL-11, 027 C-4
   loadList();
 }
 
@@ -2317,7 +2335,7 @@ async function missingOrMoved(id, movedMessage, onAnswered) {
   }
   onAnswered?.();
   if (data.length === 0) return articleGone();
-  if (movedMessage) showError(movedMessage); // CL-14
+  if (movedMessage) showInfo(movedMessage); // CL-14, 027 C-4
   loadList();
 }
 
@@ -2349,7 +2367,7 @@ function deleteFromArticleForm() {
 // Otra persona ya lo ha borrado (CL-2): se cierra el formulario de artículo si estaba abierto
 function articleGone() {
   closeArticleForm();
-  showError(ARTICLE_GONE_MESSAGE);
+  showInfo(ARTICLE_GONE_MESSAGE); // 027 C-4
   loadList();
 }
 
@@ -4531,7 +4549,7 @@ async function saveMove(meal, to, targetMeal) {
   }
   endMoving();
   if (outcome === 'changed') {
-    showError(MOVE_CHANGED_MESSAGE); // C-20
+    showInfo(MOVE_CHANGED_MESSAGE); // C-20, 027 C-4
     loadData();
     return;
   }

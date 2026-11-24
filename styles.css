@@ -528,6 +528,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   border-radius: var(--radius);
 }
 .error-notice .btn-text { color: var(--color-error); }
+/* 027 C-1, C-4 (D-2): confirmación en caballa e informativo en berenjena */
+.error-notice.notice-confirmation { background: var(--color-mackerel-light); color: var(--color-mackerel-text); }
+.error-notice.notice-confirmation .btn-text { color: var(--color-mackerel-text); }
+.error-notice.notice-info { background: var(--color-today); color: var(--color-primary); }
+.error-notice.notice-info .btn-text { color: var(--color-primary); }
 .copy-gap { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); font-weight: 600; color: var(--color-no-copy-text); }
 .loading-indicator { max-width: var(--max-width); margin: 0.5rem auto 0; padding: 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); }
 
