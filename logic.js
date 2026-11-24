@@ -2186,6 +2186,92 @@ function storedSessionUserId(text) {
   return typeof id === 'string' && id !== '' ? id : null;
 }
 
+// ===== 028-gestion-etiquetas: grupos de etiquetas y acciones (T2) =====
+
+const TAGS_EMPTY_TEXT = 'Todavía no hay etiquetas.'; // C-8
+const TAG_NAME_ERROR = 'Escribe el nombre de la etiqueta.'; // C-19
+const TAG_GONE_MESSAGE = 'Esta etiqueta ya no existe; puede que la haya cambiado la otra persona.'; // C-31, C-32
+// Desempate de formas: alfabético en español y, si aun así empatan, por código
+const TAG_FORM_COLLATOR = new Intl.Collator('es');
+
+// Etiquetas en uso, una por equivalencia (articleKey, como clave_articulo): { key, tag, forms,
+// count }. tag es la forma usada en más recetas (a igualdad, la primera en orden alfabético);
+// count, las recetas que tienen alguna forma. En orden alfabético español (C-7, C-8, C-10)
+function tagGroups(recipes) {
+  const byKey = new Map();
+  recipes.forEach((recipe) => {
+    const seen = new Set();
+    (recipe.etiquetas || []).forEach((tag) => {
+      const key = articleKey(tag);
+      if (!byKey.has(key)) byKey.set(key, { key, forms: new Map(), count: 0 });
+      const group = byKey.get(key);
+      group.forms.set(tag, (group.forms.get(tag) || 0) + 1);
+      if (!seen.has(key)) group.count += 1;
+      seen.add(key);
+    });
+  });
+  const byForm = (a, b) => TAG_FORM_COLLATOR.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
+  return [...byKey.values()].map((group) => {
+    const forms = [...group.forms.keys()];
+    const tag = [...forms].sort((a, b) => group.forms.get(b) - group.forms.get(a) || byForm(a, b))[0];
+    return { key: group.key, tag, forms, count: group.count };
+  }).sort((a, b) => ARTICLE_COLLATOR.compare(a.tag, b.tag) || byForm(a.tag, b.tag));
+}
+
+// "1 receta" o "n recetas" (Definiciones)
+function recipeCountText(n) {
+  return n === 1 ? '1 receta' : `${n} recetas`;
+}
+
+// Fila de la lista y título del diálogo: "pasta · 4 recetas" (C-7, C-13)
+function tagRowText(group) {
+  return `${group.tag} · ${recipeCountText(group.count)}`;
+}
+
+// Qué hace "Renombrar" con lo escrito: { action: 'error', error } si queda vacío (C-19);
+// 'none' si no cambia y la etiqueta tiene una sola forma (C-20); 'merge' con target (el grupo
+// de la otra) si es equivalente a otra en uso (C-21); si no, 'rename' con el nombre limpio y
+// de 30 caracteres como mucho (C-16 a C-18, C-20 con dos formas)
+function tagRenameAction(group, typed, groups) {
+  const name = cleanTag(typed);
+  if (!name) return { action: 'error', error: TAG_NAME_ERROR };
+  if (name === group.tag && group.forms.length === 1) return { action: 'none' };
+  const key = articleKey(name);
+  const target = key === group.key ? null : groups.find((g) => g.key === key);
+  return target ? { action: 'merge', target } : { action: 'rename', name };
+}
+
+// Las demás etiquetas en uso para "Unir con…", en el orden de la lista (C-22, C-23)
+function mergeTargets(groups, key) {
+  return groups.filter((g) => g.key !== key);
+}
+
+// Confirmación de unir (C-21, C-24)
+function tagMergeText(from, to) {
+  return `¿Unir «${from}» con «${to}»?`;
+}
+
+// Confirmación de quitar una etiqueta de sus recetas (C-26)
+function tagDeleteText(group) {
+  return `¿Quitar la etiqueta «${group.tag}» de ${recipeCountText(group.count)}? Las recetas no se borran.`;
+}
+
+// Qué hacer con lo que devuelve cambiar_etiqueta: 'done', 'gone' (la etiqueta o la elegida para
+// unir ya no existe: TAG_GONE_MESSAGE, C-31, C-32) o 'error'
+function tagChangeOutcome(result) {
+  const value = isObject(result) ? result.resultado : null;
+  if (['renombrada', 'unida', 'quitada'].includes(value)) return 'done';
+  if (value === 'no_existe' || value === 'destino_no_existe') return 'gone';
+  return 'error';
+}
+
+// Confirmación tras la acción, según lo que hizo la función (C-41, D-4)
+function tagDoneText(tag, result) {
+  if (result.resultado === 'renombrada') return `Etiqueta «${tag}» renombrada a «${result.forma}».`;
+  if (result.resultado === 'unida') return `Etiqueta «${tag}» unida con «${result.forma}».`;
+  return `Etiqueta «${tag}» quitada de ${recipeCountText(result.recetas)}.`;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -2244,5 +2330,7 @@ if (typeof module !== 'undefined') {
     recipeFacts, starsText, ratingsText, myStars, nextStars, recipeDeleteText, storedSessionUserId,
     sameNameRecipe, recipeExistsText, recipeSavedText,
     NOTICE_TYPES, noticeDuration, timerMayHide,
+    TAGS_EMPTY_TEXT, TAG_NAME_ERROR, TAG_GONE_MESSAGE, tagGroups, recipeCountText, tagRowText,
+    tagRenameAction, mergeTargets, tagMergeText, tagDeleteText, tagChangeOutcome, tagDoneText,
   };
 }
