@@ -85,6 +85,10 @@ let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 m
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
 const existsState = { article: null, choice: null, saving: false };
+// Diálogo de etiqueta (028 D-8): key, la clave del grupo (lo sigue aunque cambie su forma, C-11);
+// group, el grupo como se ve ahora (count 0 si ya no lo tiene ninguna receta); saving, mientras
+// guarda (C-14, C-28); pressedOutside, la pulsación empezó fuera (C-14)
+const tagDialogState = { key: null, group: null, saving: false, pressedOutside: false };
 // Ventana de ↺ en Guardados (022): el artículo como se vio al abrirla; saving, mientras guarda (C-10)
 const recoverState = { item: null, saving: false };
 // Revisión de ingredientes de comidas (009, plan § Algoritmo); requestId nunca vuelve a
@@ -472,6 +476,7 @@ function closeDialogs() {
   closeRecover(); // 022 C-12
   closeArticleForm(); // 007 CL-8
   if ($('recipe-dialog').open) $('recipe-dialog').close(); // 026 C-37
+  closeTagDialog(); // 028 C-37
   if (reviewState.open) closeReview(); // 009 CL-5
   searchState.query = ''; // 023 C-28, D-9: se olvida la búsqueda guardada
   closeSearch({ restoreFocus: false }); // 023 C-28: abierto en una sección oculta, dejaría la página inerte
@@ -1020,6 +1025,7 @@ function applyWriteControls() {
   refreshRecoverButtons(); // 022 C-11
   $('article-save').disabled = state.offline || articleForm.saving;
   refreshRecipeSave(); // 026 C-22, C-34
+  refreshTagButtons(); // 028 C-35
   $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
   if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
@@ -3305,8 +3311,7 @@ function renderTagSettings() {
   empty.hidden = !recipeState.loaded || groups.length > 0;
   empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : TAGS_EMPTY_TEXT; // C-42, C-8
   list.replaceChildren(...groups.map((group) => {
-    const row = el('button', 'settings-row', tagRowText(group));
-    row.type = 'button';
+    const row = button('settings-row', tagRowText(group), () => openTagDialog(group.key)); // C-13
     row.dataset.key = group.key;
     row.disabled = state.offline;
     const item = el('li');
@@ -3314,6 +3319,66 @@ function renderTagSettings() {
     return item;
   }));
   if (focusedKey) list.querySelector(`[data-key="${CSS.escape(focusedKey)}"]`)?.focus();
+  refreshTagDialog(); // C-11: el diálogo abierto, con el número al día
+}
+
+// Abre el diálogo de una etiqueta con su nombre en el campo (C-13); sin red, no (C-35)
+function openTagDialog(key) {
+  if (state.offline || tagDialogState.key) return;
+  const group = tagGroups(recipeState.items).find((g) => g.key === key);
+  if (!group) return;
+  Object.assign(tagDialogState, { key, group, saving: false, pressedOutside: false });
+  $('tag-name').value = group.tag;
+  showTagError('');
+  refreshTagDialog();
+  $('tag-dialog').showModal(); // I-12: encima de todo
+  $('tag-name').focus();
+}
+
+// Título "etiqueta · n recetas" con las recetas cargadas ahora; si ya no la tiene ninguna, la
+// última forma vista con "0 recetas" y el diálogo sigue abierto (C-11). Como texto (I-9)
+function refreshTagDialog() {
+  if (!tagDialogState.key) return;
+  const group = tagGroups(recipeState.items).find((g) => g.key === tagDialogState.key);
+  tagDialogState.group = group || { ...tagDialogState.group, count: 0 };
+  $('tag-title').textContent = tagRowText(tagDialogState.group);
+  refreshTagButtons();
+}
+
+// Botones del diálogo: desactivados mientras guarda (C-28)
+function refreshTagButtons() {
+  $('tag-cancel').disabled = tagDialogState.saving;
+}
+
+function showTagError(text) {
+  $('tag-error').textContent = text;
+  $('tag-error').hidden = !text;
+}
+
+// Cierra sin guardar; también al cerrarse la sesión (C-37)
+function closeTagDialog() {
+  Object.assign(tagDialogState, { key: null, group: null, saving: false, pressedOutside: false });
+  if ($('tag-dialog').open) $('tag-dialog').close();
+}
+
+// "Cancelar", Esc o pulsar fuera: cierra sin cambiar nada; mientras guarda, nada (C-14, D-6)
+function cancelTagDialog() {
+  if (!tagDialogState.saving) closeTagDialog();
+}
+
+// Pulsación que empieza y acaba fuera del diálogo (C-14)
+function onTagDialogClick(event) {
+  if (tagDialogState.pressedOutside && isOutsideDialog($('tag-dialog'), event)) cancelTagDialog();
+  tagDialogState.pressedOutside = false;
+}
+
+function setupTagDialog() {
+  $('tag-cancel').addEventListener('click', cancelTagDialog);
+  $('tag-dialog').addEventListener('cancel', (event) => { event.preventDefault(); cancelTagDialog(); });
+  $('tag-dialog').addEventListener('pointerdown', (event) => {
+    tagDialogState.pressedOutside = isOutsideDialog($('tag-dialog'), event);
+  });
+  $('tag-dialog').addEventListener('click', onTagDialogClick);
 }
 
 // ===== Menú del usuario (008) =====
@@ -4810,6 +4875,7 @@ function bindEvents() {
   $('exists-change').addEventListener('click', () => applyExisting(existsState.choice?.change));
   $('exists-dialog').addEventListener('cancel', (event) => { event.preventDefault(); keepExisting(); });
   setupRecover(); // 022
+  setupTagDialog(); // 028
 
   // Recargar al volver a primer plano y al recuperar la conexión
   document.addEventListener('visibilitychange', () => {

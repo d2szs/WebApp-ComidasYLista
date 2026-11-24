@@ -507,6 +507,22 @@
     </form>
   </dialog>
 
+  <!-- Diálogo de una etiqueta (028 C-13, D-5): título "etiqueta · n recetas" y su nombre (30
+       caracteres como mucho, C-18) -->
+  <dialog id="tag-dialog" class="dialog dialog-small tag-dialog" aria-labelledby="tag-title">
+    <div id="tag-main">
+      <h2 id="tag-title" class="tag-title"></h2>
+      <label class="field">
+        <span>Nombre</span>
+        <input type="text" id="tag-name" maxlength="30" autocomplete="off" enterkeyhint="done">
+      </label>
+      <p id="tag-error" class="error-message" role="alert" hidden></p>
+      <div class="dialog-buttons tag-buttons">
+        <button type="button" id="tag-cancel" class="btn">Cancelar</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Plantilla de un plato del formulario -->
   <template id="dish-template">
     <fieldset class="dish">
