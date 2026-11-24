@@ -2161,6 +2161,23 @@ function recipeSavedText(name) {
   return `Receta «${name}» guardada.`;
 }
 
+// ===== 027-colores-avisos: tipos de aviso (D-1) =====
+
+// Tipos de aviso de la franja: error (rojo), informativo (berenjena), confirmación (caballa)
+const NOTICE_TYPES = ['error', 'info', 'confirmation'];
+const CONFIRMATION_MS = 5000; // C-1
+
+// Milisegundos hasta que el aviso se quita solo, o null si se queda fijo (C-1, C-4, C-5)
+function noticeDuration(type) {
+  return type === 'confirmation' ? CONFIRMATION_MS : null;
+}
+
+// El temporizador del aviso número timerId solo lo quita si sigue a la vista: si otro aviso
+// lo sustituyó o se cerró con ✕, no toca nada (C-2, C-3)
+function timerMayHide(timerId, visibleId) {
+  return visibleId !== null && timerId === visibleId;
+}
+
 // Id del usuario de la sesión que guardó supabase-js, o null; para "Tus estrellas" también en
 // modo copia, sin red (C-12, C-34). Misma validez que storedSessionEmail
 function storedSessionUserId(text) {
@@ -2226,5 +2243,6 @@ if (typeof module !== 'undefined') {
     recipeSearchResults, copyRecipes, recipeSaveOutcome, recipeErrorMessage,
     recipeFacts, starsText, ratingsText, myStars, nextStars, recipeDeleteText, storedSessionUserId,
     sameNameRecipe, recipeExistsText, recipeSavedText,
+    NOTICE_TYPES, noticeDuration, timerMayHide,
   };
 }
