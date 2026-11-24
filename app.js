@@ -88,7 +88,8 @@ const existsState = { article: null, choice: null, saving: false };
 // Diálogo de etiqueta (028 D-8): key, la clave del grupo (lo sigue aunque cambie su forma, C-11);
 // group, el grupo como se ve ahora (count 0 si ya no lo tiene ninguna receta); saving, mientras
 // guarda (C-14, C-28); pressedOutside, la pulsación empezó fuera (C-14); view, 'main' o
-// 'confirm' (D-5); confirm, la acción que se pregunta ({ unir, targetKey, target, back });
+// 'merge' o 'confirm' (D-5); confirm, la acción que se pregunta ({ action: 'merge' o 'delete',
+// targetKey y target al unir, back: la vista a la que vuelve "Cancelar" });
 // opened, cuenta las aperturas para no pintar una respuesta en otro diálogo
 const tagDialogState = {
   key: null, group: null, saving: false, pressedOutside: false, view: 'main', confirm: null, opened: 0,
@@ -3346,6 +3347,7 @@ function openTagDialog(key) {
 function showTagView(view) {
   tagDialogState.view = view;
   $('tag-main').hidden = view !== 'main';
+  $('tag-merge').hidden = view !== 'merge';
   $('tag-confirm').hidden = view !== 'confirm';
   showTagError('');
 }
@@ -3358,13 +3360,49 @@ function refreshTagDialog() {
   const group = groups.find((g) => g.key === tagDialogState.key);
   tagDialogState.group = group || { ...tagDialogState.group, count: 0 };
   $('tag-title').textContent = tagRowText(tagDialogState.group);
+  if (tagDialogState.view === 'merge') renderTagMerge(groups); // C-11, D-8
   const confirm = tagDialogState.confirm;
-  if (confirm) {
+  if (confirm?.action === 'merge') {
     // C-11: la otra, con su forma al día; si ya no está, la última vista (C-32 avisa al pulsar)
-    if (confirm.targetKey) confirm.target = groups.find((g) => g.key === confirm.targetKey) || confirm.target;
+    confirm.target = groups.find((g) => g.key === confirm.targetKey) || confirm.target;
     $('tag-confirm-text').textContent = tagMergeText(tagDialogState.group.tag, confirm.target.tag);
+  } else if (confirm?.action === 'delete') {
+    $('tag-confirm-text').textContent = tagDeleteText(tagDialogState.group); // C-11: el número al día
   }
+  $('tag-merge-button').dataset.empty = String(mergeTargets(groups, tagDialogState.key).length === 0);
   refreshTagButtons();
+}
+
+// "Unir «etiqueta» con…" y las demás etiquetas en uso con su número (C-22); como texto (I-9).
+// Sin red, las filas no se pueden pulsar (C-35)
+function renderTagMerge(groups) {
+  const list = $('tag-merge-list');
+  const focusedKey = list.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  $('tag-merge-title').textContent = `Unir «${tagDialogState.group.tag}» con…`;
+  list.replaceChildren(...mergeTargets(groups, tagDialogState.key).map((group) => {
+    const row = button('settings-row', tagRowText(group), () => askTagMerge(group, 'merge')); // C-24
+    row.dataset.key = group.key;
+    row.disabled = state.offline || tagDialogState.saving;
+    const item = el('li');
+    item.append(row);
+    return item;
+  }));
+  if (focusedKey) list.querySelector(`[data-key="${CSS.escape(focusedKey)}"]`)?.focus();
+}
+
+// "Unir con…": pasa a la lista de las demás (C-22)
+function showTagMerge() {
+  if (tagDialogState.saving || state.offline) return;
+  showTagView('merge');
+  refreshTagDialog();
+  ($('tag-merge-list').querySelector('button:not(:disabled)') || $('tag-merge-back')).focus();
+}
+
+// "‹ Volver": al diálogo con lo escrito (C-22)
+function closeTagMerge() {
+  if (tagDialogState.saving) return;
+  showTagView('main');
+  $('tag-merge-button').focus();
 }
 
 // Botones del diálogo: desactivados mientras guarda (C-28); las acciones, también sin red (C-35)
@@ -3373,6 +3411,10 @@ function refreshTagButtons() {
   $('tag-cancel').disabled = saving;
   $('tag-confirm-cancel').disabled = saving;
   $('tag-rename').disabled = saving || state.offline;
+  $('tag-merge-button').disabled = saving || state.offline || $('tag-merge-button').dataset.empty === 'true'; // C-23
+  $('tag-delete').disabled = saving || state.offline;
+  $('tag-merge-back').disabled = saving;
+  for (const row of $('tag-merge-list').querySelectorAll('button')) row.disabled = saving || state.offline;
   $('tag-confirm-ok').disabled = saving || state.offline;
 }
 
@@ -3396,10 +3438,12 @@ function cancelTagDialog() {
   if (!tagDialogState.saving) closeTagDialog();
 }
 
-// Esc: en la confirmación, como su "Cancelar"; en la vista principal, cierra (D-6)
+// Esc: en "Unir con…" o la confirmación, como su "‹ Volver" o "Cancelar"; en la vista
+// principal, cierra (D-6)
 function onTagDialogEscape(event) {
   event.preventDefault();
   if (tagDialogState.view === 'confirm') cancelTagConfirm();
+  else if (tagDialogState.view === 'merge') closeTagMerge();
   else cancelTagDialog();
 }
 
@@ -3409,13 +3453,27 @@ function cancelTagConfirm() {
   const back = tagDialogState.confirm?.back || 'main';
   tagDialogState.confirm = null;
   showTagView(back);
+  refreshTagDialog();
   if (back === 'main') $('tag-name').focus();
+  else ($('tag-merge-list').querySelector('button:not(:disabled)') || $('tag-merge-back')).focus();
 }
 
-// Pregunta si se une con target (el grupo de la otra) antes de hacerlo (C-21, D-5)
+// Pregunta si se une con target (el grupo de la otra) antes de hacerlo; "Cancelar" vuelve a
+// back (C-21, C-24, D-5)
 function askTagMerge(target, back) {
-  tagDialogState.confirm = { unir: true, targetKey: target.key, target, back };
-  $('tag-confirm-ok').textContent = 'Unir';
+  if (tagDialogState.saving || state.offline) return;
+  askTagConfirm({ action: 'merge', targetKey: target.key, target, back }, 'Unir');
+}
+
+// "Borrar": pregunta antes de quitarla de sus recetas (C-26)
+function askTagDelete() {
+  if (tagDialogState.saving || state.offline) return;
+  askTagConfirm({ action: 'delete', back: 'main' }, 'Quitar');
+}
+
+function askTagConfirm(confirm, okText) {
+  tagDialogState.confirm = confirm;
+  $('tag-confirm-ok').textContent = okText;
   showTagView('confirm');
   refreshTagDialog();
   $('tag-confirm-cancel').focus();
@@ -3435,10 +3493,11 @@ function renameTag() {
   changeTag(result.name, false);
 }
 
-// "Unir" (o "Quitar", T6) de la confirmación
+// "Unir" o "Quitar" de la confirmación (C-24, C-26)
 function confirmTagChange() {
   const confirm = tagDialogState.confirm;
-  if (confirm?.unir) changeTag(confirm.target.tag, true);
+  if (confirm?.action === 'merge') changeTag(confirm.target.tag, true);
+  else if (confirm?.action === 'delete') changeTag(null, false);
 }
 
 // Llama a cambiar_etiqueta con la forma que se ve (D-3): todo o nada, con los botones
@@ -3485,6 +3544,9 @@ function setupTagDialog() {
       if (!$('tag-rename').disabled) renameTag();
     }
   });
+  $('tag-merge-button').addEventListener('click', showTagMerge);
+  $('tag-delete').addEventListener('click', askTagDelete);
+  $('tag-merge-back').addEventListener('click', closeTagMerge);
   $('tag-confirm-cancel').addEventListener('click', cancelTagConfirm);
   $('tag-confirm-ok').addEventListener('click', confirmTagChange);
   $('tag-dialog').addEventListener('cancel', onTagDialogEscape);

@@ -520,8 +520,20 @@
       <div class="tag-actions">
         <button type="button" id="tag-rename" class="btn btn-primary">Renombrar</button>
       </div>
+      <div class="tag-actions">
+        <button type="button" id="tag-merge-button" class="btn">Unir con…</button>
+        <button type="button" id="tag-delete" class="btn">Borrar</button>
+      </div>
       <div class="dialog-buttons tag-buttons">
         <button type="button" id="tag-cancel" class="btn">Cancelar</button>
+      </div>
+    </div>
+    <!-- "Unir con…" (C-22): las demás etiquetas en uso -->
+    <div id="tag-merge" hidden>
+      <h2 id="tag-merge-title" class="tag-title"></h2>
+      <ul id="tag-merge-list" class="settings-list tag-merge-list"></ul>
+      <div class="dialog-buttons tag-buttons">
+        <button type="button" id="tag-merge-back" class="btn">‹ Volver</button>
       </div>
     </div>
     <!-- Confirmación dentro del diálogo (D-5): sus botones se desactivan mientras guarda y el
