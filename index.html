@@ -517,8 +517,21 @@
         <input type="text" id="tag-name" maxlength="30" autocomplete="off" enterkeyhint="done">
       </label>
       <p id="tag-error" class="error-message" role="alert" hidden></p>
+      <div class="tag-actions">
+        <button type="button" id="tag-rename" class="btn btn-primary">Renombrar</button>
+      </div>
       <div class="dialog-buttons tag-buttons">
         <button type="button" id="tag-cancel" class="btn">Cancelar</button>
+      </div>
+    </div>
+    <!-- Confirmación dentro del diálogo (D-5): sus botones se desactivan mientras guarda y el
+         error sale aquí (C-28, C-36) -->
+    <div id="tag-confirm" hidden>
+      <p id="tag-confirm-text" class="tag-confirm-text"></p>
+      <p id="tag-confirm-error" class="error-message" role="alert" hidden></p>
+      <div class="dialog-buttons tag-buttons">
+        <button type="button" id="tag-confirm-cancel" class="btn">Cancelar</button>
+        <button type="button" id="tag-confirm-ok" class="btn btn-danger"></button>
       </div>
     </div>
   </dialog>

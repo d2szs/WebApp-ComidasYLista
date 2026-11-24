@@ -931,6 +931,8 @@ body.dragging, body.dragging * { cursor: grabbing; }
 .tag-title { margin: 0 0 var(--space); font-size: var(--text-large); overflow-wrap: anywhere; }
 .tag-dialog input, .tag-dialog .btn { min-height: 2.5rem; min-width: 2.5rem; }
 .tag-buttons { flex-wrap: wrap; }
+.tag-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: var(--space); }
+.tag-confirm-text { margin-top: 0; overflow-wrap: anywhere; }
 /* Revisión de ingredientes (009 D-5): en columna, las líneas se desplazan por dentro */
 .ingredients-dialog { max-height: calc(100vh - 1rem); max-height: calc(100dvh - 1rem); }
 .ingredients-dialog[open] { display: flex; flex-direction: column; }

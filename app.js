@@ -87,8 +87,12 @@ let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 m
 const existsState = { article: null, choice: null, saving: false };
 // Diálogo de etiqueta (028 D-8): key, la clave del grupo (lo sigue aunque cambie su forma, C-11);
 // group, el grupo como se ve ahora (count 0 si ya no lo tiene ninguna receta); saving, mientras
-// guarda (C-14, C-28); pressedOutside, la pulsación empezó fuera (C-14)
-const tagDialogState = { key: null, group: null, saving: false, pressedOutside: false };
+// guarda (C-14, C-28); pressedOutside, la pulsación empezó fuera (C-14); view, 'main' o
+// 'confirm' (D-5); confirm, la acción que se pregunta ({ unir, targetKey, target, back });
+// opened, cuenta las aperturas para no pintar una respuesta en otro diálogo
+const tagDialogState = {
+  key: null, group: null, saving: false, pressedOutside: false, view: 'main', confirm: null, opened: 0,
+};
 // Ventana de ↺ en Guardados (022): el artículo como se vio al abrirla; saving, mientras guarda (C-10)
 const recoverState = { item: null, saving: false };
 // Revisión de ingredientes de comidas (009, plan § Algoritmo); requestId nunca vuelve a
@@ -3327,43 +3331,142 @@ function openTagDialog(key) {
   if (state.offline || tagDialogState.key) return;
   const group = tagGroups(recipeState.items).find((g) => g.key === key);
   if (!group) return;
-  Object.assign(tagDialogState, { key, group, saving: false, pressedOutside: false });
+  Object.assign(tagDialogState, {
+    key, group, saving: false, pressedOutside: false, view: 'main', confirm: null, opened: tagDialogState.opened + 1,
+  });
   $('tag-name').value = group.tag;
   showTagError('');
+  showTagView('main');
   refreshTagDialog();
   $('tag-dialog').showModal(); // I-12: encima de todo
   $('tag-name').focus();
+}
+
+// Vista principal o confirmación (D-5); los errores de la otra vista se quitan
+function showTagView(view) {
+  tagDialogState.view = view;
+  $('tag-main').hidden = view !== 'main';
+  $('tag-confirm').hidden = view !== 'confirm';
+  showTagError('');
 }
 
 // Título "etiqueta · n recetas" con las recetas cargadas ahora; si ya no la tiene ninguna, la
 // última forma vista con "0 recetas" y el diálogo sigue abierto (C-11). Como texto (I-9)
 function refreshTagDialog() {
   if (!tagDialogState.key) return;
-  const group = tagGroups(recipeState.items).find((g) => g.key === tagDialogState.key);
+  const groups = tagGroups(recipeState.items);
+  const group = groups.find((g) => g.key === tagDialogState.key);
   tagDialogState.group = group || { ...tagDialogState.group, count: 0 };
   $('tag-title').textContent = tagRowText(tagDialogState.group);
+  const confirm = tagDialogState.confirm;
+  if (confirm) {
+    // C-11: la otra, con su forma al día; si ya no está, la última vista (C-32 avisa al pulsar)
+    if (confirm.targetKey) confirm.target = groups.find((g) => g.key === confirm.targetKey) || confirm.target;
+    $('tag-confirm-text').textContent = tagMergeText(tagDialogState.group.tag, confirm.target.tag);
+  }
   refreshTagButtons();
 }
 
-// Botones del diálogo: desactivados mientras guarda (C-28)
+// Botones del diálogo: desactivados mientras guarda (C-28); las acciones, también sin red (C-35)
 function refreshTagButtons() {
-  $('tag-cancel').disabled = tagDialogState.saving;
+  const { saving } = tagDialogState;
+  $('tag-cancel').disabled = saving;
+  $('tag-confirm-cancel').disabled = saving;
+  $('tag-rename').disabled = saving || state.offline;
+  $('tag-confirm-ok').disabled = saving || state.offline;
 }
 
+// Error dentro de la vista donde se pulsó (C-19, C-36)
 function showTagError(text) {
-  $('tag-error').textContent = text;
-  $('tag-error').hidden = !text;
+  const id = tagDialogState.view === 'confirm' ? 'tag-confirm-error' : 'tag-error';
+  for (const box of ['tag-error', 'tag-confirm-error']) {
+    $(box).textContent = box === id ? text : '';
+    $(box).hidden = box !== id || !text;
+  }
 }
 
 // Cierra sin guardar; también al cerrarse la sesión (C-37)
 function closeTagDialog() {
-  Object.assign(tagDialogState, { key: null, group: null, saving: false, pressedOutside: false });
+  Object.assign(tagDialogState, { key: null, group: null, saving: false, pressedOutside: false, confirm: null });
   if ($('tag-dialog').open) $('tag-dialog').close();
 }
 
 // "Cancelar", Esc o pulsar fuera: cierra sin cambiar nada; mientras guarda, nada (C-14, D-6)
 function cancelTagDialog() {
   if (!tagDialogState.saving) closeTagDialog();
+}
+
+// Esc: en la confirmación, como su "Cancelar"; en la vista principal, cierra (D-6)
+function onTagDialogEscape(event) {
+  event.preventDefault();
+  if (tagDialogState.view === 'confirm') cancelTagConfirm();
+  else cancelTagDialog();
+}
+
+// "Cancelar" de la confirmación: vuelve a la vista de donde se vino, con lo escrito (C-21)
+function cancelTagConfirm() {
+  if (tagDialogState.saving) return;
+  const back = tagDialogState.confirm?.back || 'main';
+  tagDialogState.confirm = null;
+  showTagView(back);
+  if (back === 'main') $('tag-name').focus();
+}
+
+// Pregunta si se une con target (el grupo de la otra) antes de hacerlo (C-21, D-5)
+function askTagMerge(target, back) {
+  tagDialogState.confirm = { unir: true, targetKey: target.key, target, back };
+  $('tag-confirm-ok').textContent = 'Unir';
+  showTagView('confirm');
+  refreshTagDialog();
+  $('tag-confirm-cancel').focus();
+}
+
+// "Renombrar": según lo escrito, error, cerrar sin cambios, preguntar si se une o renombrar
+// (C-16 a C-21, tagRenameAction)
+function renameTag() {
+  if (tagDialogState.saving || state.offline) return;
+  const result = tagRenameAction(tagDialogState.group, $('tag-name').value, tagGroups(recipeState.items));
+  if (result.action === 'error') {
+    showTagError(result.error);
+    return $('tag-name').focus();
+  }
+  if (result.action === 'none') return closeTagDialog();
+  if (result.action === 'merge') return askTagMerge(result.target, 'main');
+  changeTag(result.name, false);
+}
+
+// "Unir" (o "Quitar", T6) de la confirmación
+function confirmTagChange() {
+  const confirm = tagDialogState.confirm;
+  if (confirm?.unir) changeTag(confirm.target.tag, true);
+}
+
+// Llama a cambiar_etiqueta con la forma que se ve (D-3): todo o nada, con los botones
+// desactivados mientras guarda (C-28). Bien → se cierra, aviso y recetas al día (C-29, C-41,
+// D-9); ya no existe → se cierra con el aviso (C-31, C-32); error o sin respuesta en 8 s →
+// el error en la vista y se puede reintentar (C-36, D-10)
+async function changeTag(newName, merge) {
+  if (tagDialogState.saving || state.offline) return;
+  const opened = tagDialogState.opened;
+  const from = tagDialogState.group.tag;
+  tagDialogState.saving = true;
+  showTagError('');
+  refreshTagButtons();
+  const result = await timedQuery(client.rpc('cambiar_etiqueta', { p_etiqueta: from, p_nueva: newName, p_unir: merge }));
+  if (!sessionActive || opened !== tagDialogState.opened || !tagDialogState.key) return; // I-13, D-6
+  tagDialogState.saving = false;
+  const outcome = result.error ? 'error' : tagChangeOutcome(result.data);
+  if (outcome === 'error') {
+    showTagError(result.error
+      ? translateError(result.error, reachable(result))
+      : translateError(new Error('Respuesta inesperada al cambiar la etiqueta'), true));
+    return refreshTagButtons();
+  }
+  closeTagDialog();
+  if (outcome === 'gone') showInfo(TAG_GONE_MESSAGE);
+  else showError(tagDoneText(from, result.data), 'action', 'confirmation');
+  await loadRecipes();
+  if (sessionActive) scheduleCopySave();
 }
 
 // Pulsación que empieza y acaba fuera del diálogo (C-14)
@@ -3374,7 +3477,17 @@ function onTagDialogClick(event) {
 
 function setupTagDialog() {
   $('tag-cancel').addEventListener('click', cancelTagDialog);
-  $('tag-dialog').addEventListener('cancel', (event) => { event.preventDefault(); cancelTagDialog(); });
+  $('tag-rename').addEventListener('click', renameTag);
+  // Intro en "Nombre" hace lo de "Renombrar"
+  $('tag-name').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      if (!$('tag-rename').disabled) renameTag();
+    }
+  });
+  $('tag-confirm-cancel').addEventListener('click', cancelTagConfirm);
+  $('tag-confirm-ok').addEventListener('click', confirmTagChange);
+  $('tag-dialog').addEventListener('cancel', onTagDialogEscape);
   $('tag-dialog').addEventListener('pointerdown', (event) => {
     tagDialogState.pressedOutside = isOutsideDialog($('tag-dialog'), event);
   });
