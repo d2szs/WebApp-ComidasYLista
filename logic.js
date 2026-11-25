@@ -2229,13 +2229,16 @@ function tagRowText(group) {
 }
 
 // Qué hace "Renombrar" con lo escrito: { action: 'error', error } si queda vacío (C-19);
-// 'none' si no cambia y la etiqueta tiene una sola forma (C-20); 'merge' con target (el grupo
-// de la otra) si es equivalente a otra en uso (C-21); si no, 'rename' con el nombre limpio y
-// de 30 caracteres como mucho (C-16 a C-18, C-20 con dos formas)
+// 'none' si no cambia y la etiqueta tiene una sola forma (C-20), o 'gone' con el aviso si
+// además ya no está en ninguna receta (C-31); 'merge' con target (el grupo de la otra) si es
+// equivalente a otra en uso (C-21); si no, 'rename' con el nombre limpio y de 30 caracteres
+// como mucho (C-16 a C-18, C-20 con dos formas)
 function tagRenameAction(group, typed, groups) {
   const name = cleanTag(typed);
   if (!name) return { action: 'error', error: TAG_NAME_ERROR };
-  if (name === group.tag && group.forms.length === 1) return { action: 'none' };
+  if (name === group.tag && group.forms.length === 1) {
+    return group.count === 0 ? { action: 'gone', message: TAG_GONE_MESSAGE } : { action: 'none' };
+  }
   const key = articleKey(name);
   const target = key === group.key ? null : groups.find((g) => g.key === key);
   return target ? { action: 'merge', target } : { action: 'rename', name };

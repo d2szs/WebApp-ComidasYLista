@@ -3489,6 +3489,10 @@ function renameTag() {
     return $('tag-name').focus();
   }
   if (result.action === 'none') return closeTagDialog();
+  if (result.action === 'gone') { // C-31: sin llamar a la base de datos
+    closeTagDialog();
+    return showInfo(result.message);
+  }
   if (result.action === 'merge') return askTagMerge(result.target, 'main');
   changeTag(result.name, false);
 }
