@@ -76,7 +76,7 @@ function initialRecipeState(requestId = 0) {
   };
 }
 function initialRecipeFilters(order = storedRecipeOrder(null)) {
-  return { text: '', tags: [], maxTime: null, order };
+  return { text: '', tags: [], tagsOpen: false, maxTime: null, order }; // 029 C-1, D-2
 }
 let recipeState = initialRecipeState();
 let currentUserId = null; // id del usuario de la sesión, para "Tus estrellas" (026 C-12, D-22)
@@ -1189,7 +1189,14 @@ function toggleRecipeTag(tag) {
   renderRecipes();
 }
 
-// Pastillas de las etiquetas usadas, en orden alfabético (C-8); el foco se queda en la pulsada
+// Pliega o despliega el filtro de etiquetas; se queda así hasta salir de Recetas (029 C-2, D-2)
+function toggleRecipeTagsOpen() {
+  recipeState.tagsOpen = !recipeState.tagsOpen;
+  renderRecipes();
+}
+
+// Pastillas de las etiquetas usadas, en orden alfabético (C-8): desplegado, todas; plegado,
+// solo las marcadas (029 C-2 a C-6). El foco se queda en la pulsada o, si sale, en el botón
 function renderRecipeTags() {
   const tags = usedTags(recipeState.items);
   const box = $('recipe-tags');
@@ -1197,7 +1204,15 @@ function renderRecipeTags() {
   box.replaceChildren();
   $('recipe-tags-row').hidden = tags.length === 0;
   const marked = new Set(recipeState.tags.map(articleKey));
-  for (const tag of tags) {
+  const open = recipeState.tagsOpen;
+  const shown = open ? tags : tags.filter((tag) => marked.has(articleKey(tag)));
+  const count = tags.filter((tag) => marked.has(articleKey(tag))).length;
+  const toggle = $('recipe-tags-toggle');
+  toggle.textContent = `Etiquetas${count ? ` (${count})` : ''} ${open ? '▴' : '▾'}`;
+  toggle.setAttribute('aria-expanded', String(open));
+  box.hidden = shown.length === 0;
+  if (focusedKey && !shown.some((tag) => articleKey(tag) === focusedKey)) toggle.focus();
+  for (const tag of shown) {
     const key = articleKey(tag);
     const chip = button('recipe-tag', tag, () => toggleRecipeTag(tag));
     chip.dataset.key = key;
@@ -4994,6 +5009,7 @@ function bindEvents() {
   }));
   $('saved-toggle').addEventListener('click', toggleSaved);
   $('recipe-search').addEventListener('input', onRecipeSearch); // 026 C-7
+  $('recipe-tags-toggle').addEventListener('click', toggleRecipeTagsOpen); // 029 C-2
   $('recipe-time').addEventListener('change', onRecipeTime); // C-9
   $('recipe-order').addEventListener('change', onRecipeOrder); // C-11, C-41
   $('add-recipe-button').addEventListener('click', () => openRecipeForm()); // C-17

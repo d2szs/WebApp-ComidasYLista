@@ -254,8 +254,9 @@
       <div id="recipe-filters" class="recipe-filters" hidden>
         <input type="text" id="recipe-search" maxlength="200" placeholder="Buscar por nombre o ingrediente" aria-label="Buscar por nombre o ingrediente" autocomplete="off" enterkeyhint="search">
         <div id="recipe-tags-row" class="recipe-filter-row">
-          <span id="recipe-tags-label" class="recipe-filter-label">Etiquetas:</span>
-          <div id="recipe-tags" class="recipe-tags" role="group" aria-labelledby="recipe-tags-label"></div>
+          <!-- 029 C-1 a C-6: plegado, solo las marcadas; desplegado, todas -->
+          <button type="button" id="recipe-tags-toggle" class="recipe-tags-toggle" aria-expanded="false" aria-controls="recipe-tags">Etiquetas ▾</button>
+          <div id="recipe-tags" class="recipe-tags" role="group" aria-label="Etiquetas"></div>
         </div>
         <label class="recipe-filter-row">
           <span class="recipe-filter-label">Tiempo:</span>
