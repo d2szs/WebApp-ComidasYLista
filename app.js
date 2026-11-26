@@ -4467,6 +4467,7 @@ function buildFormDish(container, { noLink = false } = {}) {
   } else {
     setupRecipeSuggestions(dish);
     dish.recipesButton.addEventListener('click', () => openRecipePicker(dish));
+    dish.persons.addEventListener('input', () => scaleDish(dish)); // 031 C-1, D-3
   }
   container.append(node);
   return dish;
@@ -4615,13 +4616,15 @@ async function chooseRecipe(dish, recipe) {
   return true;
 }
 
-function addIngredient(dish, data = {}) {
+// basePersons: las personas a las que corresponde la cantidad de data (031 Definiciones)
+function addIngredient(dish, data = {}, basePersons = null) {
   const row = $('ingredient-template').content.firstElementChild.cloneNode(true);
   const name = row.querySelector('.ingredient-name');
   name.value = flattenLineBreaks(data.nombre || '');
   const hasAmount = data.cantidad !== null && data.cantidad !== undefined;
   row.querySelector('.ingredient-quantity').value = hasAmount ? amountFieldText(data.cantidad) : ''; // 013 C-5
   row.originalQuantity = hasAmount ? data.cantidad : null; // 013 D-4
+  row.base = { amount: hasAmount ? Number(data.cantidad) : null, persons: basePersons }; // 031
   row.querySelector('.ingredient-unit').value = data.unidad || '';
   name.addEventListener('keydown', onNameKeydown);
   name.addEventListener('beforeinput', onNameBeforeInput);
@@ -4844,8 +4847,29 @@ function fillDish(dish, data) {
   dish.ingredients.querySelectorAll('.ingredient-name').forEach((name) => nameObserver.unobserve(name));
   dish.ingredients.replaceChildren();
   const ingredients = data?.ingredientes || [];
-  if (ingredients.length) ingredients.forEach((ingredient) => addIngredient(dish, ingredient));
+  const basePersons = savedPersons(data?.personas); // 031 C-9: la base es lo que se rellena
+  if (ingredients.length) ingredients.forEach((ingredient) => addIngredient(dish, ingredient, basePersons));
   else addIngredient(dish);
+}
+
+// Ajusta las cantidades del plato a las personas escritas, cada fila desde su base, solo con
+// la marca de una receta (aunque el nombre ya no sea equivalente, D-2). Con personas vacías o
+// no válidas, nada; si la base no tiene personas, las primeras válidas pasan a serlo
+// (031 C-1, C-2, C-5, C-6, C-8). El campo y su número guardado toman el redondeado (D-6)
+function scaleDish(dish) {
+  if (!dish.link) return;
+  const { personas } = personsFromField(dish.persons.value);
+  if (!personas) return;
+  for (const { row, quantity, unit } of readRows(dish)) {
+    if (!row.base.persons) {
+      row.base.persons = personas;
+      continue;
+    }
+    const amount = scaledAmount(row.base.amount, row.base.persons, personas, unit.value);
+    if (amount === null) continue;
+    quantity.value = amountFieldText(amount);
+    row.originalQuantity = amount;
+  }
 }
 
 // Línea de la marca bajo el nombre: la receta, o que se quitará al guardar (030 C-44, D-19)
