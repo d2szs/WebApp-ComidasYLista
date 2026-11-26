@@ -162,6 +162,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 }
 .alert-icon { flex: none; }
 #new-password-account { overflow-wrap: anywhere; }
+#confirm-text { overflow-wrap: anywhere; } /* 030 C-40: nombres largos sin espacios */
 
 /* ===== Barra superior (008 RF-1 a RF-4): fija arriba, el contenido empieza debajo ===== */
 #screen-app { padding-top: var(--top-bar-height); }
@@ -749,6 +750,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .picker-title { flex: 1; min-width: 0; margin: 0; font-size: var(--text-large); }
 .picker-body { padding: var(--space); }
 .picker-notice { margin: 0 0 var(--space); overflow-wrap: anywhere; }
+.picker-notice.info-message { color: var(--color-text); }
 .picker-body.recipe-open .recipe-browse { display: none; }
 .picker-body:not(.recipe-open) .recipe-detail { display: none; }
 .recipe-picker .recipe-back { display: inline-block; }

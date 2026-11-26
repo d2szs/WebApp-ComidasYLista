@@ -98,7 +98,7 @@ const recipeScreen = {
 };
 // Ventana "Recetas" (030 D-7): sus filtros, solo en memoria y vacíos al abrirla (C-12, C-13);
 // openId y listScroll, como en la pantalla; dish, el plato del que se abrió; notice, el aviso
-// de la ventana ({ kind: 'load', text }, D-8)
+// de la ventana ({ kind: 'load' o 'gone', text }, D-8)
 function initialPickerState(order = storedRecipeOrder(null)) {
   return { ...initialRecipeFilters(order), openId: null, listScroll: 0, dish: null, notice: null };
 }
@@ -112,9 +112,9 @@ const recipePicker = {
     tagsToggle: 'picker-tags-toggle', detail: 'picker-detail',
   },
   render: () => renderPicker(),
-  open: () => {}, // el detalle, "‹ Recetas" y "Elegir" llegan con la T9 (D-15)
-  back: () => {},
-  choose: () => {},
+  open: (id) => openPickerRecipe(id),
+  back: () => backToPickerList(),
+  choose: (recipe) => chooseFromPicker(recipe),
 };
 let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
@@ -897,7 +897,9 @@ function loadRecipesFromCopy() {
   recipeState.loaded = true;
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   pickerState.tags = keptTags(pickerState.tags, recipeState.items); // 030: igual en la ventana
+  const pickerGone = checkPickerGone(); // 030 C-35, D-18
   renderRecipes();
+  if (pickerGone) $('recipe-picker').scrollTop = pickerState.listScroll;
   refreshDishLinks(); // 030 D-19
   refreshOpenRecipeSuggestions(); // 030 C-5
   renderTagSettings(); // 028 C-35, C-42, D-8
@@ -1170,6 +1172,7 @@ async function loadRecipes() {
   recipeState.loaded = true;
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   pickerState.tags = keptTags(pickerState.tags, recipeState.items); // 030: igual en la ventana
+  const pickerGone = checkPickerGone(); // 030 C-35, D-18
   // C-30, D-19: la abierta ya no está (y no es un borrado propio): a la lista, con aviso
   const gone = recipeState.openId && recipeState.openId !== recipeState.deletingId
     && !recipeState.items.some((r) => r.id === recipeState.openId);
@@ -1178,6 +1181,7 @@ async function loadRecipes() {
     showInfo(RECIPE_GONE_MESSAGE); // 027 C-4
   }
   renderRecipes();
+  if (pickerGone) $('recipe-picker').scrollTop = pickerState.listScroll; // 030 C-35
   refreshDishLinks(); // 030 D-19
   refreshOpenRecipeSuggestions(); // 030 C-5
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
@@ -1321,6 +1325,46 @@ function renderPicker() {
   const notice = $('picker-notice');
   notice.hidden = !pickerState.notice;
   notice.textContent = pickerState.notice?.text || '';
+  notice.className = `picker-notice ${pickerState.notice?.kind === 'gone' ? 'info-message' : 'error-message'}`;
+}
+
+// Abre el detalle en lugar de la lista, también en el pc ancho (C-14); guarda la posición de la
+// lista (C-15, D-14) y quita el aviso de "ya no existe" (D-8)
+function openPickerRecipe(id) {
+  const dialog = $('recipe-picker');
+  if (!pickerState.openId) pickerState.listScroll = dialog.scrollTop;
+  pickerState.openId = id;
+  if (pickerState.notice?.kind === 'gone') pickerState.notice = null;
+  renderPicker();
+  dialog.scrollTop = 0;
+  $('picker-detail').querySelector('.recipe-back')?.focus({ preventScroll: true });
+}
+
+// "‹ Recetas": la lista con la misma búsqueda, filtros, orden y posición (C-15)
+function backToPickerList() {
+  const id = pickerState.openId;
+  pickerState.openId = null;
+  renderPicker();
+  $('recipe-picker').scrollTop = pickerState.listScroll;
+  $('picker-list').querySelector(`.recipe-card[data-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+}
+
+// "Elegir": copia la receta al plato y cierra la ventana (C-6); con algo más que el nombre,
+// antes pregunta y "Cancelar" vuelve a "Elegir" (C-7, D-11). Sin red, igual (C-38, D-16)
+async function chooseFromPicker(recipe) {
+  const dish = pickerState.dish;
+  if (!dish) return;
+  if (await chooseRecipe(dish, recipe)) return;
+  if (sessionActive && $('recipe-picker').open) $('picker-detail').querySelector('.picker-choose')?.focus();
+}
+
+// La receta abierta en la ventana ya no está en las cargadas: a la lista, con el aviso (C-35)
+function checkPickerGone() {
+  if (!$('recipe-picker').open || !pickerState.openId) return false;
+  if (recipeState.items.some((r) => r.id === pickerState.openId)) return false;
+  pickerState.openId = null;
+  pickerState.notice = { kind: 'gone', text: RECIPE_GONE_MESSAGE };
+  return true;
 }
 
 // Abre la ventana para un plato: búsqueda, etiquetas y tiempo vacíos, etiquetas plegadas y el
@@ -1431,6 +1475,7 @@ function renderRecipeDetail(view) {
   const screen = view.mode === 'screen';
   const box = viewNode(view, 'detail');
   const focusedStar = box.contains(document.activeElement) ? document.activeElement.dataset.stars : null;
+  const focusedButton = !screen && box.contains(document.activeElement) ? document.activeElement.className : null;
   box.replaceChildren();
   const recipe = openedRecipe(view);
   viewNode(view, 'root').classList.toggle('recipe-open', Boolean(recipe));
@@ -1471,9 +1516,10 @@ function renderRecipeDetail(view) {
     remove.disabled = state.offline;
     buttons.append(edit, remove);
   } else {
-    buttons.append(button('btn btn-primary', 'Elegir', () => view.choose(recipe))); // 030 C-14
+    buttons.append(button('btn btn-primary picker-choose', 'Elegir', () => view.choose(recipe))); // 030 C-14
   }
   box.append(buttons);
+  if (focusedButton) box.querySelector(`[class="${focusedButton}"]`)?.focus({ preventScroll: true }); // 030 C-34
 }
 
 // "Tus estrellas": cinco botones; tocar la que ya tengo las quita (C-15); solo las mías (C-16)
@@ -3350,6 +3396,7 @@ function onSlotChange() {
 }
 
 function onFormClosed() {
+  closeRecipePicker(); // 030: la ventana no sigue abierta sin su formulario
   formState.open = false;
   stopRefresh();
   announceForm();
@@ -4495,6 +4542,10 @@ async function chooseRecipe(dish, recipe) {
     const replace = await askConfirm(replaceDishText(recipe.nombre), 'Sustituir');
     if (!sessionActive || !$('meal-dialog').open) return false; // I-13 (D-11): nada
     if (!replace) return false;
+  }
+  if ($('recipe-picker').open) { // C-6: el foco va a "Personas", no al botón "Recetas"
+    pickerState.dish = null;
+    closeRecipePicker();
   }
   const current = recipeState.items.find((item) => item.id === recipe.id) || recipe;
   fillDish(dish, { ...dishFromRecipe(current), receta_id: current.id }); // D-2: link con su nombre
