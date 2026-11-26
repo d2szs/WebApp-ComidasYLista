@@ -1978,6 +1978,41 @@ function userLabel(profile) {
   return (profile && (profile.nombre_corto || profile.inicial)) || '?';
 }
 
+// ===== Recetas en las comidas (030-recetas-comidas) =====
+
+// Hasta 5 recetas cuyo nombre o algún ingrediente coincide con lo escrito, por estrellas (sin
+// puntuar al final; a igualdad, por nombre), sin la enlazada al plato; vacío o espacios, [] (C-1 a C-3, D-13)
+function recipeSuggestions(recipes, typed, linkedId) {
+  if (searchKey(typed) === '') return [];
+  const found = filterRecipes(recipes, { text: typed }).filter((item) => item.id !== linkedId);
+  return sortRecipes(found, 'stars').slice(0, MAX_SUGGESTIONS);
+}
+
+// Plato copiado de una receta: nombre, personas, ingredientes (nombre, cantidad y unidad, en su
+// orden), preparación como "Receta" y referencia; lo que falta, vacío (C-6, D-12)
+function dishFromRecipe(recipe) {
+  const text = (value) => (typeof value === 'string' ? value : '');
+  return {
+    nombre: text(recipe.nombre), personas: savedPersons(recipe.personas),
+    ingredientes: dishIngredients(recipe).map((item) => ({
+      nombre: text(item.nombre), cantidad: item.cantidad ?? null, unidad: item.unidad ?? null,
+    })),
+    receta: text(recipe.preparacion), referencia: text(recipe.referencia),
+  };
+}
+
+// El plato en bruto tiene algo más que el nombre: personas, algún ingrediente escrito
+// (nombre, cantidad o unidad), receta o referencia (C-7)
+function dishHasMoreThanName(rawDish) {
+  return Boolean((rawDish.persons || '').trim() || rawDish.recipe.trim() || rawDish.reference.trim())
+    || rawDish.rows.some((row) => !isIngredientRowEmpty(row));
+}
+
+// Pregunta antes de copiar una receta sobre un plato con algo más que el nombre (C-7, D-11)
+function replaceDishText(name) {
+  return `¿Sustituir el plato por la receta «${name}»? Se perderá lo que has escrito en él.`;
+}
+
 // ----- Formulario, "Guardar como receta", buscador, copia y errores (T4) -----
 
 const MAX_TAG_LENGTH = 30; // caracteres de una etiqueta (C-42; etiquetas_validas)
@@ -2335,5 +2370,6 @@ if (typeof module !== 'undefined') {
     NOTICE_TYPES, noticeDuration, timerMayHide,
     TAGS_EMPTY_TEXT, TAG_NAME_ERROR, TAG_GONE_MESSAGE, tagGroups, recipeCountText, tagRowText,
     tagRenameAction, mergeTargets, tagMergeText, tagDeleteText, tagChangeOutcome, tagDoneText,
+    recipeSuggestions, dishFromRecipe, dishHasMoreThanName, replaceDishText,
   };
 }
