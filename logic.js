@@ -396,7 +396,11 @@ function validateDish(rawDish, index, nameMessage) {
   if (reference && !safeLink(reference)) fail(REFERENCE_ERROR, 'reference');
 
   if (error) return { error, invalid };
-  return { dish: { nombre: dishName, personas: persons.personas, ingredientes: ingredients, receta: rawDish.recipe.trim(), referencia: reference } };
+  const dish = { nombre: dishName, personas: persons.personas, ingredientes: ingredients, receta: rawDish.recipe.trim(), referencia: reference };
+  // La marca, solo si el nombre sigue siendo equivalente al de la marca (030 C-18, D-1, D-2)
+  const recipeId = keptRecipeLink(rawDish.name, rawDish.link);
+  if (recipeId !== null) dish.receta_id = recipeId;
+  return { dish };
 }
 
 // Valida el formulario en bruto { date, type, dishes }: { data } listo para guardar, o { error, invalid }.
@@ -2008,6 +2012,37 @@ function dishHasMoreThanName(rawDish) {
     || rawDish.rows.some((row) => !isIngredientRowEmpty(row));
 }
 
+// Id de la marca del plato (link = { id, name }) si su nombre sigue siendo equivalente al de
+// la marca; si no, o sin marca, null (C-18, C-19, D-2)
+function keptRecipeLink(name, link) {
+  if (!link) return null;
+  return articleKey(name) === articleKey(link.name) ? link.id : null;
+}
+
+// Línea bajo el nombre de un plato con marca: el nombre actual de la receta (o, si no está,
+// el de la marca), el aviso de que dejará de estar enlazado o, sin marca, null (C-44, D-19)
+function recipeLinkText(name, link, recipes) {
+  if (!link) return null;
+  if (keptRecipeLink(name, link) === null) return 'Al guardar dejará de estar enlazado a la receta.';
+  const current = recipes.find((item) => item.id === link.id);
+  return 'Receta de la biblioteca: ' + (current ? current.nombre : link.name);
+}
+
+// Platos leídos con la marca recetaId en el plato index, o null si ese plato ya no existe o
+// su nombre no es equivalente al de cuando se pulsó "Guardar como receta" (C-29, C-30, D-4)
+function linkedDishes(platos, index, name, recetaId) {
+  if (!Array.isArray(platos)) return null;
+  const dish = platos[index];
+  if (!isObject(dish) || typeof dish.nombre !== 'string' || articleKey(dish.nombre) !== articleKey(name)) return null;
+  return platos.map((item, i) => (i === index ? { ...item, receta_id: recetaId } : item));
+}
+
+// Receta cargada de la marca del plato, o null sin marca o con la receta borrada (C-24, D-6)
+function linkedRecipe(dish, recipes) {
+  if (!isObject(dish) || typeof dish.receta_id !== 'string') return null;
+  return recipes.find((item) => item.id === dish.receta_id) || null;
+}
+
 // Pregunta antes de copiar una receta sobre un plato con algo más que el nombre (C-7, D-11)
 function replaceDishText(name) {
   return `¿Sustituir el plato por la receta «${name}»? Se perderá lo que has escrito en él.`;
@@ -2371,5 +2406,6 @@ if (typeof module !== 'undefined') {
     TAGS_EMPTY_TEXT, TAG_NAME_ERROR, TAG_GONE_MESSAGE, tagGroups, recipeCountText, tagRowText,
     tagRenameAction, mergeTargets, tagMergeText, tagDeleteText, tagChangeOutcome, tagDoneText,
     recipeSuggestions, dishFromRecipe, dishHasMoreThanName, replaceDishText,
+    keptRecipeLink, recipeLinkText, linkedDishes, linkedRecipe,
   };
 }
