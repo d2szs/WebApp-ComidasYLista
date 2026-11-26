@@ -376,6 +376,51 @@
     </form>
   </dialog>
 
+  <!-- Ventana "Recetas" del formulario de comida (030 C-11 a C-17, D-7, D-14): encima del
+       formulario; a 360 px, a toda la pantalla; desde 600 px, una columna. Lista, filtros y
+       detalle, como en la pantalla Recetas pero con su propio estado -->
+  <dialog id="recipe-picker" class="recipe-picker" aria-labelledby="picker-title">
+    <div class="picker-head">
+      <h2 id="picker-title" class="picker-title">Recetas</h2>
+      <button type="button" id="picker-close" class="search-close" aria-label="Cerrar la ventana Recetas">✕</button>
+    </div>
+    <div id="picker-body" class="picker-body">
+      <!-- D-8: avisos de la ventana (carga fallida, C-45; receta que ya no existe, C-35) -->
+      <p id="picker-notice" class="error-message picker-notice" role="status" hidden></p>
+      <div class="recipe-browse">
+        <div id="picker-filters" class="recipe-filters" hidden>
+          <input type="text" id="picker-search" maxlength="200" placeholder="Buscar por nombre o ingrediente" aria-label="Buscar por nombre o ingrediente" autocomplete="off" enterkeyhint="search">
+          <div id="picker-tags-row" class="recipe-filter-row">
+            <button type="button" id="picker-tags-toggle" class="recipe-tags-toggle" aria-expanded="false" aria-controls="picker-tags">Etiquetas ▾</button>
+            <div id="picker-tags" class="recipe-tags" role="group" aria-label="Etiquetas"></div>
+          </div>
+          <label class="recipe-filter-row">
+            <span class="recipe-filter-label">Tiempo:</span>
+            <select id="picker-time" class="recipe-select">
+              <option value="">Cualquiera</option>
+              <option value="15">Hasta 15 min</option>
+              <option value="30">Hasta 30 min</option>
+              <option value="60">Hasta 60 min</option>
+            </select>
+          </label>
+          <label class="recipe-filter-row">
+            <span class="recipe-filter-label">Ordenar:</span>
+            <select id="picker-order" class="recipe-select">
+              <option value="stars">Estrellas</option>
+              <option value="name">Nombre</option>
+              <option value="recent">Recientes</option>
+              <option value="time">Tiempo</option>
+            </select>
+          </label>
+        </div>
+        <p id="picker-loading" class="list-loading">Cargando…</p>
+        <p id="picker-empty" class="list-empty" hidden></p>
+        <ul id="picker-list" class="recipe-list"></ul>
+      </div>
+      <section id="picker-detail" class="recipe-detail" aria-label="Detalle de la receta"></section>
+    </div>
+  </dialog>
+
   <!-- Formulario de artículo (007 RF-14, RF-27); "Borrar" solo en "Editar artículo" (RF-43) -->
   <dialog id="article-dialog" class="dialog">
     <form id="article-form" novalidate>
@@ -558,6 +603,8 @@
         <span class="dish-name-label">Nombre de receta</span>
         <div class="dish-name-row">
           <input type="text" class="dish-name" maxlength="200" autocomplete="off">
+          <!-- Abre la ventana "Recetas" (030 C-11); oculto hasta poder elegir (D-15) -->
+          <button type="button" class="btn dish-recipes-button" hidden>Recetas</button>
         </div>
         <!-- Sugerencias de receta (030 C-1 a C-5, D-9); el formulario de receta no las usa (D-10) -->
         <ul class="suggestions recipe-suggestions" role="listbox" aria-label="Sugerencias de receta" hidden></ul>

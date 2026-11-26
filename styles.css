@@ -714,6 +714,55 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
     overflow-y: auto;
   }
 }
+/* ===== Ventana "Recetas" del formulario de comida (030 C-11, C-40, D-14): a menos de 600 px,
+   a toda la pantalla; desde 600 px, una columna del ancho de los demás diálogos. Se desplaza
+   por dentro; el detalle siempre sustituye a la lista, también en el pc ancho (C-14) ===== */
+.recipe-picker {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.recipe-picker::backdrop { background: var(--color-bg); }
+.picker-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--top-bar-height);
+  padding: 0.35rem 0.5rem 0.35rem var(--space);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+.picker-title { flex: 1; min-width: 0; margin: 0; font-size: var(--text-large); }
+.picker-body { padding: var(--space); }
+.picker-notice { margin: 0 0 var(--space); overflow-wrap: anywhere; }
+.picker-body.recipe-open .recipe-browse { display: none; }
+.picker-body:not(.recipe-open) .recipe-detail { display: none; }
+.recipe-picker .recipe-back { display: inline-block; }
+.recipe-picker .recipe-detail { position: static; max-height: none; overflow: visible; }
+@media (min-width: 600px) {
+  .recipe-picker {
+    width: min(600px, calc(100% - 1rem));
+    height: calc(100dvh - 2rem);
+    margin: auto;
+    border-radius: var(--radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+  .recipe-picker::backdrop { background: rgba(0, 0, 0, 0.4); }
+}
 .ingredients-button { width: 100%; margin-top: 0.5rem; } /* 009 RF-1 */
 .list-section { margin-top: calc(var(--space) * 1.25); }
 .list-title { margin: 0 0 0.4rem; font-size: var(--text-large); }
