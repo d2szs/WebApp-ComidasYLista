@@ -4625,6 +4625,10 @@ function addIngredient(dish, data = {}, basePersons = null) {
   row.querySelector('.ingredient-quantity').value = hasAmount ? amountFieldText(data.cantidad) : ''; // 013 C-5
   row.originalQuantity = hasAmount ? data.cantidad : null; // 013 D-4
   row.base = { amount: hasAmount ? Number(data.cantidad) : null, persons: basePersons }; // 031
+  if (!dish.noLink) { // 031 C-7, D-5: un retoque a mano pasa a ser la base de la fila
+    row.querySelector('.ingredient-quantity').addEventListener('input', () => rebaseRow(dish, row));
+    row.querySelector('.ingredient-unit').addEventListener('change', () => rebaseRow(dish, row));
+  }
   row.querySelector('.ingredient-unit').value = data.unidad || '';
   name.addEventListener('keydown', onNameKeydown);
   name.addEventListener('beforeinput', onNameBeforeInput);
@@ -4870,6 +4874,16 @@ function scaleDish(dish) {
     quantity.value = amountFieldText(amount);
     row.originalQuantity = amount;
   }
+}
+
+// La base de una fila pasa a ser lo escrito con las personas de ese momento (sin personas
+// válidas, ninguna: las primeras válidas lo serán). Una cantidad que no se lee no cambia (031 C-7)
+function rebaseRow(dish, row) {
+  const quantity = row.querySelector('.ingredient-quantity').value;
+  row.base = {
+    amount: amountFromField(quantity, row.originalQuantity ?? null),
+    persons: personsFromField(dish.persons.value).personas ?? null,
+  };
 }
 
 // Línea de la marca bajo el nombre: la receta, o que se quitará al guardar (030 C-44, D-19)
