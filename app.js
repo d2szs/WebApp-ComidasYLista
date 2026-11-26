@@ -4210,6 +4210,7 @@ function buildDishDetail(dish, title) {
 // ===== Confirmación =====
 function askConfirm(text, acceptText = 'Aceptar') {
   const dialog = $('confirm-dialog');
+  if (dialog.open) return Promise.resolve(false); // 030 D-17: una sola a la vez
   $('confirm-text').textContent = text;
   $('confirm-yes').textContent = acceptText;
   dialog.returnValue = '';
@@ -4366,14 +4367,27 @@ function closeRecipeSuggestions(dish) {
   dish.name.removeAttribute('aria-activedescendant');
 }
 
-// Elegir: por ahora solo pone el nombre de la receta y el cursor va a "Personas"; no guarda
-// nada (D-15: la copia de la receta y su marca llegan en T7)
-function pickRecipeSuggestion(dish, recipe) {
-  dish.name.value = recipe.nombre;
+// Elegir una sugerencia: copia la receta al plato (030 C-6 a C-10); "Cancelar" vuelve al nombre
+async function pickRecipeSuggestion(dish, recipe) {
   dish.typedName = false;
   closeRecipeSuggestions(dish);
-  refreshDishLink(dish);
-  dish.persons.focus();
+  if (!(await chooseRecipe(dish, recipe))) dish.name.focus();
+}
+
+// Copia la receta al plato con su marca (la nueva sustituye a la que hubiera, C-9, C-10) y el
+// cursor va a "Personas". Con algo más que el nombre, antes pregunta (C-7, D-11). Copia la
+// receta cargada en ese momento (C-8); si ya no está, la que se tocó. No guarda nada.
+// Devuelve si se copió; false al cancelar o si el formulario o la sesión ya no siguen
+async function chooseRecipe(dish, recipe) {
+  if (dishHasMoreThanName(readDish(dish))) {
+    const replace = await askConfirm(replaceDishText(recipe.nombre), 'Sustituir');
+    if (!sessionActive || !$('meal-dialog').open) return false; // I-13 (D-11): nada
+    if (!replace) return false;
+  }
+  const current = recipeState.items.find((item) => item.id === recipe.id) || recipe;
+  fillDish(dish, { ...dishFromRecipe(current), receta_id: current.id }); // D-2: link con su nombre
+  dish.persons.focus(); // C-6 (D-12)
+  return true;
 }
 
 function addIngredient(dish, data = {}) {
@@ -4744,6 +4758,9 @@ async function checkExisting() {
     return;
   }
 
+  // 030 D-17: con una confirmación (o la ventana "Recetas") abierta, espera a que se cierre
+  await modalsClosed();
+  if (!sessionActive || searchId !== formState.searchId || formState.id) return;
   const hasData = dishHasData(readDish(formState.dish1)) || dishHasData(readDish(formState.dish2));
   if (hasData) {
     const load = await askConfirm(duplicateMessage(formState.type, 'confirm'), 'Editar la existente');
@@ -4757,6 +4774,14 @@ async function checkExisting() {
   }
   fillForm(existing);
   showFormNotice(duplicateMessage(existing.tipo, 'editing'));
+}
+
+// Espera a que no quede abierta ninguna confirmación ni la ventana "Recetas" (030 D-17)
+async function modalsClosed() {
+  let open;
+  while ((open = [$('confirm-dialog'), $('recipe-picker')].find((dialog) => dialog?.open))) {
+    await new Promise((resolve) => open.addEventListener('close', resolve, { once: true }));
+  }
 }
 
 // ===== Formulario: validación y guardado =====
