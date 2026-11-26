@@ -217,6 +217,7 @@ function showAppScreen(name) {
     renderShopping();
   }
   if (name === 'recipes') renderRecipes();
+  if (name === 'meals') refreshMealLinks(); // 030 D-6: cargas de recetas hechas en otra pantalla
   if (name === 'settings') renderSettings();
   else rememberScreen(name); // 007 RF-46: la "pantalla abierta" (barra, carga o entrada)
 }
@@ -901,6 +902,7 @@ function loadRecipesFromCopy() {
   renderRecipes();
   if (pickerGone) $('recipe-picker').scrollTop = pickerState.listScroll;
   refreshDishLinks(); // 030 D-19
+  refreshMealLinks(); // 030 D-6
   refreshOpenRecipeSuggestions(); // 030 C-5
   renderTagSettings(); // 028 C-35, C-42, D-8
 }
@@ -1183,6 +1185,7 @@ async function loadRecipes() {
   renderRecipes();
   if (pickerGone) $('recipe-picker').scrollTop = pickerState.listScroll; // 030 C-35
   refreshDishLinks(); // 030 D-19
+  refreshMealLinks(); // 030 D-6
   refreshOpenRecipeSuggestions(); // 030 C-5
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
   refreshRecipeTagSuggestions(); // C-20: con las etiquetas usadas ahora
@@ -4164,6 +4167,7 @@ function render() {
   }
   renderPending = false;
   paintedMeals = state.meals; // 025: "como se veía" al levantar
+  paintedLinks = dishLinksKey(); // 030 D-6
   updateHeader();
   const { from, to } = currentRange();
   $('copy-gap').hidden = !(state.copyMode && hasCopyGap(from, to, copyState.copy)); // 011 RF-15
@@ -4353,11 +4357,46 @@ function buildDishDetail(dish, title) {
     a.rel = 'noopener noreferrer';
     box.append(el('p', 'detail-subtitle', 'Referencia'), a);
   }
-  // 026 C-26, D-13: uno por plato, bajo sus datos; desactivado sin red (C-34, I-6)
+  // 030 C-24, D-6: con la receta de su marca cargada, "Ver receta" (también sin red, C-37);
+  // si no, 026 C-26, D-13: "Guardar como receta", desactivado sin red (C-34, I-6)
+  if (linkedRecipe(dish, recipeState.items)) {
+    box.append(button('btn dish-save-recipe', 'Ver receta', () => viewDishRecipe(dish)));
+    return box;
+  }
   const save = button('btn dish-save-recipe', 'Guardar como receta', () => openRecipeForm(null, dish));
   save.disabled = state.offline;
   box.append(save);
   return box;
+}
+
+// "Ver receta" (C-25, D-6): cierra el detalle de la comida, va a Recetas sin búsqueda ni
+// filtros y abre la receta; si ya no está, la lista con el aviso (C-26)
+function viewDishRecipe(dish) {
+  const recipe = linkedRecipe(dish, recipeState.items);
+  state.openType = null;
+  render();
+  showAppScreen('recipes');
+  if (recipe) return openRecipe(recipe.id);
+  window.scrollTo(0, 0);
+  showInfo(RECIPE_GONE_MESSAGE);
+}
+
+// Platos de las comidas cargadas con la receta de su marca cargada (D-6), para repintar solo
+// cuando cambia
+function dishLinksKey() {
+  const keys = [];
+  for (const meal of state.meals.values()) {
+    meal.platos?.forEach((dish, index) => {
+      if (linkedRecipe(dish, recipeState.items)) keys.push(`${meal.id}|${index}`);
+    });
+  }
+  return keys.join(',');
+}
+
+// Tras cada carga de recetas: si cambia algún "Ver receta" / "Guardar como receta", se repinta
+// el calendario (D-6; render respeta el arrastre); en otra pantalla, al volver a Comidas
+function refreshMealLinks() {
+  if (currentScreen === 'meals' && dishLinksKey() !== paintedLinks) render();
 }
 
 // ===== Confirmación =====
@@ -5053,6 +5092,7 @@ let renderPending = false;
 let swallowClick = false;     // el clic que sigue a un levantamiento no abre nada (C-16, D-8)
 let cancelledPointerId = null; // puntero de un arrastre cancelado aún sin soltar (C-16, C-30)
 let paintedMeals = new Map(); // comidas de la semana pintada ("como se veía")
+let paintedLinks = ''; // platos con "Ver receta" en el calendario pintado (030 D-6)
 const TAP_CLICK_WAIT_MS = 500; // tras un toque corto, hasta aquí se espera su clic
 
 function isRenderHeld() {
