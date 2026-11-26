@@ -137,6 +137,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 .field { display: block; margin-bottom: var(--space); }
 .field > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
+.dish-recipe-link { margin: -0.4rem 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); overflow-wrap: anywhere; } /* 030 C-44 */
 
 .error-message { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
 .info-message { background: var(--color-info-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }

@@ -876,6 +876,7 @@ function loadRecipesFromCopy() {
   recipeState.loaded = true;
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   renderRecipes();
+  refreshDishLinks(); // 030 D-19
   renderTagSettings(); // 028 C-35, C-42, D-8
 }
 
@@ -1150,6 +1151,7 @@ async function loadRecipes() {
     showInfo(RECIPE_GONE_MESSAGE); // 027 C-4
   }
   renderRecipes();
+  refreshDishLinks(); // 030 D-19
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
   refreshRecipeTagSuggestions(); // C-20: con las etiquetas usadas ahora
   renderTagSettings(); // 028 C-11, D-8
@@ -1443,6 +1445,7 @@ const recipeForm = {
 function buildRecipeDish() {
   const dish = buildFormDish($('recipe-form-dish'));
   dish.node.classList.add('recipe-dish');
+  dish.noLink = true; // 030 D-10: la receta no lleva marca
   dish.nameLabel.textContent = 'Nombre de receta *';
   dish.recipe.previousElementSibling.textContent = 'Preparación';
   dish.persons.closest('.field').after($('recipe-form-time-field'));
@@ -4224,12 +4227,15 @@ function buildFormDish(container) {
     title: find('.dish-title'),
     nameLabel: find('.dish-name-label'),
     name: find('.dish-name'),
+    linkLine: find('.dish-recipe-link'),
+    link: null, // la marca del plato, { id, name } (030 D-2)
     persons: find('.dish-persons'), // 018 D-11: markInvalid lo busca como 'persons'
     ingredients: find('.ingredients'),
     recipe: find('.dish-recipe'),
     reference: find('.dish-reference'),
   };
   find('.dish-add-ingredient').addEventListener('click', () => addIngredient(dish));
+  dish.name.addEventListener('input', () => refreshDishLink(dish)); // 030 C-44
   container.append(node);
   return dish;
 }
@@ -4451,6 +4457,10 @@ function pickIngredientSuggestion(row, text) {
 
 function fillDish(dish, data) {
   dish.name.value = data?.nombre || '';
+  // La marca guardada, con el nombre guardado como nombre de la marca (030 C-21, D-2); sin
+  // marca o en el formulario de receta, ninguna (C-20)
+  dish.link = !dish.noLink && data?.receta_id ? { id: data.receta_id, name: data.nombre || '' } : null;
+  refreshDishLink(dish);
   dish.persons.value = String(savedPersons(data?.personas) ?? ''); // 018 C-6, C-11
   dish.recipe.value = data?.receta || '';
   dish.reference.value = data?.referencia || '';
@@ -4459,6 +4469,19 @@ function fillDish(dish, data) {
   const ingredients = data?.ingredientes || [];
   if (ingredients.length) ingredients.forEach((ingredient) => addIngredient(dish, ingredient));
   else addIngredient(dish);
+}
+
+// Línea de la marca bajo el nombre: la receta, o que se quitará al guardar (030 C-44, D-19)
+function refreshDishLink(dish) {
+  const text = recipeLinkText(dish.name.value, dish.link, recipeState.items);
+  dish.linkLine.textContent = text || '';
+  dish.linkLine.hidden = !text;
+}
+
+// Con cada carga de recetas, el nombre actual de la receta en los platos del formulario (D-19)
+function refreshDishLinks() {
+  if (formState.dish1) refreshDishLink(formState.dish1);
+  if (formState.dish2) refreshDishLink(formState.dish2);
 }
 
 function readRows(dish) {
@@ -4480,6 +4503,7 @@ function readRow(row) {
 function readDish(dish) {
   return {
     name: dish.name.value,
+    link: dish.link, // 030 D-2
     persons: dish.persons.value,
     recipe: dish.recipe.value,
     reference: dish.reference.value,
