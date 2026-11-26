@@ -877,6 +877,7 @@ function loadRecipesFromCopy() {
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   renderRecipes();
   refreshDishLinks(); // 030 D-19
+  refreshOpenRecipeSuggestions(); // 030 C-5
   renderTagSettings(); // 028 C-35, C-42, D-8
 }
 
@@ -1152,6 +1153,7 @@ async function loadRecipes() {
   }
   renderRecipes();
   refreshDishLinks(); // 030 D-19
+  refreshOpenRecipeSuggestions(); // 030 C-5
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
   refreshRecipeTagSuggestions(); // C-20: con las etiquetas usadas ahora
   renderTagSettings(); // 028 C-11, D-8
@@ -1443,9 +1445,8 @@ const recipeForm = {
 // El plato de dish-template, sin leyenda, con "Tiempo (min)" tras "Personas" y "Notas o
 // variaciones" tras "Preparación" (spec § Cómo se verá; D-18)
 function buildRecipeDish() {
-  const dish = buildFormDish($('recipe-form-dish'));
+  const dish = buildFormDish($('recipe-form-dish'), { noLink: true }); // 030 D-10: sin marca
   dish.node.classList.add('recipe-dish');
-  dish.noLink = true; // 030 D-10: la receta no lleva marca
   dish.nameLabel.textContent = 'Nombre de receta *';
   dish.recipe.previousElementSibling.textContent = 'Preparación';
   dish.persons.closest('.field').after($('recipe-form-time-field'));
@@ -4219,7 +4220,8 @@ function askConfirm(text, acceptText = 'Aceptar') {
 }
 
 // ===== Formulario: platos e ingredientes =====
-function buildFormDish(container) {
+// noLink: el plato del formulario de receta, sin marca ni sugerencias de receta (030 D-10)
+function buildFormDish(container, { noLink = false } = {}) {
   const node = $('dish-template').content.firstElementChild.cloneNode(true);
   const find = (selector) => node.querySelector(selector);
   const dish = {
@@ -4229,15 +4231,149 @@ function buildFormDish(container) {
     name: find('.dish-name'),
     linkLine: find('.dish-recipe-link'),
     link: null, // la marca del plato, { id, name } (030 D-2)
+    noLink,
+    recipeList: find('.recipe-suggestions'),
+    found: [], // las recetas sugeridas, en el orden de la lista (030 D-9)
+    typedName: false, // se ha escrito o borrado en el nombre: las cargas recalculan (C-5)
     persons: find('.dish-persons'), // 018 D-11: markInvalid lo busca como 'persons'
     ingredients: find('.ingredients'),
     recipe: find('.dish-recipe'),
     reference: find('.dish-reference'),
   };
   find('.dish-add-ingredient').addEventListener('click', () => addIngredient(dish));
-  dish.name.addEventListener('input', () => refreshDishLink(dish)); // 030 C-44
+  const label = find('.dish-name-label');
+  label.id = `dish-name-label-${++dishCount}`;
+  dish.name.setAttribute('aria-labelledby', label.id); // D-10: el título, sin lo de la fila
+  if (noLink) dish.recipeList.remove();
+  else setupRecipeSuggestions(dish);
   container.append(node);
   return dish;
+}
+
+// ===== Sugerencias de receta en el nombre del plato (030 C-1 a C-5, D-9) =====
+// Como las de ingrediente: el foco no sale del nombre; mousedown no lo quita y la elección
+// va en click
+let dishCount = 0;
+
+function setupRecipeSuggestions(dish) {
+  const { name, recipeList: list } = dish;
+  list.id = `recipe-suggestions-${dishCount}`;
+  name.setAttribute('role', 'combobox');
+  name.setAttribute('aria-autocomplete', 'list');
+  name.setAttribute('aria-expanded', 'false');
+  name.setAttribute('aria-controls', list.id);
+  name.addEventListener('input', () => {
+    refreshDishLink(dish); // C-44
+    dish.typedName = true; // desde aquí, las cargas recalculan su lista (C-5)
+    renderRecipeSuggestions(dish); // C-1
+  });
+  name.addEventListener('keydown', (event) => onDishNameKeydown(dish, event));
+  name.addEventListener('blur', () => { // C-4: al salir se cierra y se olvida lo escrito
+    dish.typedName = false;
+    closeRecipeSuggestions(dish);
+  });
+  list.addEventListener('mousedown', (event) => event.preventDefault());
+  list.addEventListener('click', (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option) pickRecipeSuggestion(dish, dish.found[recipeOptions(dish).indexOf(option)]);
+  });
+}
+
+// Pinta la lista del plato; sin sugerencias, oculta y sin hueco (C-1 a C-3). Como texto (I-9)
+function renderRecipeSuggestions(dish) {
+  const { name, recipeList: list } = dish;
+  const linkedId = keptRecipeLink(name.value, dish.link); // C-3 (D-13)
+  dish.found = recipeSuggestions(recipeState.items, name.value, linkedId);
+  const grew = dish.found.length > 0 && (list.hidden || dish.found.length !== list.children.length);
+  list.replaceChildren(...dish.found.map((recipe, index) => {
+    const option = el('li', 'suggestion recipe-suggestion');
+    option.id = `${list.id}-${index}`;
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', 'false');
+    const { name: recipeName, info } = recipeLine(recipe);
+    option.append(el('span', 'recipe-suggestion-name', recipeName),
+      el('span', 'recipe-suggestion-stars', info.split(' · ')[0])); // solo las estrellas (D-9)
+    return option;
+  }));
+  list.hidden = dish.found.length === 0;
+  name.setAttribute('aria-expanded', String(dish.found.length > 0));
+  name.removeAttribute('aria-activedescendant'); // lista nueva: ninguna marcada
+  if (grew) list.scrollIntoView({ block: 'nearest' }); // C-4: lo justo; si se ve, nada
+}
+
+function recipeOptions(dish) {
+  return [...dish.recipeList.querySelectorAll('[role="option"]')];
+}
+
+// Marca la opción index (-1: ninguna) y la deja a la vista (C-4)
+function setRecipeMark(dish, index) {
+  const options = recipeOptions(dish);
+  options.forEach((option, i) => option.setAttribute('aria-selected', String(i === index)));
+  if (index < 0) return dish.name.removeAttribute('aria-activedescendant');
+  dish.name.setAttribute('aria-activedescendant', options[index].id);
+  options[index].scrollIntoView({ block: 'nearest' });
+}
+
+// Con la lista visible, ↑/↓ marcan, Intro con marcada elige y Esc solo cierra la lista; Intro
+// sin marcada sigue al envío del formulario. Con un teclado de composición, nada nuestro (C-4)
+function onDishNameKeydown(dish, event) {
+  if (event.isComposing || dish.recipeList.hidden) return;
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const options = recipeOptions(dish);
+    setRecipeMark(dish, moveMark(markedIndex(options), options.length, event.key === 'ArrowDown' ? 'down' : 'up'));
+  } else if (event.key === 'Escape') {
+    event.preventDefault(); // anula el cierre del diálogo: la siguiente Esc sí lo cierra
+    dish.typedName = false; // cerrada a propósito: una carga no la vuelve a abrir
+    closeRecipeSuggestions(dish);
+  } else if (event.key === 'Enter' && pickMarkedRecipe(dish)) {
+    event.preventDefault();
+  }
+}
+
+// Elige la sugerencia marcada, si la hay; también desde saveMeal, para los teclados que no
+// avisan de la tecla y envían el formulario (D-9, manual 1)
+function pickMarkedRecipe(dish) {
+  const marked = markedIndex(recipeOptions(dish));
+  if (marked < 0) return false;
+  pickRecipeSuggestion(dish, dish.found[marked]);
+  return true;
+}
+
+// El plato del formulario de comida con el cursor en su nombre, o null
+function focusedDish() {
+  return [formState.dish1, formState.dish2].find((dish) => dish && dish.name === document.activeElement) || null;
+}
+
+// Tras una carga de recetas (con red o de la copia), la lista del plato con el cursor se
+// recalcula si en él se ha escrito o borrado; la marcada sigue si sigue en la lista (C-5)
+function refreshOpenRecipeSuggestions() {
+  const dish = $('meal-dialog').open ? focusedDish() : null;
+  if (!dish || !dish.typedName) return;
+  const oldIds = dish.found.map((recipe) => recipe.id);
+  const oldIndex = markedIndex(recipeOptions(dish));
+  renderRecipeSuggestions(dish);
+  const kept = keptMark(oldIds, oldIndex, dish.found.map((recipe) => recipe.id));
+  if (kept >= 0) setRecipeMark(dish, kept);
+}
+
+function closeRecipeSuggestions(dish) {
+  if (!dish.recipeList) return;
+  dish.recipeList.hidden = true;
+  dish.recipeList.replaceChildren();
+  dish.found = [];
+  dish.name.setAttribute('aria-expanded', 'false');
+  dish.name.removeAttribute('aria-activedescendant');
+}
+
+// Elegir: por ahora solo pone el nombre de la receta y el cursor va a "Personas"; no guarda
+// nada (D-15: la copia de la receta y su marca llegan en T7)
+function pickRecipeSuggestion(dish, recipe) {
+  dish.name.value = recipe.nombre;
+  dish.typedName = false;
+  closeRecipeSuggestions(dish);
+  refreshDishLink(dish);
+  dish.persons.focus();
 }
 
 function addIngredient(dish, data = {}) {
@@ -4457,6 +4593,8 @@ function pickIngredientSuggestion(row, text) {
 
 function fillDish(dish, data) {
   dish.name.value = data?.nombre || '';
+  dish.typedName = false; // 030 C-4: al abrir o rellenar, ninguna sugerencia de receta
+  closeRecipeSuggestions(dish);
   // La marca guardada, con el nombre guardado como nombre de la marca (030 C-21, D-2); sin
   // marca o en el formulario de receta, ninguna (C-20)
   dish.link = !dish.noLink && data?.receta_id ? { id: data.receta_id, name: data.nombre || '' } : null;
@@ -4657,6 +4795,8 @@ function validateForm() {
 
 async function saveMeal(event) {
   event.preventDefault();
+  const dish = focusedDish(); // 030 D-9: Intro de un teclado sin tecla, con una marcada, elige
+  if (dish && pickMarkedRecipe(dish)) return;
   if (formState.savedElsewhere || state.offline) return; // RF-4: también al enviar con Enter; 011 RF-10
   showFormError('');
   const { data: meal, error } = validateForm();

@@ -553,10 +553,15 @@
   <template id="dish-template">
     <fieldset class="dish">
       <legend class="dish-title"></legend>
-      <label class="field">
+      <!-- Título y fila del nombre por separado: un toque en las sugerencias no va al campo (030 D-10) -->
+      <div class="field dish-name-field">
         <span class="dish-name-label">Nombre de receta</span>
-        <input type="text" class="dish-name" maxlength="200">
-      </label>
+        <div class="dish-name-row">
+          <input type="text" class="dish-name" maxlength="200" autocomplete="off">
+        </div>
+        <!-- Sugerencias de receta (030 C-1 a C-5, D-9); el formulario de receta no las usa (D-10) -->
+        <ul class="suggestions recipe-suggestions" role="listbox" aria-label="Sugerencias de receta" hidden></ul>
+      </div>
       <!-- La marca de receta del plato (030 C-44, D-19); el formulario de receta no la usa (D-10) -->
       <p class="dish-recipe-link" hidden></p>
       <label class="field">

@@ -137,6 +137,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 
 .field { display: block; margin-bottom: var(--space); }
 .field > span:first-child { display: block; margin-bottom: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
+/* 030 D-10: fila del nombre del plato (luego, con "Recetas" a la derecha) y sus sugerencias */
+.dish-name-row { display: flex; gap: 0.5rem; align-items: stretch; }
+.dish-name-row .dish-name { flex: 1 1 auto; min-width: 0; }
+.recipe-suggestions .suggestion + .suggestion { border-top: 1px solid var(--color-border); }
+.recipe-suggestions [aria-selected="true"] { background: var(--color-marked); } /* C-4 */
+.recipe-suggestions .recipe-suggestion { display: flex; gap: 0.75rem; align-items: baseline; justify-content: space-between; }
+.recipe-suggestion-name { min-width: 0; overflow-wrap: anywhere; } /* C-40: sin desplazamiento horizontal */
+.recipe-suggestion-stars { flex: none; font-size: var(--text-small); color: var(--color-text-muted); white-space: nowrap; }
 .dish-recipe-link { margin: -0.4rem 0 var(--space); font-size: var(--text-small); color: var(--color-text-muted); overflow-wrap: anywhere; } /* 030 C-44 */
 
 .error-message { color: var(--color-error); background: var(--color-error-bg); padding: 0.5rem 0.7rem; border-radius: calc(var(--radius) - 4px); }
