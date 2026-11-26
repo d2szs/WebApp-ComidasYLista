@@ -81,6 +81,21 @@ function initialRecipeFilters(order = storedRecipeOrder(null)) {
 let recipeState = initialRecipeState();
 let currentUserId = null; // id del usuario de la sesión, para "Tus estrellas" (026 C-12, D-22)
 const WIDE_RECIPES = window.matchMedia('(min-width: 1024px)'); // pc ancho: lista y detalle (C-14)
+// Vista de Recetas (030 D-7): lista, etiquetas y detalle se pintan para la pantalla Recetas o la
+// ventana "Recetas" del formulario de comida. state: filtros y receta abierta (las recetas
+// cargadas, siempre de recipeState); ids: sus nodos; mode: 'screen' o 'picker'
+const recipeScreen = {
+  mode: 'screen',
+  get state() { return recipeState; }, // recipeState se sustituye al cerrar sesión
+  ids: {
+    root: 'recipes', loading: 'recipes-loading', empty: 'recipes-empty', list: 'recipe-list',
+    filters: 'recipe-filters', tagsRow: 'recipe-tags-row', tags: 'recipe-tags',
+    tagsToggle: 'recipe-tags-toggle', detail: 'recipe-detail',
+  },
+  render: () => renderRecipes(),
+  open: (id) => openRecipe(id),
+  back: () => backToRecipes(),
+};
 let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
@@ -1034,7 +1049,7 @@ function applyWriteControls() {
   $('finish-button').disabled = state.offline || listState.finishing || readStrikeQueue().length > 0; // 012 RF-20
   refreshMatch(); // "Guardar" del formulario de comida
   if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
-  if (sessionActive) renderRecipeDetail(); // 026 C-34: estrellas y "Borrar" de la receta
+  if (sessionActive) renderRecipeDetail(recipeScreen); // 026 C-34: estrellas y "Borrar" de la receta
 }
 
 async function loadData() {
@@ -1181,40 +1196,47 @@ function onRecipeOrder() {
   renderRecipes();
 }
 
+// Un nodo de la vista (030 D-7)
+function viewNode(view, name) {
+  return $(view.ids[name]);
+}
+
 // Marca o desmarca una etiqueta (C-8)
-function toggleRecipeTag(tag) {
+function toggleRecipeTag(view, tag) {
+  const filters = view.state;
   const key = articleKey(tag);
-  const marked = recipeState.tags.some((t) => articleKey(t) === key);
-  recipeState.tags = marked ? recipeState.tags.filter((t) => articleKey(t) !== key) : [...recipeState.tags, tag];
-  renderRecipes();
+  const marked = filters.tags.some((t) => articleKey(t) === key);
+  filters.tags = marked ? filters.tags.filter((t) => articleKey(t) !== key) : [...filters.tags, tag];
+  view.render();
 }
 
 // Pliega o despliega el filtro de etiquetas; se queda así hasta salir de Recetas (029 C-2, D-2)
-function toggleRecipeTagsOpen() {
-  recipeState.tagsOpen = !recipeState.tagsOpen;
-  renderRecipes();
+function toggleRecipeTagsOpen(view) {
+  view.state.tagsOpen = !view.state.tagsOpen;
+  view.render();
 }
 
 // Pastillas de las etiquetas usadas, en orden alfabético (C-8): desplegado, todas; plegado,
 // solo las marcadas (029 C-2 a C-6). El foco se queda en la pulsada o, si sale, en el botón
-function renderRecipeTags() {
+function renderRecipeTags(view) {
+  const filters = view.state;
   const tags = usedTags(recipeState.items);
-  const box = $('recipe-tags');
+  const box = viewNode(view, 'tags');
   const focusedKey = box.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   box.replaceChildren();
-  $('recipe-tags-row').hidden = tags.length === 0;
-  const marked = new Set(recipeState.tags.map(articleKey));
-  const open = recipeState.tagsOpen;
+  viewNode(view, 'tagsRow').hidden = tags.length === 0;
+  const marked = new Set(filters.tags.map(articleKey));
+  const open = filters.tagsOpen;
   const shown = open ? tags : tags.filter((tag) => marked.has(articleKey(tag)));
   const count = tags.filter((tag) => marked.has(articleKey(tag))).length;
-  const toggle = $('recipe-tags-toggle');
+  const toggle = viewNode(view, 'tagsToggle');
   toggle.textContent = `Etiquetas${count ? ` (${count})` : ''} ${open ? '▴' : '▾'}`;
   toggle.setAttribute('aria-expanded', String(open));
   box.hidden = shown.length === 0;
   if (focusedKey && !shown.some((tag) => articleKey(tag) === focusedKey)) toggle.focus();
   for (const tag of shown) {
     const key = articleKey(tag);
-    const chip = button('recipe-tag', tag, () => toggleRecipeTag(tag));
+    const chip = button('recipe-tag', tag, () => toggleRecipeTag(view, tag));
     chip.dataset.key = key;
     chip.setAttribute('aria-pressed', String(marked.has(key)));
     box.append(chip);
@@ -1222,26 +1244,27 @@ function renderRecipeTags() {
   }
 }
 
-// Pinta la lista de recetas (C-4 a C-11, C-33, C-47); todo con textContent (I-9). No toca lo
-// escrito ni lo elegido en los filtros (C-29)
-function renderRecipes() {
-  $('recipes-loading').hidden = recipeState.loaded;
-  const list = $('recipe-list');
+// Pinta la lista de recetas de una vista (C-4 a C-11, C-33, C-47); todo con textContent (I-9).
+// No toca lo escrito ni lo elegido en los filtros (C-29)
+function renderRecipeList(view) {
+  const filters = view.state;
+  viewNode(view, 'loading').hidden = recipeState.loaded;
+  const list = viewNode(view, 'list');
   const focusedId = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;
   list.replaceChildren();
   const any = recipeState.loaded && recipeState.items.length > 0;
-  $('recipe-filters').hidden = !any;
-  const shown = any ? sortRecipes(filterRecipes(recipeState.items, recipeState), recipeState.order) : [];
-  const empty = $('recipes-empty');
+  viewNode(view, 'filters').hidden = !any;
+  const shown = any ? sortRecipes(filterRecipes(recipeState.items, filters), filters.order) : [];
+  const empty = viewNode(view, 'empty');
   empty.hidden = !recipeState.loaded || shown.length > 0;
   if (any) empty.textContent = 'Ninguna receta coincide.'; // C-6
   else empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : 'Todavía no hay recetas.';
-  if (any) renderRecipeTags();
+  if (any) renderRecipeTags(view);
   for (const recipe of shown) {
     const line = recipeLine(recipe);
-    const card = button('recipe-card', undefined, () => openRecipe(recipe.id));
+    const card = button('recipe-card', undefined, () => view.open(recipe.id));
     card.dataset.id = recipe.id;
-    if (recipe.id === recipeState.openId) card.setAttribute('aria-current', 'true'); // C-14, C-50
+    if (recipe.id === filters.openId) card.setAttribute('aria-current', 'true'); // C-14, C-50
     card.append(el('span', 'recipe-card-name', line.name), el('span', 'recipe-card-info', line.info));
     if (line.tags) card.append(el('span', 'recipe-card-tags', line.tags));
     const item = el('li');
@@ -1249,13 +1272,18 @@ function renderRecipes() {
     list.append(item);
     if (recipe.id === focusedId) card.focus({ preventScroll: true });
   }
-  renderRecipeDetail();
+}
+
+// Pinta la pantalla Recetas: lista y detalle; y el buscador, si está abierto
+function renderRecipes() {
+  renderRecipeList(recipeScreen);
+  renderRecipeDetail(recipeScreen);
   if ($('search-dialog').open) renderSearchRecipes(); // C-27, C-47: cargas y cambios del otro
 }
 
-// La receta abierta, si sigue en las cargadas (o en la copia)
-function openedRecipe() {
-  return recipeState.items.find((r) => r.id === recipeState.openId) || null;
+// La receta abierta en la vista, si sigue en las cargadas (o en la copia)
+function openedRecipe(view) {
+  return recipeState.items.find((r) => r.id === view.state.openId) || null;
 }
 
 // Abre el detalle (C-12). Por debajo de 1024 px sustituye a la lista: se guarda su posición y
@@ -1285,25 +1313,28 @@ function backToRecipes() {
   $('recipe-list').querySelector(`.recipe-card[data-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
 }
 
-// Pinta el detalle de la receta abierta (C-12); partes vacías ocultas; todo con textContent (I-9).
-// Estrellas y "Borrar", desactivados sin red y mientras se puntúa (C-34, D-14)
-function renderRecipeDetail() {
-  const box = $('recipe-detail');
+// Pinta el detalle de la receta abierta en la vista (C-12); partes vacías ocultas; todo con
+// textContent (I-9). En la pantalla, estrellas y "Borrar", desactivados sin red y mientras se
+// puntúa (C-34, D-14); en la ventana (030 C-14, D-7), sin "Tus estrellas", "Editar" ni
+// "Borrar", y con "Elegir"
+function renderRecipeDetail(view) {
+  const screen = view.mode === 'screen';
+  const box = viewNode(view, 'detail');
   const focusedStar = box.contains(document.activeElement) ? document.activeElement.dataset.stars : null;
   box.replaceChildren();
-  const recipe = openedRecipe();
-  $('recipes').classList.toggle('recipe-open', Boolean(recipe));
+  const recipe = openedRecipe(view);
+  viewNode(view, 'root').classList.toggle('recipe-open', Boolean(recipe));
   if (!recipe) {
-    if (recipeState.loaded) box.append(el('p', 'recipe-detail-empty', 'Elige una receta para ver su detalle.'));
+    if (screen && recipeState.loaded) box.append(el('p', 'recipe-detail-empty', 'Elige una receta para ver su detalle.'));
     return;
   }
-  box.append(button('recipe-back', '‹ Recetas', backToRecipes), el('h2', null, recipe.nombre));
+  box.append(button('recipe-back', '‹ Recetas', view.back), el('h2', null, recipe.nombre));
   const facts = recipeFacts(recipe);
   if (facts) box.append(el('p', 'recipe-detail-facts', facts));
   if (recipe.etiquetas?.length) box.append(el('p', 'recipe-detail-tags', recipe.etiquetas.join(' · ')));
   const ratings = ratingsText(recipe, recipeState.profiles);
   if (ratings) box.append(el('p', 'recipe-detail-ratings', ratings));
-  box.append(buildMyStars(recipe));
+  if (screen) box.append(buildMyStars(recipe));
   if (focusedStar) box.querySelector(`.recipe-star[data-stars="${focusedStar}"]`)?.focus();
 
   if (recipe.ingredientes?.length) {
@@ -1323,11 +1354,15 @@ function renderRecipeDetail() {
   }
   box.append(el('p', 'recipe-detail-author', 'Añadida por ' + recipe.autor_nombre)); // C-25
   const buttons = el('div', 'detail-buttons');
-  const edit = button('btn', 'Editar', () => openRecipeForm(recipe));
-  const remove = button('btn btn-danger', 'Borrar', () => deleteRecipe(recipe));
-  edit.disabled = state.offline; // C-34
-  remove.disabled = state.offline;
-  buttons.append(edit, remove);
+  if (screen) {
+    const edit = button('btn', 'Editar', () => openRecipeForm(recipe));
+    const remove = button('btn btn-danger', 'Borrar', () => deleteRecipe(recipe));
+    edit.disabled = state.offline; // C-34
+    remove.disabled = state.offline;
+    buttons.append(edit, remove);
+  } else {
+    buttons.append(button('btn btn-primary', 'Elegir', () => view.choose(recipe))); // 030 C-14
+  }
   box.append(buttons);
 }
 
@@ -1354,7 +1389,7 @@ function buildMyStars(recipe) {
 async function rateRecipe(recipe, tapped) {
   if (state.offline || recipeState.rating) return;
   recipeState.rating = true;
-  renderRecipeDetail();
+  renderRecipeDetail(recipeScreen);
   const result = await timedQuery(client.rpc('puntuar_receta', {
     p_receta: recipe.id,
     p_estrellas: nextStars(myStars(recipe, currentUserId), tapped),
@@ -1367,7 +1402,7 @@ async function rateRecipe(recipe, tapped) {
     await loadRecipes();
   }
   recipeState.rating = false;
-  renderRecipeDetail();
+  renderRecipeDetail(recipeScreen);
 }
 
 // Borra la receta tras confirmar (C-24): sus estrellas, en cascada; si ya no estaba, sin error.
@@ -5009,7 +5044,7 @@ function bindEvents() {
   }));
   $('saved-toggle').addEventListener('click', toggleSaved);
   $('recipe-search').addEventListener('input', onRecipeSearch); // 026 C-7
-  $('recipe-tags-toggle').addEventListener('click', toggleRecipeTagsOpen); // 029 C-2
+  $('recipe-tags-toggle').addEventListener('click', () => toggleRecipeTagsOpen(recipeScreen)); // 029 C-2
   $('recipe-time').addEventListener('change', onRecipeTime); // C-9
   $('recipe-order').addEventListener('change', onRecipeOrder); // C-11, C-41
   $('add-recipe-button').addEventListener('click', () => openRecipeForm()); // C-17
