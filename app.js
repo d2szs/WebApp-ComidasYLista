@@ -1591,10 +1591,11 @@ async function deleteRecipe(recipe) {
 // id y version: la receta que se edita (null al añadir); tags: sus etiquetas (pastillas);
 // tagTyped: se ha escrito en "Etiquetas" desde que tiene el cursor; stars y starsTouched: "Tus
 // estrellas", que solo se mandan si se tocaron (C-21, D-5); opened: sube con cada apertura;
-// fromMeal: abierto con "Guardar como receta", termina en Comidas (C-44, C-49)
+// source: abierto con "Guardar como receta", termina en Comidas (C-44, C-49) y enlaza el plato
+// { mealId, index, name } (030 C-27 a C-30, D-4); null en los demás
 const recipeForm = {
   dish: null, id: null, version: null, tags: [], tagTyped: false,
-  stars: null, starsTouched: false, saving: false, opened: 0, fromMeal: false,
+  stars: null, starsTouched: false, saving: false, opened: 0, source: null,
 };
 
 // El plato de dish-template, sin leyenda, con "Tiempo (min)" tras "Personas" y "Notas o
@@ -1658,15 +1659,16 @@ function fillRecipeForm(recipe = null) {
 }
 
 // "+ Añadir receta" (vacío), "Editar" (con lo guardado) (C-17) o "Guardar como receta" de un
-// plato (dish: una copia de sus datos; la comida no cambia, C-26); sin red, nada (C-34, D-13)
-function openRecipeForm(recipe = null, dish = null) {
+// plato (dish: una copia de sus datos; la comida no cambia, C-26; source: de dónde sale, para
+// enlazarlo, 030 D-4); sin red, nada (C-34, D-13)
+function openRecipeForm(recipe = null, dish = null, source = null) {
   if (state.offline) return;
   fillRecipeForm(recipe);
   if (dish) {
     const data = recipeFromDish(dish);
     fillDish(recipeForm.dish, { ...data, receta: data.preparacion });
   }
-  recipeForm.fromMeal = dish !== null;
+  recipeForm.source = source;
   recipeForm.opened++;
   $('recipe-dialog').showModal();
 }
@@ -1727,13 +1729,12 @@ async function sendRecipe(data, opened) {
   }));
   if (!sessionActive) return; // I-13
   const outcome = result.error ? null : recipeSaveOutcome(result.data);
-  if (outcome === 'saved' && recipeForm.fromMeal) {
-    // C-44, C-49: se cierra y se sigue en Comidas como estaba, con el aviso
-    if (opened === recipeForm.opened && $('recipe-dialog').open) {
-      $('recipe-dialog').close();
-      showError(recipeSavedText(data.nombre), 'action', 'confirmation'); // 027 C-1
-    }
+  if (outcome === 'saved' && recipeForm.source) {
+    // C-44, C-49: se cierra y se sigue en Comidas como estaba; el aviso, al enlazar (030 D-5)
+    const source = recipeForm.source;
+    if (opened === recipeForm.opened && $('recipe-dialog').open) $('recipe-dialog').close();
     loadRecipes();
+    linkDish(source, result.data.id, data.nombre);
   } else if (outcome === 'saved') {
     await loadRecipes(); // D-19: el detalle se abre con la receta ya cargada
     if (!sessionActive) return;
@@ -1750,6 +1751,27 @@ async function sendRecipe(data, opened) {
       ? recipeErrorMessage('save', result.error, reachable(result), data.nombre)
       : recipeErrorMessage('save', new Error('Respuesta inesperada al guardar'), true));
   }
+}
+
+// Marca el plato del que salió la receta (030 C-27 a C-30, D-4): se lee la comida y se guarda
+// solo con receta_id en ese plato si nadie la tocó entre medias; si no se puede, la receta
+// sigue guardada y la comida como estaba (C-29)
+async function linkDish(source, recipeId, name) {
+  const read = await timedQuery(client.from('comidas').select('*').eq('id', source.mealId).maybeSingle());
+  if (!sessionActive) return; // I-13
+  const meal = read.error ? null : read.data;
+  const platos = meal && linkedDishes(meal.platos, source.index, source.name, recipeId);
+  if (!platos) return showError(recipeLinkFailedText(name));
+  const saved = await timedQuery(client.rpc('guardar_comida_si_no_cambio', {
+    p_id: meal.id,
+    p_fecha_antes: meal.fecha, p_tipo_antes: meal.tipo, p_platos_antes: meal.platos,
+    p_fecha: meal.fecha, p_tipo: meal.tipo, p_platos: platos,
+  }));
+  if (!sessionActive) return;
+  if (saved.error || saveOutcome(saved.data) !== 'saved') return showError(recipeLinkFailedText(name));
+  showError(recipeSavedText(name), 'action', 'confirmation'); // C-27, C-28 (027 C-1)
+  sendForms('saved', { date: meal.fecha, type: meal.tipo }); // C-36: aviso del formulario abierto
+  loadData();
 }
 
 // ----- Etiquetas del formulario de receta (C-20, C-42, C-52) -----
@@ -4325,7 +4347,7 @@ function buildBlock(date, type) {
 
 function buildDetail(meal) {
   const detail = el('div', 'block-detail');
-  meal.platos.forEach((dish, index) => detail.append(buildDishDetail(dish, dishTitle(meal.tipo, index))));
+  meal.platos.forEach((dish, index) => detail.append(buildDishDetail(dish, dishTitle(meal.tipo, index), meal, index)));
 
   const buttons = el('div', 'detail-buttons');
   const remove = button('btn btn-danger', 'Borrar', () => deleteMeal(meal));
@@ -4335,7 +4357,7 @@ function buildDetail(meal) {
   return detail;
 }
 
-function buildDishDetail(dish, title) {
+function buildDishDetail(dish, title, meal, index) {
   const box = el('div', 'detail-dish');
   box.append(el('p', 'detail-subtitle', title), el('h3', null, dish.nombre));
   const persons = personsText(dish.personas); // 018 C-8, C-9, C-11
@@ -4363,7 +4385,8 @@ function buildDishDetail(dish, title) {
     box.append(button('btn dish-save-recipe', 'Ver receta', () => viewDishRecipe(dish)));
     return box;
   }
-  const save = button('btn dish-save-recipe', 'Guardar como receta', () => openRecipeForm(null, dish));
+  const source = { mealId: meal.id, index, name: dish.nombre }; // 030 D-4
+  const save = button('btn dish-save-recipe', 'Guardar como receta', () => openRecipeForm(null, dish, source));
   save.disabled = state.offline;
   box.append(save);
   return box;

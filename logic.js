@@ -2231,6 +2231,11 @@ function recipeSavedText(name) {
   return `Receta «${name}» guardada.`;
 }
 
+// La receta se guardó pero el plato no quedó enlazado (030 C-29)
+function recipeLinkFailedText(name) {
+  return `Receta «${name}» guardada, pero no se ha podido enlazar con la comida.`;
+}
+
 // ===== 027-colores-avisos: tipos de aviso (D-1) =====
 
 // Tipos de aviso de la franja: error (rojo), informativo (berenjena), confirmación (caballa)
@@ -2401,7 +2406,7 @@ if (typeof module !== 'undefined') {
     cleanTag, addTag, tagSuggestions, timeFromField, validateRecipeForm, recipeFromDish,
     recipeSearchResults, copyRecipes, recipeSaveOutcome, recipeErrorMessage,
     recipeFacts, starsText, ratingsText, myStars, nextStars, recipeDeleteText, storedSessionUserId,
-    sameNameRecipe, recipeExistsText, recipeSavedText,
+    sameNameRecipe, recipeExistsText, recipeSavedText, recipeLinkFailedText,
     NOTICE_TYPES, noticeDuration, timerMayHide,
     TAGS_EMPTY_TEXT, TAG_NAME_ERROR, TAG_GONE_MESSAGE, tagGroups, recipeCountText, tagRowText,
     tagRenameAction, mergeTargets, tagMergeText, tagDeleteText, tagChangeOutcome, tagDoneText,
