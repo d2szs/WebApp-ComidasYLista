@@ -331,6 +331,38 @@ function personsText(value) {
   return persons === 1 ? 'Para 1 persona' : `Para ${persons} personas`;
 }
 
+// ===== Personas proporcionales (031-personas-proporcionales) =====
+
+// Paso de redondeo de cada unidad que se ajusta; las demás (pizca, chorrito, vacía, antiguas)
+// no cambian. gr. y ml. dependen del tamaño (Definiciones; C-1, C-5)
+const SCALE_STEPS = {
+  kg: 0.05, l: 0.05, und: 1, diente: 1, loncha: 1,
+  lata: 0.5, bote: 0.5, paquete: 0.5, sobre: 0.5,
+  taza: 0.25, vaso: 0.25, vasito: 0.25, cda: 0.25, cdta: 0.25,
+};
+
+// Paso de una cantidad en gr. o ml.: 1 por debajo de 50, 5 hasta 500, 25 por encima (C-4)
+function weightStep(value) {
+  if (value < 50) return 1;
+  return value <= 500 ? 5 : 25;
+}
+
+// Cantidad de la base para las personas nuevas, redondeada al paso de su unidad (la media
+// exacta, hacia arriba) y con el paso como mínimo; con las personas de la base, la exacta.
+// null si la fila no cambia: sin cantidad, sin personas válidas o unidad que no se ajusta
+// (C-1 a C-5)
+function scaledAmount(amount, fromPersons, toPersons, unit) {
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (!fromPersons || !toPersons) return null;
+  const isWeight = unit === 'gr' || unit === 'ml';
+  if (!isWeight && !SCALE_STEPS[unit]) return null;
+  if (fromPersons === toPersons) return amount;
+  const value = (amount * toPersons) / fromPersons;
+  const step = isWeight ? weightStep(value) : SCALE_STEPS[unit];
+  const rounded = Math.round(value / step + 1e-9) * step; // 1e-9: la media exacta no se pierde
+  return Math.round(Math.max(rounded, step) * 1000) / 1000; // sin restos de coma flotante
+}
+
 // ===== Formulario: validación =====
 
 // Saltos de línea y tabuladores que pasan a espacio en el nombre del ingrediente (CL-1)
@@ -2412,5 +2444,6 @@ if (typeof module !== 'undefined') {
     tagRenameAction, mergeTargets, tagMergeText, tagDeleteText, tagChangeOutcome, tagDoneText,
     recipeSuggestions, dishFromRecipe, dishHasMoreThanName, replaceDishText,
     keptRecipeLink, recipeLinkText, linkedDishes, linkedRecipe,
+    scaledAmount,
   };
 }
