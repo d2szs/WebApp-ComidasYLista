@@ -68,11 +68,12 @@ let listState = initialListState();
 // (C-47); noCopy = en modo copia, copia de una versión anterior sin recetas (C-33). Búsqueda,
 // etiquetas y tiempo solo en memoria; el orden, también en el navegador (C-41, D-11).
 // openId: receta del detalle (D-10); listScroll: posición de la lista al abrirla (C-13);
-// rating: puntuación en curso (D-14); deletingId: borrado propio en curso (D-19)
+// rating: puntuación en curso (D-14); deletingId: borrado propio en curso (D-19); counts: contadores
+// de contar_recetas por receta, o null sin cargar o de una copia anterior (032 D-2, D-3)
 function initialRecipeState(requestId = 0) {
   return {
     items: [], profiles: [], loaded: false, noCopy: false, requestId, ...initialRecipeFilters(),
-    openId: null, listScroll: 0, rating: false, deletingId: null,
+    openId: null, listScroll: 0, rating: false, deletingId: null, counts: null,
   };
 }
 function initialRecipeFilters(order = storedRecipeOrder(null)) {
@@ -117,6 +118,8 @@ const recipePicker = {
   choose: (recipe) => chooseFromPicker(recipe),
 };
 let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
+let countsReloadTimer = null; // agrupa los contadores pedidos por cambios de comidas (032 D-2)
+let countsRequestId = 0; // solo vale la última respuesta de contar_recetas; sube al cerrar sesión
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
 const existsState = { article: null, choice: null, saving: false };
@@ -498,6 +501,8 @@ function applySession(session, { pageLoad = false } = {}) {
     listState = initialListState(listState.requestId + 1); // 007 RF-11: "Cargando…" al volver a entrar
     renderShopping();
     clearTimeout(recipeReloadTimer);
+    clearTimeout(countsReloadTimer);
+    countsRequestId++; // 032 D-2: una respuesta de la sesión anterior ya no se pinta
     recipeState = initialRecipeState(recipeState.requestId + 1); // 026 C-47: "Cargando…" al volver a entrar
     renderRecipes();
     renderTagSettings(); // 028 C-9
@@ -765,6 +770,11 @@ function mealNamesQuery() {
   return client.rpc('nombres_ingredientes');
 }
 
+// Veces, última y próxima de cada receta con el hoy del dispositivo (032 D-1)
+function recipeCountsQuery() {
+  return client.rpc('contar_recetas', { p_hoy: toISODate(getToday()) });
+}
+
 // ===== Copia para ver sin red (011 RF-1, RF-2, RF-3, CL-1, RNF-1) =====
 // Agrupa disparadores seguidos (entrar, primer plano, red, tiempo real) en un guardado (D-3)
 function scheduleCopySave() {
@@ -785,9 +795,9 @@ async function saveCopy() {
   const id = ++copyState.saveId;
   const { from, to } = copyRange(getToday());
   const savedAt = Date.now(); // D-2: justo antes de las descargas
-  const [meals, list, names, recipes, profiles] = await Promise.all([
+  const [meals, list, names, recipes, profiles, counts] = await Promise.all([
     timedQuery(mealsQuery(from, to)), timedQuery(listQuery()), timedQuery(mealNamesQuery()),
-    timedQuery(recipesQuery()), timedQuery(profilesQuery())]);
+    timedQuery(recipesQuery()), timedQuery(profilesQuery()), timedQuery(recipeCountsQuery())]);
   if (id !== copyState.saveId || !sessionActive) return;
   const mealNames = names.error ? null : cleanMealNames(names.data);
   if (mealNames) {
@@ -800,8 +810,12 @@ async function saveCopy() {
   // 026 D-9: sin recetas o perfiles nuevos, los de la copia anterior (si los tiene)
   const keptRecipes = recipes.error || profiles.error
     ? copyRecipes(readSavedCopy()) : { recipes: recipes.data, profiles: profiles.data };
+  // 032 D-3: sin contadores nuevos válidos, los de la copia anterior (si los tiene)
+  const previous = readSavedCopy();
+  const keptCounts = !counts.error && cleanRecipeCounts(counts.data) ? counts.data
+    : copyRecipeCounts(previous) ? previous.recipeCounts : undefined;
   writeCopy(buildCopy({ savedAt, from, to, meals: meals.data, articles: list.data, mealNames: keptNames,
-    recipes: keptRecipes?.recipes, profiles: keptRecipes?.profiles }));
+    recipes: keptRecipes?.recipes, profiles: keptRecipes?.profiles, recipeCounts: keptCounts }));
 }
 
 // Nombres de comidas para sugerir (014 D-8): en modo copia, los de la copia en pantalla; fuera,
@@ -895,6 +909,7 @@ function loadRecipesFromCopy() {
   recipeState.items = saved ? saved.recipes : [];
   recipeState.profiles = saved ? saved.profiles : [];
   recipeState.noCopy = !saved;
+  recipeState.counts = copyRecipeCounts(copyState.copy); // 032 C-27: null en una copia anterior
   recipeState.loaded = true;
   recipeState.tags = keptTags(recipeState.tags, recipeState.items); // C-51
   pickerState.tags = keptTags(pickerState.tags, recipeState.items); // 030: igual en la ventana
@@ -1157,6 +1172,7 @@ async function loadRecipes() {
   if (!sessionActive) return;
   const requestId = ++recipeState.requestId;
   if (state.copyMode) return loadRecipesFromCopy();
+  loadRecipeCounts(); // 032 D-2: a la vez, con su propia petición
   const [recipes, profiles] = await Promise.all([timedQuery(recipesQuery()), timedQuery(profilesQuery())]);
   if (requestId !== recipeState.requestId || !sessionActive || state.copyMode) return;
   const failed = recipes.error ? recipes : profiles.error ? profiles : null;
@@ -1190,6 +1206,24 @@ async function loadRecipes() {
   if (gone && !WIDE_RECIPES.matches) window.scrollTo(0, recipeState.listScroll); // C-13
   refreshRecipeTagSuggestions(); // C-20: con las etiquetas usadas ahora
   renderTagSettings(); // 028 C-11, D-8
+}
+
+// Contadores de recetas (032 D-2): solo vale la última respuesta; si falla, sin aviso y se quedan
+// los anteriores hasta la siguiente carga; no cambia el estado de red
+async function loadRecipeCounts() {
+  if (!sessionActive || state.copyMode) return;
+  const id = ++countsRequestId;
+  const result = await timedQuery(recipeCountsQuery());
+  if (id !== countsRequestId || !sessionActive || state.copyMode || result.error) return;
+  const counts = cleanRecipeCounts(result.data);
+  if (!counts) return;
+  recipeState.counts = counts;
+  renderRecipes();
+}
+
+function scheduleCountsReload() {
+  clearTimeout(countsReloadTimer);
+  countsReloadTimer = setTimeout(loadRecipeCounts, 300);
 }
 
 // Orden guardado en el navegador; sin poder leerlo, el de por defecto (C-41, D-11)
@@ -1489,6 +1523,8 @@ function renderRecipeDetail(view) {
   box.append(button('recipe-back', '‹ Recetas', view.back), el('h2', null, recipe.nombre));
   const facts = recipeFacts(recipe);
   if (facts) box.append(el('p', 'recipe-detail-facts', facts));
+  const made = madeText(madeInfo(recipeState.counts, recipe.id), getToday()); // 032 C-1, C-4
+  if (made) box.append(el('p', 'recipe-detail-made', made));
   if (recipe.etiquetas?.length) box.append(el('p', 'recipe-detail-tags', recipe.etiquetas.join(' · ')));
   const ratings = ratingsText(recipe, recipeState.profiles);
   if (ratings) box.append(el('p', 'recipe-detail-ratings', ratings));
@@ -3223,6 +3259,7 @@ function onReviewNetworkChange() {
 function onMealsChange() {
   scheduleReload();
   scheduleReviewReload();
+  scheduleCountsReload(); // 032 C-22
   scheduleCopySave(); // 011 RF-1
 }
 

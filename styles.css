@@ -683,7 +683,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
 .recipe-detail ul { margin: 0; padding-left: 1.2rem; }
 .recipe-detail a { color: var(--color-primary); text-decoration: underline; word-break: break-all; }
 .recipe-detail-tags { margin: 0.2rem 0; font-size: var(--text-small); color: var(--color-olive); }
-.recipe-detail-facts, .recipe-detail-ratings { margin: 0.2rem 0; font-size: var(--text-small); color: var(--color-text-muted); }
+.recipe-detail-facts, .recipe-detail-made, .recipe-detail-ratings { margin: 0.2rem 0; font-size: var(--text-small); color: var(--color-text-muted); }
 .recipe-my-stars { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem; margin: 0.4rem 0; }
 .recipe-my-stars-label { margin-right: 0.3rem; font-size: var(--text-small); color: var(--color-text-muted); }
 .recipe-star { min-width: 2.5rem; min-height: 2.5rem; padding: 0; border: none; background: none; font-size: 1.5rem; line-height: 1; color: var(--color-olive); cursor: pointer; }
