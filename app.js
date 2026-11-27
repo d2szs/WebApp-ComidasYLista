@@ -128,6 +128,7 @@ function initialPlannerState(requestId = 0) {
   return { recipeId: null, name: '', refDate: null, meals: null, mealsMonday: null, loading: false, error: null, requestId };
 }
 let plannerState = initialPlannerState();
+let plannerReloadTimer = null;
 let monthTarget = 'calendar'; // a quién sirve el panel de meses: 'calendar' o 'planner' (032 D-8)
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
@@ -1185,6 +1186,7 @@ async function loadRecipes() {
   const requestId = ++recipeState.requestId;
   if (state.copyMode) return loadRecipesFromCopy();
   loadRecipeCounts(); // 032 D-2: a la vez, con su propia petición
+  if ($('planner').open) loadPlanner(); // 032 D-13: primer plano y red recuperada, con el hoy nuevo
   const [recipes, profiles] = await Promise.all([timedQuery(recipesQuery()), timedQuery(profilesQuery())]);
   if (requestId !== recipeState.requestId || !sessionActive || state.copyMode) return;
   const failed = recipes.error ? recipes : profiles.error ? profiles : null;
@@ -1206,6 +1208,8 @@ async function loadRecipes() {
   // C-30, D-19: la abierta ya no está (y no es un borrado propio): a la lista, con aviso
   const gone = recipeState.openId && recipeState.openId !== recipeState.deletingId
     && !recipeState.items.some((r) => r.id === recipeState.openId);
+  // 032 C-24, D-12: la receta de la ventana ya no está; un formulario encima sigue abierto
+  if ($('planner').open && !recipeState.items.some((r) => r.id === plannerState.recipeId)) closePlanner();
   if (gone) {
     closeRecipe();
     showInfo(RECIPE_GONE_MESSAGE); // 027 C-4
@@ -1591,6 +1595,7 @@ async function loadPlanner() {
   if (!sessionActive || !$('planner').open) return;
   const id = ++plannerState.requestId;
   const monday = weekStart(plannerState.refDate);
+  const focused = $('planner-days').contains(document.activeElement) ? { ...document.activeElement.dataset } : null;
   if (plannerState.mealsMonday !== toISODate(monday)) { // D-14: otra semana, sin casillas
     plannerState.meals = null;
     plannerState.mealsMonday = null;
@@ -1608,6 +1613,14 @@ async function loadPlanner() {
     plannerState.mealsMonday = toISODate(monday);
   }
   renderPlanner();
+  // El foco vuelve a la casilla en la que estaba antes de recargar (la desactiva "Cargando…")
+  if (focused) $('planner-days').querySelector(`.planner-slot[data-date="${focused.date}"][data-type="${focused.type}"]`)?.focus();
+}
+
+// Agrupa varias recargas seguidas de la ventana abierta (032 D-13)
+function schedulePlannerReload() {
+  clearTimeout(plannerReloadTimer);
+  plannerReloadTimer = setTimeout(loadPlanner, 300);
 }
 
 function setupPlanner() {
@@ -3409,6 +3422,7 @@ function onMealsChange() {
   scheduleReload();
   scheduleReviewReload();
   scheduleCountsReload(); // 032 C-22
+  schedulePlannerReload(); // 032 C-22, D-13: las casillas de la ventana abierta
   scheduleCopySave(); // 011 RF-1
 }
 
@@ -5248,6 +5262,8 @@ async function checkExisting() {
     }
   }
   fillForm(existing);
+  // 032 C-32, D-18: ya no se planifica la receta; al guardar, solo se cierra el formulario
+  if (formState.planned) formState.planned = { ...formState.planned, slotOnly: true };
   showFormNotice(duplicateMessage(existing.tipo, 'editing'));
 }
 
@@ -5333,7 +5349,8 @@ async function saveMeal(event) {
     const { planned } = formState; // 032 D-11: antes del cierre, que la borra
     $('meal-dialog').close();
     loadData();
-    if (planned) finishPlanned(planned, meal);
+    if (planned?.slotOnly) schedulePlannerReload(); // 032 C-32, D-18: sin aviso, la ventana al día
+    else if (planned) finishPlanned(planned, meal);
   } catch (saveError) {
     if (!sessionActive) return; // CL-13: error de fetchMeal llegado tras el cierre
     showFormError(saveErrorMessage(saveError, meal.tipo, navigator.onLine));
