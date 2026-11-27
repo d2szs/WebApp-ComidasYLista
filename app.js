@@ -41,6 +41,7 @@ const formState = {
   snapshot: null,        // { fecha, tipo, platos } de la comida abierta, o null si es nueva (CL-4)
   seen: null,            // { date, type, meal }: qué había en la fecha y el tipo del formulario (D-12)
   recheckId: 0,          // para descartar relecturas antiguas (D-12)
+  planned: null,         // 032 D-10: abierto desde la ventana "Planificar": { id, name, date, type } de la receta y la casilla
 };
 
 let client = null;
@@ -1520,9 +1521,31 @@ function setPlannerWeek(refDate) {
 }
 
 // Las casillas libres y ampliables se tocan solo con una carga buena de la semana visible y con
-// red (C-13, C-26, D-9). 032 D-16: hasta T7 no abren nada, así que siguen desactivadas
+// red (C-13, C-26, D-9)
 function plannerSlotsEnabled() {
-  return false;
+  return !plannerState.loading && !plannerState.error && !state.offline;
+}
+
+// Tocar una casilla (C-15 a C-17, D-10): libre, "Añadir comida" con esa fecha y tipo y la receta
+// en el primer plato; ampliable, "Editar comida" con la receta en el segundo. El formulario es
+// el de siempre (C-18), encima de la ventana
+async function openPlannedSlot(isoDate, slot) {
+  if (!plannerSlotsEnabled() || $('meal-dialog').open) return;
+  const recipe = recipeState.items.find((r) => r.id === plannerState.recipeId);
+  if (!recipe) return;
+  const expandable = slot.state === 'expandable';
+  if (expandable) openForm({ meal: slot.meal });
+  else openForm({ date: fromISODate(isoDate), type: slot.type, lookup: false });
+  formState.planned = { id: recipe.id, name: recipe.nombre, date: isoDate, type: slot.type };
+  await chooseRecipe(expandable ? formState.dish2 : formState.dish1, recipe);
+}
+
+// Guardado desde la ventana (C-19, C-20, D-11): se cierra también la ventana y sale el aviso con
+// la fecha y el tipo guardados; los contadores se piden sin esperar al tiempo real
+function finishPlanned(planned, meal) {
+  closePlanner();
+  showInfo(plannedText(planned.name, meal.tipo, meal.fecha, getToday()));
+  loadRecipeCounts();
 }
 
 // Pinta título, semana, "Cargando…", el error y los siete días (C-10, C-11, C-13); todo con
@@ -1548,7 +1571,7 @@ function renderPlanner() {
     card.append(el('p', 'planner-date', day.title)); // C-11: solo texto
     for (const slot of day.slots) {
       const full = slot.state === 'full';
-      const row = full ? el('div') : button('', undefined, () => {});
+      const row = full ? el('div') : button('', undefined, () => openPlannedSlot(day.date, slot));
       row.className = `week-meal planner-slot type-${slot.type}${slot.state === 'free' ? ' empty' : ''}${full ? ' full' : ''}`;
       if (!full) row.disabled = !enabled;
       row.dataset.date = day.date;
@@ -3584,7 +3607,13 @@ function onSlotChange() {
 }
 
 function onFormClosed() {
+  const { planned } = formState;
+  formState.planned = null; // 032 D-10
   closeRecipePicker(); // 030: la ventana no sigue abierta sin su formulario
+  // 032 C-21, D-11: con "Cancelar" o Esc, la ventana sigue debajo y el foco vuelve a la casilla
+  if (planned && sessionActive && $('planner').open) {
+    $('planner-days').querySelector(`.planner-slot[data-date="${planned.date}"][data-type="${planned.type}"]`)?.focus();
+  }
   formState.open = false;
   stopRefresh();
   announceForm();
@@ -5159,9 +5188,10 @@ function fillForm({ id = null, fecha: date, tipo: type = null, platos: dishes = 
   chooseType(type);
 }
 
-// Abre el formulario para una comida concreta, o para una fecha/tipo (edita si ya existe)
-function openForm({ meal = null, date = null, type = null } = {}) {
-  const existing = meal || (date && type ? mealAt(date, type) : null);
+// Abre el formulario para una comida concreta, o para una fecha/tipo (edita si ya existe).
+// lookup: false no mira las comidas del calendario; la ventana "Planificar" trae las suyas (032 D-10)
+function openForm({ meal = null, date = null, type = null, lookup = true } = {}) {
+  const existing = meal || (lookup && date && type ? mealAt(date, type) : null);
   if (existing) {
     fillForm(existing);
   } else {
@@ -5300,8 +5330,10 @@ async function saveMeal(event) {
       if (saveError) throw saveError;
     }
     sendForms('saved', { date: meal.fecha, type: meal.tipo }); // RF-3 (D-6): sin esperar
+    const { planned } = formState; // 032 D-11: antes del cierre, que la borra
     $('meal-dialog').close();
     loadData();
+    if (planned) finishPlanned(planned, meal);
   } catch (saveError) {
     if (!sessionActive) return; // CL-13: error de fetchMeal llegado tras el cierre
     showFormError(saveErrorMessage(saveError, meal.tipo, navigator.onLine));
