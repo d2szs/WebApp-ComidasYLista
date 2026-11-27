@@ -1486,10 +1486,11 @@ function copyRange(today) {
 
 // Copia lista para guardar: fechas en 'aaaa-mm-dd' y savedAt en milisegundos (RF-2); con
 // mealNames, los nombres de comidas para sugerir, y con recipes y profiles, las recetas y los
-// perfiles: campos opcionales del mismo formato (014 D-9; 026 D-9)
-function buildCopy({ savedAt, from, to, meals, articles, mealNames, recipes, profiles }) {
+// perfiles, y con recipeCounts, los contadores de recetas: campos opcionales del mismo formato
+// (014 D-9; 026 D-9; 032 D-3)
+function buildCopy({ savedAt, from, to, meals, articles, mealNames, recipes, profiles, recipeCounts }) {
   const copy = { format: COPY_FORMAT, savedAt, from: toISODate(from), to: toISODate(to), meals, articles };
-  const optional = { mealNames, recipes, profiles };
+  const optional = { mealNames, recipes, profiles, recipeCounts };
   Object.keys(optional).forEach((key) => {
     if (optional[key] !== undefined) copy[key] = optional[key];
   });
@@ -2382,6 +2383,52 @@ function tagDoneText(tag, result) {
   return `Etiqueta «${tag}» quitada de ${recipeCountText(result.recetas)}.`;
 }
 
+// ===== Planificar desde la receta y "Hecha n veces" (032-planificar-receta) =====
+
+// Tablas fijas, como el aviso del modo copia: Intl no da lo mismo en Node y Chrome (D-4)
+const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+  'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+// 'aaaa-mm-dd' → "20 nov"; si no es del año de hoy, "14 mar 2025" (Definiciones)
+function shortDate(isoDate, today) {
+  const date = fromISODate(isoDate);
+  const year = date.getFullYear() === today.getFullYear() ? '' : ' ' + date.getFullYear();
+  return `${date.getDate()} ${MONTH_SHORT[date.getMonth()]}${year}`;
+}
+
+// Contadores de una receta: su fila, "nunca hecha" si no tiene, o null sin contadores
+// cargados (D-2)
+function madeInfo(counts, recipeId) {
+  if (!counts) return null;
+  return counts.get(recipeId) || { veces: 0, ultima: null, proxima: null };
+}
+
+// "Hecha 2 veces · última el 20 nov · próxima el 27 nov" o "Nunca hecha"; sin contadores, ''
+// (C-1, C-3)
+function madeText(info, today) {
+  if (!info) return '';
+  const next = info.proxima ? ' · próxima el ' + shortDate(info.proxima, today) : '';
+  if (!info.veces) return 'Nunca hecha' + next;
+  const times = info.veces === 1 ? '1 vez' : info.veces + ' veces';
+  return `Hecha ${times} · última el ${shortDate(info.ultima, today)}${next}`;
+}
+
+// Filas de contar_recetas → mapa por receta; null si algo no tiene la forma esperada (D-2, D-3)
+function cleanRecipeCounts(rows) {
+  const isDate = (value) => value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  const valid = Array.isArray(rows) && rows.every((row) => isObject(row) &&
+    typeof row.receta_id === 'string' && Number.isInteger(row.veces) && row.veces >= 0 &&
+    isDate(row.ultima) && isDate(row.proxima) && (row.veces === 0) === (row.ultima === null));
+  if (!valid) return null;
+  return new Map(rows.map((row) => [row.receta_id, { veces: row.veces, ultima: row.ultima, proxima: row.proxima }]));
+}
+
+// Contadores de la copia; null si es de una versión anterior o el campo está mal (C-27, D-3)
+function copyRecipeCounts(copy) {
+  return cleanRecipeCounts(copy?.recipeCounts);
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -2445,5 +2492,6 @@ if (typeof module !== 'undefined') {
     recipeSuggestions, dishFromRecipe, dishHasMoreThanName, replaceDishText,
     keptRecipeLink, recipeLinkText, linkedDishes, linkedRecipe,
     scaledAmount,
+    MONTH_SHORT, MONTH_NAMES, shortDate, madeInfo, madeText, cleanRecipeCounts, copyRecipeCounts,
   };
 }
