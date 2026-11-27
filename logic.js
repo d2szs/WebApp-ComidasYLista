@@ -1929,7 +1929,8 @@ function moveErrorMessage(error, online, timedOut) {
 
 // ===== Biblioteca de recetas (026-biblioteca-recetas) =====
 
-const RECIPE_ORDERS = ['stars', 'name', 'recent', 'time']; // "Ordenar"; la primera, por defecto (C-11, C-41)
+// "Ordenar"; la primera, por defecto (C-11, C-41); 'made' y 'forgotten', de la 032 (D-5)
+const RECIPE_ORDERS = ['stars', 'name', 'recent', 'time', 'made', 'forgotten'];
 const RECIPE_TIME_LIMITS = [15, 30, 60]; // "Hasta n min" del filtro "Tiempo" (C-9)
 
 // Media de las estrellas puestas (1 o 2 personas); null si nadie ha puntuado (C-15)
@@ -1945,11 +1946,16 @@ function averageText(average) {
 }
 
 // Tarjeta de la lista: nombre; "★ 4,5" o "Sin puntuar", y " · 45 min" si tiene tiempo;
-// etiquetas unidas con " · " (C-4)
-function recipeLine(recipe) {
+// etiquetas unidas con " · " (C-4). Con contadores y el orden 'made', " · Hecha n veces"; con
+// 'forgotten', " · Última el 20 nov"; sin hechas, " · Nunca hecha" (032 C-8, D-6)
+function recipeLine(recipe, { order, counts = null, today } = {}) {
   const average = recipeAverage(recipe);
   const parts = [average === null ? 'Sin puntuar' : '★ ' + averageText(average)];
   if (recipe.tiempo) parts.push(recipe.tiempo + ' min');
+  const info = (order === 'made' || order === 'forgotten') ? madeInfo(counts, recipe.id) : null;
+  if (info && !info.veces) parts.push('Nunca hecha');
+  else if (info && order === 'made') parts.push(info.veces === 1 ? 'Hecha 1 vez' : `Hecha ${info.veces} veces`);
+  else if (info) parts.push('Última el ' + shortDate(info.ultima, today));
   return { name: recipe.nombre, info: parts.join(' · '), tags: (recipe.etiquetas || []).join(' · ') };
 }
 
@@ -1987,12 +1993,23 @@ function keptTags(marked, recipes) {
 
 // Copia ordenada: 'stars' (media de mayor a menor, sin puntuar al final), 'name' (A-Z en
 // español), 'recent' (la última añadida primero) o 'time' (de menor a mayor, sin tiempo al
-// final); a igualdad, por nombre (C-11)
-function sortRecipes(recipes, order) {
-  const byName = (a, b) => ARTICLE_COLLATOR.compare(a.nombre, b.nombre);
+// final); a igualdad, por nombre (C-11). Con los contadores (032 C-6, C-7): 'made' (más veces
+// primero, nunca hechas al final) o 'forgotten' (nunca hechas primero y luego la última más
+// antigua); sin contadores cargados, por nombre (D-2)
+function sortRecipes(recipes, order, counts = null) {
+  const compare = recipeCompare(order, counts);
+  return [...recipes].sort((a, b) => compare(a, b) || recipeByName(a, b));
+}
+
+const recipeByName = (a, b) => ARTICLE_COLLATOR.compare(a.nombre, b.nombre);
+
+// Comparación de un orden, sin el desempate por nombre (sortRecipes, recipeSuggestions)
+function recipeCompare(order, counts) {
   // Números de menor a mayor con los vacíos (null) al final
   const nullsLast = (x, y) => (x === null) - (y === null) || (x === null ? 0 : x - y);
-  const compare = {
+  const times = (recipe) => madeInfo(counts, recipe.id)?.veces ?? 0;
+  const last = (recipe) => madeInfo(counts, recipe.id)?.ultima ?? '';
+  return {
     stars: (a, b) => {
       const x = recipeAverage(a);
       const y = recipeAverage(b);
@@ -2001,8 +2018,9 @@ function sortRecipes(recipes, order) {
     name: () => 0,
     recent: (a, b) => (a.creado_en < b.creado_en) - (a.creado_en > b.creado_en),
     time: (a, b) => nullsLast(a.tiempo || null, b.tiempo || null),
+    made: (a, b) => times(b) - times(a),
+    forgotten: (a, b) => (last(a) > last(b)) - (last(a) < last(b)), // nunca hecha: '' va primero
   }[order] || (() => 0);
-  return [...recipes].sort((a, b) => compare(a, b) || byName(a, b));
 }
 
 // Orden guardado en el navegador si es uno válido; si no, "Estrellas" (C-41, D-11)
@@ -2018,11 +2036,14 @@ function userLabel(profile) {
 // ===== Recetas en las comidas (030-recetas-comidas) =====
 
 // Hasta 5 recetas cuyo nombre o algún ingrediente coincide con lo escrito, por estrellas (sin
-// puntuar al final; a igualdad, por nombre), sin la enlazada al plato; vacío o espacios, [] (C-1 a C-3, D-13)
-function recipeSuggestions(recipes, typed, linkedId) {
+// puntuar al final; a igualdad, la de más veces y luego por nombre, 032 C-9), sin la enlazada al
+// plato; vacío o espacios, [] (C-1 a C-3, D-13)
+function recipeSuggestions(recipes, typed, linkedId, counts = null) {
   if (searchKey(typed) === '') return [];
   const found = filterRecipes(recipes, { text: typed }).filter((item) => item.id !== linkedId);
-  return sortRecipes(found, 'stars').slice(0, MAX_SUGGESTIONS);
+  const byStars = recipeCompare('stars', counts);
+  const byTimes = recipeCompare('made', counts);
+  return found.sort((a, b) => byStars(a, b) || byTimes(a, b) || recipeByName(a, b)).slice(0, MAX_SUGGESTIONS);
 }
 
 // Plato copiado de una receta: nombre, personas, ingredientes (nombre, cantidad y unidad, en su
@@ -2429,6 +2450,40 @@ function copyRecipeCounts(copy) {
   return cleanRecipeCounts(copy?.recipeCounts);
 }
 
+const MEAL_ARTICLES = { desayuno: 'el desayuno', comida: 'la comida', cena: 'la cena' };
+
+// Los 7 días de la ventana desde el lunes: fecha, "Lunes 23", si es hoy, y sus tres casillas
+// con el tipo, "—" o los platos, y el estado: 'free' (libre), 'expandable' (comida o cena con
+// un plato) o 'full' (dos platos, o desayuno con comida) (Definiciones; C-11, D-9)
+function plannerSlots(meals, monday, today) {
+  const byKey = new Map(meals.map((meal) => [mealKey(meal.fecha, meal.tipo), meal]));
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(monday, i);
+    const iso = toISODate(date);
+    const weekday = WEEKDAY_NAMES[date.getDay()];
+    return {
+      date: iso,
+      title: weekday[0].toUpperCase() + weekday.slice(1) + ' ' + date.getDate(),
+      isToday: isSameDay(date, today),
+      slots: MEAL_TYPES.map(({ id, name }) => {
+        const meal = byKey.get(mealKey(iso, id)) || null;
+        let state = 'free';
+        if (meal) state = id !== 'desayuno' && meal.platos.length === 1 ? 'expandable' : 'full';
+        return { type: id, label: name, state, text: meal ? dishNames(meal) : '—', meal };
+      }),
+    };
+  });
+}
+
+// "Lentejas planificada para la cena del viernes, 27 de noviembre." (" de 2027" si no es del
+// año de hoy), con el tipo y la fecha guardados (C-19, C-20)
+function plannedText(name, type, isoDate, today) {
+  const date = fromISODate(isoDate);
+  const year = date.getFullYear() === today.getFullYear() ? '' : ' de ' + date.getFullYear();
+  return `${name} planificada para ${MEAL_ARTICLES[type]} del ${WEEKDAY_NAMES[date.getDay()]}, ` +
+    `${date.getDate()} de ${MONTH_NAMES[date.getMonth()]}${year}.`;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     MEAL_TYPES, UNITS, UNIT_PLURALS, INGREDIENT_UNITS, ARTICLE_UNITS,
@@ -2493,5 +2548,6 @@ if (typeof module !== 'undefined') {
     keptRecipeLink, recipeLinkText, linkedDishes, linkedRecipe,
     scaledAmount,
     MONTH_SHORT, MONTH_NAMES, shortDate, madeInfo, madeText, cleanRecipeCounts, copyRecipeCounts,
+    plannerSlots, plannedText,
   };
 }
