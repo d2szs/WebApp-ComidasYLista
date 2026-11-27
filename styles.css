@@ -765,6 +765,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--color-prima
   }
   .recipe-picker::backdrop { background: rgba(0, 0, 0, 0.4); }
 }
+/* ===== Ventana "Planificar" (032 C-10, C-11, C-29, D-7, D-9): la de "Recetas", con su fila
+   "‹ Hoy ›" y los siete días en una columna, también en el pc ===== */
+.planner .picker-title { overflow-wrap: anywhere; }
+.planner-nav { margin-bottom: var(--space); }
+.planner-error { overflow-wrap: anywhere; }
+.planner-days { display: grid; gap: 0.6rem; overflow-wrap: anywhere; }
+.planner-date { margin: 0 0 0.4rem; font-weight: 600; }
+.planner-slot:disabled { cursor: default; }
+.planner-slot.full { opacity: var(--opacity-disabled); cursor: default; }
+.planner .week-meal-name { display: block; white-space: normal; overflow: visible; } /* C-29: enteros también en el pc */
 .ingredients-button { width: 100%; margin-top: 0.5rem; } /* 009 RF-1 */
 .list-section { margin-top: calc(var(--space) * 1.25); }
 .list-title { margin: 0 0 0.4rem; font-size: var(--text-large); }

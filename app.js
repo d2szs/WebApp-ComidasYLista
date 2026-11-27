@@ -120,6 +120,14 @@ const recipePicker = {
 let recipeReloadTimer = null; // agrupa recargas seguidas por tiempo real (300 ms, como la lista)
 let countsReloadTimer = null; // agrupa los contadores pedidos por cambios de comidas (032 D-2)
 let countsRequestId = 0; // solo vale la última respuesta de contar_recetas; sube al cerrar sesión
+// Ventana "Planificar" (032 D-7, D-14): la receta (id y nombre al abrir), el día de referencia de
+// su semana, las comidas de la última carga buena (meals) con su lunes (mealsMonday, 'aaaa-mm-dd'),
+// si carga, el error de la última carga y requestId (solo vale la última respuesta)
+function initialPlannerState(requestId = 0) {
+  return { recipeId: null, name: '', refDate: null, meals: null, mealsMonday: null, loading: false, error: null, requestId };
+}
+let plannerState = initialPlannerState();
+let monthTarget = 'calendar'; // a quién sirve el panel de meses: 'calendar' o 'planner' (032 D-8)
 // Ventana "ya está en la lista" del campo rápido (021 C-8 a C-14): el artículo como se vio y lo
 // que guarda cada botón
 const existsState = { article: null, choice: null, saving: false };
@@ -528,10 +536,12 @@ function closeDialogs() {
   searchState.query = ''; // 023 C-28, D-9: se olvida la búsqueda guardada
   closeSearch({ restoreFocus: false }); // 023 C-28: abierto en una sección oculta, dejaría la página inerte
   const mealDialog = $('meal-dialog');
-  if (!mealDialog.open) return;
-  formState.open = false;
-  announceForm(); // síncrono: el evento close llega ya sin canal (plan D-14)
-  mealDialog.close();
+  if (mealDialog.open) {
+    formState.open = false;
+    announceForm(); // síncrono: el evento close llega ya sin canal (plan D-14)
+    mealDialog.close();
+  }
+  closePlanner(); // 032 C-28, D-17: después del formulario, con su panel de meses
 }
 
 // Vista inicial: semana de hoy sin tipo desplegado (RF-11, RF-54); "hoy" se lee al entrar
@@ -1093,6 +1103,7 @@ function applyWriteControls() {
   refreshMatch(); // "Guardar" del formulario de comida
   if (sessionActive) render(); // "Borrar" del detalle, "Añadir" del día, filas vacías de la semana
   if (sessionActive) renderRecipeDetail(recipeScreen); // 026 C-34: estrellas y "Borrar" de la receta
+  if ($('planner').open) renderPlanner(); // 032 C-26, D-14: casillas desactivadas sin red
 }
 
 async function loadData() {
@@ -1475,6 +1486,116 @@ function setupRecipePicker() {
   $('picker-order').addEventListener('change', onPickerOrder);
 }
 
+// ===== Ventana "Planificar" (032 C-10 a C-15, C-26, C-28, C-29; D-7 a D-9, D-14, D-17) =====
+
+// "Planificar" del detalle: la ventana con la semana de hoy; sin red, nada (C-10, C-26)
+function openPlanner(recipe) {
+  const dialog = $('planner');
+  if (state.offline || dialog.open) return;
+  plannerState = { ...initialPlannerState(plannerState.requestId + 1), recipeId: recipe.id, name: recipe.nombre, refDate: getToday() };
+  renderPlanner();
+  dialog.showModal();
+  dialog.scrollTop = 0;
+  loadPlanner();
+}
+
+// Cierra la ventana (✕, I-13) y antes su panel de meses (D-8); sin abrir, nada
+function closePlanner() {
+  if (monthTarget === 'planner') closeMonthPanel();
+  if ($('planner').open) $('planner').close();
+}
+
+// Al cerrarse (✕, Esc o desde fuera): una respuesta pendiente ya no se pinta
+function onPlannerClosed() {
+  if (monthTarget === 'planner') closeMonthPanel();
+  plannerState.requestId++;
+}
+
+// ‹ › (±1 semana), "Hoy" y el panel de meses: otra semana de la ventana, sin tocar el
+// calendario de Comidas (C-12)
+function setPlannerWeek(refDate) {
+  if (!$('planner').open) return;
+  plannerState.refDate = refDate;
+  loadPlanner();
+}
+
+// Las casillas libres y ampliables se tocan solo con una carga buena de la semana visible y con
+// red (C-13, C-26, D-9). 032 D-16: hasta T7 no abren nada, así que siguen desactivadas
+function plannerSlotsEnabled() {
+  return false;
+}
+
+// Pinta título, semana, "Cargando…", el error y los siete días (C-10, C-11, C-13); todo con
+// textContent (I-9)
+function renderPlanner() {
+  const recipe = recipeState.items.find((r) => r.id === plannerState.recipeId);
+  $('planner-title').textContent = `Planificar «${recipe?.nombre ?? plannerState.name}»`;
+  const monday = weekStart(plannerState.refDate);
+  $('planner-period-title').textContent = periodTitle('week', plannerState.refDate);
+  $('planner-loading').hidden = !plannerState.loading;
+  $('planner-error').hidden = !plannerState.error;
+  $('planner-error').textContent = plannerState.error || '';
+  // D-14: solo las comidas de esta misma semana; de otra, ninguna casilla
+  const meals = plannerState.mealsMonday === toISODate(monday) ? plannerState.meals : null;
+  if (!meals) {
+    $('planner-days').replaceChildren();
+    return;
+  }
+  const enabled = plannerSlotsEnabled();
+  const days = plannerSlots(meals, monday, getToday()).map((day) => {
+    const card = el('section', 'week-day planner-day' + (day.isToday ? ' today' : ''));
+    card.setAttribute('aria-label', day.title);
+    card.append(el('p', 'planner-date', day.title)); // C-11: solo texto
+    for (const slot of day.slots) {
+      const full = slot.state === 'full';
+      const row = full ? el('div') : button('', undefined, () => {});
+      row.className = `week-meal planner-slot type-${slot.type}${slot.state === 'free' ? ' empty' : ''}${full ? ' full' : ''}`;
+      if (!full) row.disabled = !enabled;
+      row.dataset.date = day.date;
+      row.dataset.type = slot.type;
+      row.append(el('span', 'week-meal-type', slot.label), el('span', 'week-meal-name', slot.text));
+      card.append(row);
+    }
+    return card;
+  });
+  $('planner-days').replaceChildren(...days);
+}
+
+// Pide las comidas de lunes a domingo de la semana de la ventana; nunca de la copia y sin
+// cambiar el estado de red (D-7). Una recarga de la misma semana conserva las casillas,
+// desactivadas mientras carga o tras un fallo; otra semana empieza sin ninguna (C-13, D-14)
+async function loadPlanner() {
+  if (!sessionActive || !$('planner').open) return;
+  const id = ++plannerState.requestId;
+  const monday = weekStart(plannerState.refDate);
+  if (plannerState.mealsMonday !== toISODate(monday)) { // D-14: otra semana, sin casillas
+    plannerState.meals = null;
+    plannerState.mealsMonday = null;
+  }
+  plannerState.loading = true;
+  plannerState.error = null;
+  renderPlanner();
+  const result = await timedQuery(mealsQuery(monday, addDays(monday, 6)));
+  if (id !== plannerState.requestId || !sessionActive || !$('planner').open) return;
+  plannerState.loading = false;
+  if (result.error) {
+    plannerState.error = 'No se han podido cargar las comidas. ' + translateError(result.error, reachable(result));
+  } else {
+    plannerState.meals = result.data;
+    plannerState.mealsMonday = toISODate(monday);
+  }
+  renderPlanner();
+}
+
+function setupPlanner() {
+  $('planner-close').addEventListener('click', closePlanner); // C-14
+  $('planner').addEventListener('close', onPlannerClosed);
+  $('planner-prev').addEventListener('click', () => setPlannerWeek(addDays(plannerState.refDate, -7)));
+  $('planner-next').addEventListener('click', () => setPlannerWeek(addDays(plannerState.refDate, 7)));
+  $('planner-today').addEventListener('click', () => setPlannerWeek(getToday()));
+  $('planner-period').addEventListener('click', () => openMonthPanel('planner'));
+}
+
 // La receta abierta en la vista, si sigue en las cargadas (o en la copia)
 function openedRecipe(view) {
   return recipeState.items.find((r) => r.id === view.state.openId) || null;
@@ -1552,11 +1673,13 @@ function renderRecipeDetail(view) {
   box.append(el('p', 'recipe-detail-author', 'Añadida por ' + recipe.autor_nombre)); // C-25
   const buttons = el('div', 'detail-buttons');
   if (screen) {
+    const plan = button('btn btn-primary recipe-plan', 'Planificar', () => openPlanner(recipe)); // 032 C-10
     const edit = button('btn', 'Editar', () => openRecipeForm(recipe));
     const remove = button('btn btn-danger', 'Borrar', () => deleteRecipe(recipe));
+    plan.disabled = state.offline; // 032 C-26
     edit.disabled = state.offline; // C-34
     remove.disabled = state.offline;
-    buttons.append(edit, remove);
+    buttons.append(plan, edit, remove);
   } else {
     buttons.append(button('btn btn-primary picker-choose', 'Elegir', () => view.choose(recipe))); // 030 C-14
   }
@@ -3498,13 +3621,25 @@ function openDay(date, openType = null) {
   loadData();
 }
 
-// Panel de meses (006): abre en el año del día de referencia, debajo de la cabecera
-function openMonthPanel() {
-  panelYear = initialPanelYear(state.refDate);
+// Día de referencia y botón del título del destino del panel: el calendario o la ventana
+// "Planificar" (032 D-8)
+function monthPanelRefDate() {
+  return monthTarget === 'planner' ? plannerState.refDate : state.refDate;
+}
+
+function monthPanelButton() {
+  return $(monthTarget === 'planner' ? 'planner-period' : 'period-button');
+}
+
+// Panel de meses (006): abre en el año del día de referencia, debajo de la cabecera (o de la
+// fila "‹ Hoy ›" de la ventana "Planificar", 032 D-8)
+function openMonthPanel(target = 'calendar') {
+  monthTarget = target;
+  panelYear = initialPanelYear(monthPanelRefDate());
   renderMonthPanel();
   placeMonthPanel();
   $('month-panel').showModal();
-  $('period-button').setAttribute('aria-expanded', 'true');
+  monthPanelButton().setAttribute('aria-expanded', 'true');
 }
 
 function renderMonthPanel() {
@@ -3512,7 +3647,7 @@ function renderMonthPanel() {
   const arrows = panelArrows(panelYear);
   $('panel-prev').disabled = !arrows.canGoBack;
   $('panel-next').disabled = !arrows.canGoForward;
-  const cells = monthPanel(panelYear, state.refDate, getToday()).map(({ month, label, isVisible, isToday }) => {
+  const cells = monthPanel(panelYear, monthPanelRefDate(), getToday()).map(({ month, label, isVisible, isToday }) => {
     const cell = button('panel-month', label, () => pickMonth(month));
     cell.classList.toggle('visible', isVisible);
     cell.classList.toggle('today', isToday);
@@ -3534,8 +3669,12 @@ function shiftPanelYear(direction) {
 // Elegir un mes: vista Mes con el día 1 de ese mes (RF-7). Carga como ‹ › salvo si
 // ya estaba en ese mes en la vista Mes (CL-4, D-7); si falla, el aviso de siempre (CL-2)
 function pickMonth(month) {
-  const next = chooseMonth(state.view, state.refDate, panelYear, month);
   $('month-panel').close();
+  if (monthTarget === 'planner') { // 032 C-12: la semana del día 1, sin tocar el calendario
+    setPlannerWeek(new Date(panelYear, month, 1));
+    return;
+  }
+  const next = chooseMonth(state.view, state.refDate, panelYear, month);
   state.view = next.view;
   state.refDate = next.refDate;
   state.openType = null;
@@ -4217,8 +4356,11 @@ function toggleSidebar() {
 
 function placeMonthPanel() {
   const panel = $('month-panel');
-  panel.style.top = document.querySelector('.header').getBoundingClientRect().bottom + 'px';
-  panel.style.left = document.querySelector('.navigation').getBoundingClientRect().left + 'px';
+  const planner = monthTarget === 'planner'; // 032 D-8: bajo la fila "‹ Hoy ›" de la ventana
+  const under = planner ? $('planner-nav') : document.querySelector('.header');
+  const aligned = planner ? $('planner-nav') : document.querySelector('#screen-app .navigation');
+  panel.style.top = under.getBoundingClientRect().bottom + 'px';
+  panel.style.left = aligned.getBoundingClientRect().left + 'px';
 }
 
 // ===== Render =====
@@ -5521,12 +5663,12 @@ function bindEvents() {
   $('prev-button').addEventListener('click', () => shiftPeriod(-1));
   $('next-button').addEventListener('click', () => shiftPeriod(1));
   $('today-button').addEventListener('click', goToToday);
-  $('period-button').addEventListener('click', openMonthPanel);
+  $('period-button').addEventListener('click', () => openMonthPanel('calendar'));
   $('panel-prev').addEventListener('click', () => shiftPanelYear(-1));
   $('panel-next').addEventListener('click', () => shiftPanelYear(1));
   $('month-panel').addEventListener('pointerdown', (event) => { panelPressedOutside = isOutsideDialog($('month-panel'), event); });
   $('month-panel').addEventListener('click', onMonthPanelClick);
-  $('month-panel').addEventListener('close', () => $('period-button').setAttribute('aria-expanded', 'false'));
+  $('month-panel').addEventListener('close', () => monthPanelButton().setAttribute('aria-expanded', 'false'));
   window.addEventListener('resize', () => {
     if ($('month-panel').open) placeMonthPanel();
   });
@@ -5542,6 +5684,7 @@ function bindEvents() {
   $('recipe-order').addEventListener('change', onRecipeOrder); // C-11, C-41
   $('add-recipe-button').addEventListener('click', () => openRecipeForm()); // C-17
   setupRecipePicker(); // 030 C-11
+  setupPlanner(); // 032 C-10
   recipeForm.dish = buildRecipeDish();
   setupRecipeTags(); // C-20
   setupRecipeFormStars(); // C-21

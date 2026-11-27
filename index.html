@@ -425,6 +425,29 @@
     </div>
   </dialog>
 
+  <!-- Ventana "Planificar" de una receta (032 C-10 a C-15, D-7): encima del detalle, con el
+       estilo de la ventana "Recetas"; su propia semana, con ‹ Hoy › y el panel de meses -->
+  <dialog id="planner" class="recipe-picker planner" aria-labelledby="planner-title">
+    <div class="picker-head">
+      <h2 id="planner-title" class="picker-title"></h2>
+      <button type="button" id="planner-close" class="search-close" aria-label="Cerrar la ventana Planificar">✕</button>
+    </div>
+    <div class="picker-body">
+      <div id="planner-nav" class="navigation planner-nav">
+        <button type="button" id="planner-prev" class="btn btn-icon" aria-label="Semana anterior">‹</button>
+        <button type="button" id="planner-today" class="btn">Hoy</button>
+        <button type="button" id="planner-next" class="btn btn-icon" aria-label="Semana siguiente">›</button>
+        <button type="button" id="planner-period" class="period-button" aria-haspopup="dialog" aria-expanded="false">
+          <span id="planner-period-title" class="period-title"></span>
+          <span class="period-arrow" aria-hidden="true">▾</span>
+        </button>
+      </div>
+      <p id="planner-loading" class="list-loading" hidden>Cargando…</p>
+      <p id="planner-error" class="error-message picker-notice planner-error" role="alert" hidden></p>
+      <div id="planner-days" class="planner-days"></div>
+    </div>
+  </dialog>
+
   <!-- Formulario de artículo (007 RF-14, RF-27); "Borrar" solo en "Editar artículo" (RF-43) -->
   <dialog id="article-dialog" class="dialog">
     <form id="article-form" novalidate>
