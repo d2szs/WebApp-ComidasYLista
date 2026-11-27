@@ -1219,6 +1219,7 @@ async function loadRecipeCounts() {
   if (!counts) return;
   recipeState.counts = counts;
   renderRecipes();
+  refreshOpenRecipeSuggestions(); // 032 C-9, C-22: el desempate por veces, al día
 }
 
 function scheduleCountsReload() {
@@ -1325,14 +1326,16 @@ function renderRecipeList(view) {
   list.replaceChildren();
   const any = recipeState.loaded && recipeState.items.length > 0;
   viewNode(view, 'filters').hidden = !any;
-  const shown = any ? sortRecipes(filterRecipes(recipeState.items, filters), filters.order) : [];
+  const counts = recipeState.counts; // 032 C-6, C-7: sin contadores, los órdenes nuevos por nombre
+  const shown = any ? sortRecipes(filterRecipes(recipeState.items, filters), filters.order, counts) : [];
+  const today = getToday();
   const empty = viewNode(view, 'empty');
   empty.hidden = !recipeState.loaded || shown.length > 0;
   if (any) empty.textContent = 'Ninguna receta coincide.'; // C-6
   else empty.textContent = recipeState.noCopy ? NO_COPY_RECIPES_TEXT : 'Todavía no hay recetas.';
   if (any) renderRecipeTags(view);
   for (const recipe of shown) {
-    const line = recipeLine(recipe);
+    const line = recipeLine(recipe, { order: filters.order, counts, today }); // 032 C-8
     const card = button('recipe-card', undefined, () => view.open(recipe.id));
     card.dataset.id = recipe.id;
     if (recipe.id === filters.openId) card.setAttribute('aria-current', 'true'); // C-14, C-50
@@ -4543,7 +4546,7 @@ function setupRecipeSuggestions(dish) {
 function renderRecipeSuggestions(dish) {
   const { name, recipeList: list } = dish;
   const linkedId = keptRecipeLink(name.value, dish.link); // C-3 (D-13)
-  dish.found = recipeSuggestions(recipeState.items, name.value, linkedId);
+  dish.found = recipeSuggestions(recipeState.items, name.value, linkedId, recipeState.counts); // 032 C-9
   const grew = dish.found.length > 0 && (list.hidden || dish.found.length !== list.children.length);
   list.replaceChildren(...dish.found.map((recipe, index) => {
     const option = el('li', 'suggestion recipe-suggestion');
